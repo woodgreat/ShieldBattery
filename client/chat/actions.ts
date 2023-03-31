@@ -5,6 +5,7 @@ import {
   ChatJoinEvent,
   ChatKickEvent,
   ChatLeaveEvent,
+  ChatMessageDeletedEvent,
   ChatMessageEvent,
   ChatPermissionsChangedEvent,
   ChatUserActiveEvent,
@@ -35,6 +36,8 @@ export type ChatActions =
   | RetrieveUserListFailure
   | GetChatUserProfile
   | GetChannelInfo
+  | GetBatchChannelInfoSuccess
+  | GetBatchChannelInfoFailure
   | ActivateChannel
   | DeactivateChannel
   | InitChannel
@@ -46,6 +49,7 @@ export type ChatActions =
   | UpdateBan
   | UpdateBanSelf
   | UpdateMessage
+  | UpdateMessageDeleted
   | UpdateUserActive
   | UpdateUserIdle
   | UpdateUserOffline
@@ -204,6 +208,17 @@ export interface GetChannelInfo {
 }
 
 /**
+ * The server returned a response to our request for channel info about one or more channels.
+ */
+export interface GetBatchChannelInfoSuccess {
+  type: '@chat/getBatchChannelInfo'
+  payload: ChannelInfo[]
+  error?: false
+}
+
+export type GetBatchChannelInfoFailure = BaseFetchFailure<'@chat/getBatchChannelInfo'>
+
+/**
  * Activate a particular chat channel. This is a purely client-side action which marks the channel
  * as "active", and removes the unread indicator if there is one.
  */
@@ -300,6 +315,15 @@ export interface UpdateBanSelf {
 export interface UpdateMessage {
   type: '@chat/updateMessage'
   payload: ChatMessageEvent
+  meta: { channelId: SbChannelId }
+}
+
+/**
+ * A message was deleted in a channel we're in.
+ */
+export interface UpdateMessageDeleted {
+  type: '@chat/updateMessageDeleted'
+  payload: ChatMessageDeletedEvent
   meta: { channelId: SbChannelId }
 }
 

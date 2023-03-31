@@ -1,17 +1,17 @@
 import { Immutable } from 'immer'
 import { rgba } from 'polished'
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useMemo } from 'react'
 import styled from 'styled-components'
 import { MapInfoJson } from '../../common/maps'
 import ImageIcon from '../icons/material/image-24px.svg'
+import { MaterialIcon } from '../icons/material/material-icon'
 import MapActionsIcon from '../icons/material/more_vert-24px.svg'
 import FavoritedIcon from '../icons/material/star-24px.svg'
 import UnfavoritedIcon from '../icons/material/star_border-24px.svg'
-import ZoomInIcon from '../icons/material/zoom_in-24px.svg'
 import { IconButton } from '../material/button'
 import { MenuItem } from '../material/menu/item'
 import { MenuList } from '../material/menu/menu'
-import { Popover, useAnchorPosition } from '../material/popover'
+import { Popover, useAnchorPosition, usePopoverController } from '../material/popover'
 import { amberA100, background700, background900, colorTextPrimary } from '../styles/colors'
 import { singleLine, subtitle2 } from '../styles/typography'
 import MapImage from './map-image'
@@ -43,6 +43,21 @@ const NoImageContainer = styled.div`
 
 const TEXT_PROTECTION_HEIGHT_PX = 48
 
+const SelectedIcon = styled.span<{ $isSelected?: boolean; $textProtection?: boolean }>`
+  width: var(--sb-map-thumbnail-selected-icon-size, 64px);
+  height: var(--sb-map-thumbnail-selected-icon-size, 64px);
+  margin-bottom: ${props =>
+    props.$textProtection ? Math.floor(TEXT_PROTECTION_HEIGHT_PX / 2) : 0}px;
+  opacity: ${props => (props.$isSelected ? 0.5 : 0)};
+
+  transition: opacity 100ms linear;
+
+  & > svg {
+    width: 100%;
+    height: 100%;
+  }
+`
+
 const Overlay = styled.div<{
   $isSelected?: boolean
   $isFocused?: boolean
@@ -57,20 +72,10 @@ const Overlay = styled.div<{
   justify-content: center;
   align-items: center;
 
-  & > svg {
-    width: var(--sb-map-thumbnail-selected-icon-size, 64px);
-    height: var(--sb-map-thumbnail-selected-icon-size, 64px);
-    margin-bottom: ${props =>
-      props.$textProtection ? Math.floor(TEXT_PROTECTION_HEIGHT_PX / 2) : 0}px;
-    opacity: ${props => (props.$isSelected ? 0.5 : 0)};
-
-    transition: opacity 100ms linear;
-  }
-
   &:hover {
     cursor: pointer;
 
-    & > svg {
+    & > ${SelectedIcon} {
       opacity: 0.25;
     }
   }
@@ -196,21 +201,15 @@ export function MapThumbnail({
   onRemove,
   onRegenMapImage,
 }: MapThumbnailProps) {
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuOpen, openMenu, closeMenu] = usePopoverController()
   const [anchorRef, anchorX, anchorY] = useAnchorPosition('right', 'top')
 
-  const onOpenMenu = useCallback(() => {
-    setMenuOpen(true)
-  }, [])
-  const onCloseMenu = useCallback(() => {
-    setMenuOpen(false)
-  }, [])
   const onActionClick = useCallback(
     (handler: () => void) => {
       handler()
-      onCloseMenu()
+      closeMenu()
     },
-    [onCloseMenu],
+    [closeMenu],
   )
 
   const actions = useMemo(() => {
@@ -244,11 +243,17 @@ export function MapThumbnail({
           $isFocused={isFocused}
           $textProtection={showMapName}
           onClick={onClick}>
-          {selectedIcon}
+          <SelectedIcon $isSelected={isSelected} $textProtection={showMapName}>
+            {selectedIcon}
+          </SelectedIcon>
         </Overlay>
       ) : null}
       {onPreview ? (
-        <MapPreviewIcon icon={<ZoomInIcon />} title={'Show map preview'} onClick={onPreview} />
+        <MapPreviewIcon
+          icon={<MaterialIcon icon='zoom_in' />}
+          title={'Show map preview'}
+          onClick={onPreview}
+        />
       ) : null}
       {onToggleFavorite ? (
         <FavoriteActionIcon
@@ -267,11 +272,11 @@ export function MapThumbnail({
                 ref={anchorRef}
                 icon={<MapActionsIcon />}
                 title='Map actions'
-                onClick={onOpenMenu}
+                onClick={openMenu}
               />
               <Popover
                 open={menuOpen}
-                onDismiss={onCloseMenu}
+                onDismiss={closeMenu}
                 anchorX={anchorX ?? 0}
                 anchorY={anchorY ?? 0}
                 originX='right'

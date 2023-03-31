@@ -53,6 +53,7 @@ function renderCommonMessage(
       return blockedUsers.has(msg.from) ? (
         <BlockedMessage
           key={msg.id}
+          msgId={msg.id}
           userId={msg.from}
           selfUserId={selfUserId}
           time={msg.time}
@@ -61,6 +62,7 @@ function renderCommonMessage(
       ) : (
         <TextMessage
           key={msg.id}
+          msgId={msg.id}
           userId={msg.from}
           selfUserId={selfUserId}
           time={msg.time}
@@ -108,7 +110,7 @@ interface PureMessageListProps {
 // This contains just the messages, to avoid needing to re-render them all if e.g. loading state
 // changes on the actual message list
 const PureMessageList = React.memo<PureMessageListProps>(({ messages, renderMessage }) => {
-  const selfUserId = useSelfUser().id
+  const selfUserId = useSelfUser()!.id
   const blocks = useAppSelector(s => s.relationships.blocks)
 
   return (

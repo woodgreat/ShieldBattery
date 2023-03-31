@@ -1,3 +1,4 @@
+import { Immutable } from 'immer'
 import keycode from 'keycode'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
@@ -8,8 +9,9 @@ import { ReduxAction } from './action-types'
 import { openOverlay } from './activities/action-creators'
 import ActivityBar from './activities/activity-bar'
 import { ActivityButton } from './activities/activity-button'
-import ActivityOverlay from './activities/activity-overlay'
-import ActivitySpacer from './activities/spacer'
+import { ActivityOverlay } from './activities/activity-overlay'
+import { ActivityOverlayType } from './activities/activity-overlay-type'
+import { VersionText } from './activities/version-text'
 import { IsAdminFilter } from './admin/admin-route-filters'
 import { openChangelogIfNecessary } from './changelog/action-creators'
 import { ChannelRouteComponent } from './chat/route'
@@ -17,16 +19,18 @@ import { openDialog } from './dialogs/action-creators'
 import { DialogType } from './dialogs/dialog-type'
 import { DispatchFunction } from './dispatch-registry'
 import { GamesRouteComponent } from './games/route'
-import JoinGameIcon from './icons/material/call_merge-36px.svg'
-import LadderIcon from './icons/material/emoji_events-36px.svg'
-import CreateGameIcon from './icons/material/gavel-36px.svg'
 import DownloadIcon from './icons/material/get_app-36px.svg'
+import LobbiesIcon from './icons/material/holiday_village-36px.svg'
+import { MaterialIcon } from './icons/material/material-icon'
 import ReplaysIcon from './icons/material/movie-36px.svg'
 import SettingsIcon from './icons/material/settings-24px.svg'
-import MapsIcon from './icons/material/terrain-36px.svg'
+import LeaguesIcon from './icons/material/social_leaderboard-36px.svg'
 import FindMatchIcon from './icons/shieldbattery/ic_satellite_dish_black_36px.svg'
+import { useKeyListener } from './keyboard/key-listener'
 import { navigateToLadder } from './ladder/action-creators'
 import { LadderRouteComponent } from './ladder/ladder'
+import { navigateToLeaguesList } from './leagues/action-creators'
+import { LeagueRoot } from './leagues/league-list'
 import LobbyView from './lobbies/view'
 import { regenMapImage, removeMap } from './maps/action-creators'
 import { cancelFindMatch } from './matchmaking/action-creators'
@@ -53,16 +57,16 @@ import { openSettingsDialog } from './settings/action-creators'
 import { isShieldBatteryHealthy, isStarcraftHealthy } from './starcraft/is-starcraft-healthy'
 import { StarcraftStatus } from './starcraft/starcraft-reducer'
 import { colorTextSecondary } from './styles/colors'
-import { caption } from './styles/typography'
+import { FlexSpacer } from './styles/flex-spacer'
 import { FriendsListActivityButton } from './users/friends-list'
 import { ProfileRouteComponent } from './users/route'
 import { WhisperRouteComponent } from './whispers/route'
 
-const curVersion = __WEBPACK_ENV.VERSION
-
+const ALT_B = { keyCode: keycode('b'), altKey: true }
 const ALT_C = { keyCode: keycode('c'), altKey: true }
 const ALT_D = { keyCode: keycode('d'), altKey: true }
 const ALT_F = { keyCode: keycode('f'), altKey: true }
+const ALT_G = { keyCode: keycode('g'), altKey: true }
 const ALT_J = { keyCode: keycode('j'), altKey: true }
 const ALT_M = { keyCode: keycode('m'), altKey: true }
 const ALT_O = { keyCode: keycode('o'), altKey: true }
@@ -78,18 +82,6 @@ const Content = styled.div`
   flex-grow: 1;
   flex-shrink: 1;
   overflow-x: hidden;
-`
-
-const StyledMapsIcon = styled(MapsIcon)`
-  width: 36px;
-  height: 36px;
-`
-
-const VersionText = styled.div`
-  ${caption};
-  margin: 8px 0px 0px 0px;
-  color: ${colorTextSecondary};
-  letter-spacing: 1.25px;
 `
 
 let lobbyRoute = <></>
@@ -197,54 +189,70 @@ export function MainLayout() {
   }, [isEmailVerified, dispatch])
 
   const onFindMatchClick = useHealthyStarcraftCallback(dispatch, starcraft, () => {
-    // TODO(2Pac): Remove `any` once the `openOverlay` is TS-ified
-    dispatch(openOverlay('findMatch') as any)
+    dispatch(openOverlay({ type: ActivityOverlayType.FindMatch }))
   })
 
-  const onCreateLobbyClick = useHealthyStarcraftCallback(dispatch, starcraft, () => {
-    // TODO(2Pac): Remove `any` once the `openOverlay` is TS-ified
-    dispatch(openOverlay('createLobby') as any)
+  const onLobbiesClick = useHealthyStarcraftCallback(dispatch, starcraft, () => {
+    dispatch(openOverlay({ type: ActivityOverlayType.Lobby }))
   })
+  // This reproduces the hotkeys we had for creating/joining a lobby before we combined the buttons
+  useKeyListener({
+    onKeyDown: (event: KeyboardEvent) => {
+      if (!IS_ELECTRON) {
+        return false
+      }
 
-  const onJoinLobbyClick = useHealthyStarcraftCallback(dispatch, starcraft, () => {
-    // TODO(2Pac): Remove `any` once the `openOverlay` is TS-ified
-    dispatch(openOverlay('joinLobby') as any)
+      if (event.keyCode === ALT_C.keyCode && event.altKey) {
+        dispatch(openOverlay({ type: ActivityOverlayType.Lobby, initData: { creating: true } }))
+        return true
+      } else if (event.keyCode === ALT_J.keyCode && event.altKey) {
+        dispatch(openOverlay({ type: ActivityOverlayType.Lobby }))
+        return true
+      }
+
+      return false
+    },
   })
 
   const onMapDetails = useCallback(
-    (map: MapInfoJson) => {
+    (map: Immutable<MapInfoJson>) => {
       dispatch(openDialog({ type: DialogType.MapDetails, initData: { mapId: map.id } }))
     },
     [dispatch],
   )
 
   const onRemoveMap = useCallback(
-    (map: MapInfoJson) => {
+    (map: Immutable<MapInfoJson>) => {
       dispatch(removeMap(map))
     },
     [dispatch],
   )
 
   const onRegenMapImage = useCallback(
-    (map: MapInfoJson) => {
+    (map: Immutable<MapInfoJson>) => {
       dispatch(regenMapImage(map))
     },
     [dispatch],
   )
 
   const onMapUpload = useCallback(
-    (map: MapInfoJson) => {
-      // TODO(2Pac): Remove `any` once the `openOverlay` is TS-ified
+    (map: Immutable<MapInfoJson>) => {
+      // TODO(tec27): This leads to a weird activity stack (typically, [Server, Local, Server]),
+      // would probably be better to just pop the activity stack up to the first Server activity? Or
+      // just restructure this to not have separate activities for these things
       dispatch(
-        openOverlay('browseServerMaps', {
-          uploadedMap: map,
-          title: 'Maps',
-          onMapUpload,
-          onMapSelect: onMapDetails,
-          onMapDetails,
-          onRemoveMap,
-          onRegenMapImage,
-        }) as any,
+        openOverlay({
+          type: ActivityOverlayType.BrowseServerMaps,
+          initData: {
+            uploadedMap: map,
+            title: 'Maps',
+            onMapUpload,
+            onMapSelect: onMapDetails,
+            onMapDetails,
+            onRemoveMap,
+            onRegenMapImage,
+          },
+        }),
       )
     },
     [dispatch, onMapDetails, onRegenMapImage, onRemoveMap],
@@ -256,16 +264,18 @@ export function MainLayout() {
     dispatch,
     starcraft,
     () => {
-      // TODO(2Pac): Remove `any` once the `openOverlay` is TS-ified
       dispatch(
-        openOverlay('browseServerMaps', {
-          title: 'Maps',
-          onMapUpload,
-          onMapSelect: onMapDetails,
-          onMapDetails,
-          onRemoveMap,
-          onRegenMapImage,
-        }) as any,
+        openOverlay({
+          type: ActivityOverlayType.BrowseServerMaps,
+          initData: {
+            title: 'Maps',
+            onMapUpload,
+            onMapSelect: onMapDetails,
+            onMapDetails,
+            onRemoveMap,
+            onRegenMapImage,
+          },
+        }),
       )
     },
     [onMapDetails, onMapUpload, onRegenMapImage, onRemoveMap],
@@ -277,8 +287,7 @@ export function MainLayout() {
     } else if (!isStarcraftHealthy({ starcraft })) {
       dispatch(openDialog({ type: DialogType.StarcraftHealth }))
     } else {
-      // TODO(2Pac): Remove `any` once the `openOverlay` is TS-ified
-      dispatch(openOverlay('browseLocalReplays') as any)
+      dispatch(openOverlay({ type: ActivityOverlayType.BrowseLocalReplays }))
     }
   }, [dispatch, starcraft])
 
@@ -306,24 +315,16 @@ export function MainLayout() {
     ? [
         findMatchButton,
         <ActivityButton
-          key='create-game'
-          icon={<CreateGameIcon />}
-          label='Create'
-          onClick={onCreateLobbyClick}
-          disabled={inGameplayActivity}
-          hotkey={ALT_C}
-        />,
-        <ActivityButton
-          key='join-game'
-          icon={<JoinGameIcon />}
-          label='Join'
-          onClick={onJoinLobbyClick}
-          hotkey={ALT_J}
+          key='lobbies'
+          icon={<LobbiesIcon />}
+          label='Lobbies'
+          onClick={onLobbiesClick}
+          hotkey={ALT_B}
           count={lobbyCount > 0 ? lobbyCount : undefined}
         />,
         <ActivityButton
           key='maps'
-          icon={<StyledMapsIcon />}
+          icon={<MaterialIcon icon='map' size={36} />}
           label='Maps'
           onClick={onMapsClick}
           hotkey={ALT_M}
@@ -337,12 +338,19 @@ export function MainLayout() {
         />,
         <ActivityButton
           key='ladder'
-          icon={<LadderIcon />}
+          icon={<MaterialIcon icon='military_tech' size={36} />}
           label='Ladder'
           onClick={() => navigateToLadder()}
           hotkey={ALT_D}
         />,
-        <ActivitySpacer key='spacer' />,
+        <ActivityButton
+          key='leagues'
+          icon={<LeaguesIcon />}
+          label='Leagues'
+          onClick={() => navigateToLeaguesList()}
+          hotkey={ALT_G}
+        />,
+        <FlexSpacer key='spacer' />,
       ]
     : [
         <ActivityButton
@@ -354,31 +362,20 @@ export function MainLayout() {
         />,
         <ActivityButton
           key='ladder'
-          icon={<LadderIcon />}
+          icon={<MaterialIcon icon='military_tech' size={36} />}
           label='Ladder'
           onClick={() => navigateToLadder()}
           hotkey={ALT_D}
         />,
-        <ActivitySpacer key='spacer' />,
+        <ActivityButton
+          key='leagues'
+          icon={<LeaguesIcon />}
+          label='Leagues'
+          onClick={() => navigateToLeaguesList()}
+          hotkey={ALT_G}
+        />,
+        <FlexSpacer key='spacer' />,
       ]
-
-  const renderSearchingMatchOverlay = () => {
-    if (!IS_ELECTRON && !isMatchmakingSearching) {
-      return null
-    }
-
-    return (
-      <MatchmakingSearchingOverlay
-        open={searchingMatchOverlayOpen}
-        anchor={searchingMatchButtonRef.current ?? undefined}
-        onCancelSearch={() => {
-          dispatch(cancelFindMatch())
-          setSearchingMatchOverlayOpen(false)
-        }}
-        onDismiss={() => setSearchingMatchOverlayOpen(false)}
-      />
-    )
-  }
 
   return (
     <Container>
@@ -391,8 +388,9 @@ export function MainLayout() {
             component={LoadableAdminPanel}
           />
           <Route path='/chat/:rest*' component={ChannelRouteComponent} />
-          <Route path='/ladder/:rest*' component={LadderRouteComponent} />
           <Route path='/games/:rest*' component={GamesRouteComponent} />
+          <Route path='/ladder/:rest*' component={LadderRouteComponent} />
+          <Route path='/leagues/:rest*' component={LeagueRoot} />
           {lobbyRoute}
           {matchmakingRoute}
           {partyRoute}
@@ -421,9 +419,19 @@ export function MainLayout() {
           <FriendsListActivityButton />
         </MiniActivityButtonsContainer>
 
-        <VersionText key='version'>v{curVersion}</VersionText>
+        <VersionText key='version' />
       </ActivityBar>
-      {renderSearchingMatchOverlay()}
+      {IS_ELECTRON && isMatchmakingSearching ? (
+        <MatchmakingSearchingOverlay
+          open={searchingMatchOverlayOpen}
+          anchor={searchingMatchButtonRef.current ?? undefined}
+          onCancelSearch={() => {
+            dispatch(cancelFindMatch())
+            setSearchingMatchOverlayOpen(false)
+          }}
+          onDismiss={() => setSearchingMatchOverlayOpen(false)}
+        />
+      ) : null}
       <ActivityOverlay />
       <NotificationPopups />
     </Container>

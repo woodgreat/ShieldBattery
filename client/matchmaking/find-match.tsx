@@ -42,7 +42,7 @@ import {
   singleLine,
   subtitle1,
 } from '../styles/typography'
-import { findMatch, updateLastQueuedMatchmakingType } from './action-creators'
+import { findMatch, getCurrentMapPool, updateLastQueuedMatchmakingType } from './action-creators'
 import { Contents1v1 } from './find-1v1'
 import { Contents2v2 } from './find-2v2'
 import { FindMatchFormRef } from './find-match-forms'
@@ -134,7 +134,7 @@ export function FindMatch() {
   const isMatchmakingStatusDisabled = !useAppSelector(
     s => s.matchmakingStatus.byType.get(activeTab as MatchmakingType)?.enabled ?? false,
   )
-  const selfUser = useSelfUser()
+  const selfUser = useSelfUser()!
   const partyId = useAppSelector(s => s.party.current?.id)
   const isInParty = !!partyId
   const partySize = useAppSelector(s => s.party.current?.members.length ?? 0)
@@ -193,6 +193,12 @@ export function FindMatch() {
       return false
     },
   })
+
+  useEffect(() => {
+    if (activeTab !== '3v3') {
+      dispatch(getCurrentMapPool(activeTab))
+    }
+  }, [activeTab, dispatch])
 
   let contents: React.ReactNode | undefined
   switch (activeTab) {
@@ -381,8 +387,8 @@ const BONUS_PER_WEEK = Math.floor(MATCHMAKING_BONUS_EARNED_PER_MS * 1000 * 60 * 
 
 function RankInfo({ matchmakingType }: { matchmakingType: MatchmakingType }) {
   const dispatch = useAppDispatch()
-  const selfUser = useSelfUser()
-  const selfUserId = selfUser?.id
+  const selfUser = useSelfUser()!
+  const selfUserId = selfUser.id
   const [loadingError, setLoadingError] = useState<Error>()
 
   const season = useAppSelector(s => s.selfRank.currentSeason)

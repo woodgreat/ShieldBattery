@@ -265,6 +265,22 @@ export async function getMessagesForChannel(
   }
 }
 
+export async function deleteChannelMessage(
+  messageId: string,
+  channelId: SbChannelId,
+  withClient?: DbClient,
+): Promise<void> {
+  const { client, done } = await db(withClient)
+  try {
+    await client.query(sql`
+      DELETE FROM channel_messages
+      WHERE id = ${messageId} AND channel_id = ${channelId};
+    `)
+  } finally {
+    done()
+  }
+}
+
 export interface LeaveChannelResult {
   /**
    * The ID of a user that was selected as a new owner of the channel, or `undefined` if the channel
@@ -477,7 +493,9 @@ export async function banAllIdentifiersFromChannel(
 
   try {
     const query = sql`
-      INSERT INTO channel_identifier_bans
+      INSERT INTO channel_identifier_bans (
+        channel_id, identifier_type, identifier_hash, time_banned, first_user_id
+      )
       SELECT
         ${channelId} AS "channel_id",
         identifier_type,
@@ -522,12 +540,53 @@ export async function isUserBannedFromChannel(
   }
 }
 
+/** Returns a chat channel with the matching ID if it exists. */
+export async function getChannelInfo(
+  channelId: SbChannelId,
+  withClient?: DbClient,
+): Promise<ChannelInfo | undefined> {
+  const { client, done } = await db(withClient)
+  try {
+    const result = await client.query<DbChannel>(sql`
+      SELECT *
+      FROM channels
+      WHERE id = ${channelId};
+    `)
+
+    return result.rows.length ? convertChannelFromDb(result.rows[0]) : undefined
+  } finally {
+    done()
+  }
+}
+
 /**
- * Retrieves information for the specified chat channels. The channels are returned in the same
+ * Returns the data for all channels with the specified IDs. If a channel cannot be found it will
+ * not be included in the result. The order of the result is not guaranteed.
+ */
+export async function getChannelInfos(
+  channelIds: SbChannelId[],
+  withClient?: DbClient,
+): Promise<ChannelInfo[]> {
+  const { client, done } = await db(withClient)
+  try {
+    const result = await client.query<DbChannel>(sql`
+      SELECT *
+      FROM channels
+      WHERE id = ANY(${channelIds});
+    `)
+
+    return result.rows.map(row => convertChannelFromDb(row))
+  } finally {
+    done()
+  }
+}
+
+/**
+ * Returns the data for all channels with the specified IDs. The channels are returned in the same
  * order they were passed in. If one of the channels could not be found, it will not be included in
  * the result.
  */
-export async function getChannelInfo(
+export async function getChannelInfosInOrder(
   channelIds: SbChannelId[],
   withClient?: DbClient,
 ): Promise<ChannelInfo[]> {

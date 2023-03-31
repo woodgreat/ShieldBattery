@@ -1,9 +1,11 @@
 import { ActiveGameActions } from './active-game/actions'
+import { ActivityOverlayActions } from './activities/actions'
 import { AuthActions } from './auth/actions'
 import { ChatActions } from './chat/actions'
 import { DialogActions } from './dialogs/actions'
 import { GamesActions } from './games/actions'
 import { LadderActions } from './ladder/actions'
+import { LeaguesActions } from './leagues/actions'
 import { MapsActions } from './maps/actions'
 import { MatchmakingActions } from './matchmaking/actions'
 import { NotificationActions } from './notifications/actions'
@@ -13,11 +15,13 @@ import { WhisperActions } from './whispers/actions'
 
 type AllActions =
   | ActiveGameActions
+  | ActivityOverlayActions
   | AuthActions
   | ChatActions
   | DialogActions
   | GamesActions
   | LadderActions
+  | LeaguesActions
   | MapsActions
   | MatchmakingActions
   | NotificationActions

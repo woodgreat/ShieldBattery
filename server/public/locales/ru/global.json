@@ -18,7 +18,6 @@
     },
     "games": {
         "results": {
-            "buttonRefresh": "Обновить",
             "buttonSearchAgain": "Искать снова",
             "headlineDefault": "Результаты",
             "headlineVictory": "Победа!",
@@ -35,23 +34,12 @@
             "headlineInProgress": "В процессе…",
             "headlineDefeat": "Поражение!",
             "statusFinal": "Финал",
-            "statusLive": "Прямой эфир"
+            "statusLive": "Прямой эфир",
+            "buttonCopyLink": "Скопировать ссылку на игру"
         },
         "miniMatchHistory": {
             "buttonDetails": "Посмотреть детали",
             "noGameSelectedText": "Игра не выбрана"
-        }
-    },
-    "time": {
-        "timeAgo": {
-            "now": "только что",
-            "hours": "{{hours}}ч. назад",
-            "minutes": "{{minutes}}мин. назад",
-            "months": "{{months}}мес. назад",
-            "seconds": "{{seconds}}сек. назад",
-            "weeks": "{{weeks}}нед. назад",
-            "days": "{{days}}д. назад",
-            "years": "{{years}}год назад"
         }
     }
 }

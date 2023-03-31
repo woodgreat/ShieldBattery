@@ -22,7 +22,7 @@
       "noGameSelectedText": "No game selected"
     },
     "results": {
-      "buttonRefresh": "Refresh",
+      "buttonCopyLink": "Copy link to game",
       "buttonSearchAgain": "Search again",
       "errorLoading": "There was a problem loading this game.",
       "headlineDefault": "Results",
@@ -40,18 +40,6 @@
       "tabBuildOrders": "Build orders",
       "tabStats": "Stats",
       "tabSummary": "Summary"
-    }
-  },
-  "time": {
-    "timeAgo": {
-      "days": "{{days}}d ago",
-      "hours": "{{hours}}h ago",
-      "minutes": "{{minutes}}m ago",
-      "months": "{{months}}mo ago",
-      "now": "just now",
-      "seconds": "{{seconds}}s ago",
-      "weeks": "{{weeks}}w ago",
-      "years": "{{years}}y ago"
     }
   }
 }

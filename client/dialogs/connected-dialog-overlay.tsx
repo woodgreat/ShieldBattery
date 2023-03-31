@@ -13,14 +13,16 @@ import { FocusTrap } from '../dom/focus-trap'
 import { useExternalElementRef } from '../dom/use-external-element-ref'
 import DownloadDialog from '../download/download-dialog'
 import { KeyListenerBoundary } from '../keyboard/key-listener'
+import { LeagueExplainerDialog } from '../leagues/league-explainer'
 import MapDetailsDialog from '../maps/map-details'
 import { MapPreviewDialog } from '../maps/map-preview'
 import AcceptMatch from '../matchmaking/accept-match'
 import { PostMatchDialog } from '../matchmaking/post-match-dialog'
+import { DialogContext } from '../material/dialog'
 import { isHandledDismissalEvent } from '../material/dismissal-events'
 import { defaultSpring } from '../material/springs'
 import { zIndexDialogScrim } from '../material/zindex'
-import { ExternalLinkDialog } from '../messaging/external-link-dialog'
+import { ExternalLinkDialog } from '../navigation/external-link-dialog'
 import { PartyInviteDialog } from '../parties/party-invite-dialog'
 import { PartyQueueAcceptDialog } from '../parties/party-queue-accept-dialog'
 import {
@@ -57,15 +59,6 @@ const VISIBLE_SCRIM_COLOR = rgba(dialogScrim, 0.42)
 
 const noop = () => {}
 
-export interface DialogContextValue {
-  styles: React.CSSProperties
-  isTopDialog: boolean
-}
-export const DialogContext = React.createContext<DialogContextValue>({
-  styles: {},
-  isTopDialog: true,
-})
-
 function getDialog(dialogType: DialogType): {
   component: React.ComponentType<any>
   modal: boolean
@@ -87,6 +80,8 @@ function getDialog(dialogType: DialogType): {
       return { component: DownloadDialog, modal: false }
     case DialogType.ExternalLink:
       return { component: ExternalLinkDialog, modal: false }
+    case DialogType.LeagueExplainer:
+      return { component: LeagueExplainerDialog, modal: false }
     case DialogType.MapDetails:
       return { component: MapDetailsDialog, modal: false }
     case DialogType.MapPreview:
@@ -145,10 +140,10 @@ function DialogOverlayContent({
   dialogHistory: Immutable<DialogState[]>
   onCancel: (dialogType: DialogType | 'all', event?: React.MouseEvent) => void
 }) {
-  const dialogTransition = useTransition<DialogState, UseTransitionProps<DialogState>>(
+  const dialogTransition = useTransition<Immutable<DialogState>, UseTransitionProps<DialogState>>(
     dialogHistory,
     {
-      keys: useCallback((dialog: DialogState) => dialog.id, []),
+      keys: useCallback((dialog: Immutable<DialogState>) => dialog.id, []),
       from: { opacity: 0, transform: 'translate3d(0, -100%, 0) scale(0.6, 0.2)' },
       enter: { opacity: 1, transform: 'translate3d(0, 0%, 0) scale(1, 1)' },
       leave: { opacity: -0.5, transform: 'translate3d(0, -120%, 0) scale(0.4, 0.15)' },
@@ -174,7 +169,7 @@ function DialogDisplay({
   onCancel: propsOnCancel,
 }: {
   dialogStyles: React.CSSProperties
-  dialogState: DialogState
+  dialogState: Immutable<DialogState>
   isTopDialog: boolean
   onCancel: (dialogType: DialogType | 'all', event?: React.MouseEvent) => void
 }) {
@@ -218,6 +213,7 @@ function DialogDisplay({
               }}>
               <DialogComponent
                 dialogRef={dialogRef}
+                key={dialogState.id}
                 onCancel={onCancel}
                 {...dialogState.initData}
               />

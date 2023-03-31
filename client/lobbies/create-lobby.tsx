@@ -11,14 +11,15 @@ import {
 } from '../../common/games/configuration'
 import { MapInfoJson } from '../../common/maps'
 import { closeOverlay, openOverlay } from '../activities/action-creators'
+import { ActivityOverlayType } from '../activities/activity-overlay-type'
 import { DisabledCard, DisabledOverlay, DisabledText } from '../activities/disabled-content'
 import { useForm } from '../forms/form-hook'
 import { SubmitOnEnter } from '../forms/submit-on-enter'
 import { composeValidators, maxLength, required } from '../forms/validators'
-import { useKeyListener } from '../keyboard/key-listener'
+import ArrowBack from '../icons/material/arrow_back-24px.svg'
 import MapSelect from '../maps/map-select'
 import { useAutoFocusRef } from '../material/auto-focus'
-import { RaisedButton } from '../material/button'
+import { RaisedButton, TextButton } from '../material/button'
 import { ScrollDivider, useScrollIndicatorState } from '../material/scroll-indicator'
 import { SelectOption } from '../material/select/option'
 import { Select } from '../material/select/select'
@@ -26,7 +27,7 @@ import { TextField } from '../material/text-field'
 import { LoadingDotsArea } from '../progress/dots'
 import { useAppDispatch, useAppSelector } from '../redux-hooks'
 import { useValueAsRef } from '../state-hooks'
-import { Headline5, subtitle1 } from '../styles/typography'
+import { headline5, Headline5, subtitle1 } from '../styles/typography'
 import {
   createLobby,
   getLobbyPreferences,
@@ -34,9 +35,6 @@ import {
   updateLobbyPreferences,
 } from './action-creators'
 import { RecentMaps, recentMapsFromJs } from './lobby-preferences-reducer'
-
-const ENTER = 'Enter'
-const ENTER_NUMPAD = 'NumpadEnter'
 
 const Container = styled.div`
   display: flex;
@@ -46,7 +44,12 @@ const Container = styled.div`
 
 const TitleBar = styled.div`
   position: relative;
-  padding: 16px 24px;
+  padding: 8px 8px 16px;
+`
+
+const Title = styled.div`
+  ${headline5};
+  padding: 8px 16px 0;
 `
 
 const Contents = styled.div<{ $disabled: boolean }>`
@@ -229,6 +232,7 @@ const CreateLobbyForm = React.forwardRef<CreateLobbyFormHandle, CreateLobbyFormP
 export interface CreateLobbyProps {
   // TODO(tec27): Pass an id instead
   map?: Immutable<MapInfoJson>
+  onNavigateToList: () => void
 }
 
 export function CreateLobby(props: CreateLobbyProps) {
@@ -276,7 +280,7 @@ export function CreateLobby(props: CreateLobbyProps) {
   }, [])
   const onMapSelect = useCallback(
     (map: Immutable<MapInfoJson>) => {
-      dispatch(openOverlay('createLobby', { map }) as any)
+      dispatch(openOverlay({ type: ActivityOverlayType.Lobby, initData: { map, creating: true } }))
     },
     [dispatch],
   )
@@ -285,12 +289,16 @@ export function CreateLobby(props: CreateLobbyProps) {
       return
     }
 
-    const serverMapsProps = {
-      title: 'Select map',
-      onMapSelect,
-      onMapUpload: onMapSelect,
-    }
-    dispatch(openOverlay('browseServerMaps', serverMapsProps) as any)
+    dispatch(
+      openOverlay({
+        type: ActivityOverlayType.BrowseServerMaps,
+        initData: {
+          title: 'Select map',
+          onMapSelect,
+          onMapUpload: onMapSelect,
+        },
+      }),
+    )
   }, [isInParty, onMapSelect, dispatch])
   const onSubmit = useCallback(
     (model: CreateLobbyModel) => {
@@ -312,21 +320,6 @@ export function CreateLobby(props: CreateLobbyProps) {
   const onChange = useCallback((model: CreateLobbyModel) => {
     lastFormModelRef.current = model
   }, [])
-
-  useKeyListener({
-    onKeyDown: event => {
-      if (isInParty) {
-        return false
-      }
-
-      if (event.code === ENTER || event.code === ENTER_NUMPAD) {
-        onCreateClick()
-        return true
-      }
-
-      return false
-    },
-  })
 
   useEffect(() => {
     dispatch(getLobbyPreferences())
@@ -367,7 +360,13 @@ export function CreateLobby(props: CreateLobbyProps) {
   return (
     <Container>
       <TitleBar>
-        <Headline5>Create lobby</Headline5>
+        <TextButton
+          color='normal'
+          label='Back to list'
+          iconStart={<ArrowBack />}
+          onClick={props.onNavigateToList}
+        />
+        <Title>Create lobby</Title>
         <ScrollDivider $show={!isAtTop} $showAt='bottom' />
       </TitleBar>
       <Contents $disabled={isDisabled}>
@@ -408,5 +407,3 @@ export function CreateLobby(props: CreateLobbyProps) {
     </Container>
   )
 }
-
-export class CreateLobby2 extends React.Component {}

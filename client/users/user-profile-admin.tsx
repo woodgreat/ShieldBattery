@@ -58,7 +58,7 @@ const LoadingError = styled.div`
 `
 
 export function AdminUserPage({ user }: { user: SbUser }) {
-  const selfUser = useSelfUser()
+  const selfUser = useSelfUser()!
   const selfPermissions = useSelfPermissions()
   return (
     <AdminUserPageRoot>
@@ -172,6 +172,11 @@ function PermissionsEditorForm({
       />
       <CheckBox {...bindCheckable('debug')} label='Debug' inputProps={inputProps} />
       <CheckBox {...bindCheckable('banUsers')} label='Ban users' inputProps={inputProps} />
+      <CheckBox
+        {...bindCheckable('manageLeagues')}
+        label='Manage leagues'
+        inputProps={inputProps}
+      />
       <CheckBox {...bindCheckable('manageMaps')} label='Manage maps' inputProps={inputProps} />
       <CheckBox
         {...bindCheckable('manageMapPools')}

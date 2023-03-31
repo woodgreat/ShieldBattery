@@ -1,5 +1,6 @@
 import { SbChannelId } from '../../common/chat'
 import { GameRecordJson } from '../../common/games/games'
+import { ClientLeagueUserChangeJson, LeagueJson } from '../../common/leagues'
 import { PublicMatchmakingRatingChangeJson } from '../../common/matchmaking'
 import { SbUserId } from '../../common/users/sb-user'
 
@@ -12,6 +13,7 @@ export enum DialogType {
   ChannelBanUser = 'channelBanUser',
   Download = 'download',
   ExternalLink = 'externalLink',
+  LeagueExplainer = 'leagueExplainer',
   MapDetails = 'mapDetails',
   MapPreview = 'mapPreview',
   PartyQueueAccept = 'partyQueueAccept',
@@ -51,6 +53,7 @@ type ExternalLinkDialogPayload = BaseDialogPayload<
     domain: string
   }
 >
+type LeagueExplainerDialogPayload = BaseDialogPayload<typeof DialogType.LeagueExplainer>
 type MapDetailsDialogPayload = BaseDialogPayload<
   typeof DialogType.MapDetails,
   {
@@ -70,6 +73,8 @@ export type PostMatchDialogPayload = BaseDialogPayload<
   {
     game: GameRecordJson
     mmrChange: PublicMatchmakingRatingChangeJson
+    leagueChanges: ClientLeagueUserChangeJson[]
+    leagues: LeagueJson[]
     replayPath?: string
   }
 >
@@ -98,6 +103,7 @@ export type DialogPayload =
   | ChannelBanUserDialogPayload
   | DownloadDialogPayload
   | ExternalLinkDialogPayload
+  | LeagueExplainerDialogPayload
   | MapDetailsDialogPayload
   | MapPreviewDialogPayload
   | PartyQueueAcceptDialogPayload

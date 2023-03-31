@@ -277,8 +277,7 @@ export class UserApi {
 
   @httpGet('/:id/profile')
   @httpBefore(
-    ensureLoggedIn,
-    throttleMiddleware(accountRetrievalThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(accountRetrievalThrottle, ctx => String(ctx.session?.userId) ?? ctx.ip),
   )
   async getUserProfile(ctx: RouterContext): Promise<GetUserProfileResponse> {
     const { params } = validateRequest(ctx, {
@@ -881,6 +880,7 @@ export class AdminUserApi {
           editPermissions: Joi.boolean().required(),
           debug: Joi.boolean().required(),
           banUsers: Joi.boolean().required(),
+          manageLeagues: Joi.boolean().required(),
           manageMaps: Joi.boolean().required(),
           manageMapPools: Joi.boolean().required(),
           manageMatchmakingSeasons: Joi.boolean().required(),

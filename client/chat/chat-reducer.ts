@@ -336,6 +336,13 @@ export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
     updateMessages(state, channelId, false, messages => newMessages.concat(messages))
   },
 
+  ['@chat/updateMessageDeleted'](state, action) {
+    const { channelId } = action.meta
+    const { messageId } = action.payload
+
+    updateMessages(state, channelId, false, messages => messages.filter(m => m.id !== messageId))
+  },
+
   ['@chat/retrieveUserListBegin'](state, action) {
     const { channelId } = action.payload
 
@@ -385,6 +392,16 @@ export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
 
   ['@chat/getChannelInfo'](state, action) {
     state.idToInfo.set(action.payload.id, action.payload)
+  },
+
+  ['@chat/getBatchChannelInfo'](state, action) {
+    if (action.error) {
+      return
+    }
+
+    for (const channel of action.payload) {
+      state.idToInfo.set(channel.id, channel)
+    }
   },
 
   ['@chat/activateChannel'](state, action) {
