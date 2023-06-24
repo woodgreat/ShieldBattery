@@ -12,9 +12,9 @@ import {
 import { GameStatus, ReportedGameStatus, statusToString } from '../../common/game-status'
 import { GameClientPlayerResult, SubmitGameResultsRequest } from '../../common/games/results'
 import { EventMap, TypedEventEmitter } from '../../common/typed-emitter'
-import { makeSbUserId, SbUserId } from '../../common/users/sb-user'
+import { SbUserId, makeSbUserId } from '../../common/users/sb-user'
 import log from '../logger'
-import { LocalSettings, ScrSettings } from '../settings'
+import { LocalSettingsManager, ScrSettingsManager } from '../settings'
 import { checkStarcraftPath } from './check-starcraft-path'
 import { MapStore } from './map-store'
 
@@ -79,8 +79,8 @@ export class ActiveGameManager extends TypedEventEmitter<ActiveGameManagerEvents
 
   constructor(
     private mapStore: MapStore,
-    private localSettings: LocalSettings,
-    private scrSettings: ScrSettings,
+    private localSettings: LocalSettingsManager,
+    private scrSettings: ScrSettingsManager,
   ) {
     super()
   }
@@ -383,11 +383,13 @@ export class ActiveGameManager extends TypedEventEmitter<ActiveGameManagerEvents
 
 const injectPath = path.resolve(app.getAppPath(), '../game/dist/shieldbattery.dll')
 
+const initialCompatLayer = process.env.__COMPAT_LAYER
+
 async function doLaunch(
   gameId: string,
   serverPort: number,
-  localSettings: LocalSettings,
-  scrSettings: ScrSettings,
+  localSettings: LocalSettingsManager,
+  scrSettings: ScrSettingsManager,
 ) {
   try {
     await fsPromises.access(injectPath)
@@ -420,6 +422,11 @@ async function doLaunch(
   // NOTE(tec27): We dynamically import this so that it doesn't crash the process on startup if
   // an antivirus decides to delete the native module
   const { launchProcess } = await import('./native/process/index')
+  // People sometimes turn on compatibility settings for the game process for misguided reasons,
+  // which then cause issues that they blame on us. So, we turn off what we can (which seems to be
+  // just the Run As Admin setting) to avoid those problems
+  log.debug('Setting __COMPAT_LAYER to remove Run As Admin setting')
+  process.env.__COMPAT_LAYER = 'RunAsInvoker'
   const proc = await launchProcess({
     appPath,
     args: args as any,
@@ -428,6 +435,7 @@ async function doLaunch(
     dllFunc: 'OnInject',
     logCallback: ((msg: string) => log.verbose(`[Inject] ${msg}`)) as any,
   })
+  process.env.__COMPAT_LAYER = initialCompatLayer
   log.verbose('Process launched')
   return proc
 }

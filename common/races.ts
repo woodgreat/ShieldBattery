@@ -1,3 +1,4 @@
+import { TFunction } from 'i18next'
 import { assertUnreachable } from './assert-unreachable'
 
 /** A single-character representation of a chosen StarCraft race. */
@@ -31,16 +32,16 @@ export interface RaceStats {
   rZLosses: number
 }
 
-export function raceCharToLabel(raceChar: RaceChar): string {
+export function raceCharToLabel(raceChar: RaceChar, t: TFunction): string {
   switch (raceChar) {
     case 'p':
-      return 'Protoss'
+      return t('game.race.protoss', 'Protoss')
     case 'r':
-      return 'Random'
+      return t('game.race.random', 'Random')
     case 't':
-      return 'Terran'
+      return t('game.race.terran', 'Terran')
     case 'z':
-      return 'Zerg'
+      return t('game.race.zerg', 'Zerg')
     default:
       return assertUnreachable(raceChar)
   }

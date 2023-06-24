@@ -4,8 +4,7 @@ import { connect } from 'react-redux'
 import styled from 'styled-components'
 import FileInput from '../forms/file-input'
 import form from '../forms/form'
-import SuccessIcon from '../icons/material/check_circle-24px.svg'
-import ErrorIcon from '../icons/material/error-24px.svg'
+import { MaterialIcon } from '../icons/material/material-icon'
 import { upload as uploadMap } from '../maps/upload'
 import { RaisedButton, TextButton } from '../material/button'
 import { fetchJson } from '../network/fetch'
@@ -17,7 +16,7 @@ import {
   colorSuccess,
   colorTextSecondary,
 } from '../styles/colors'
-import { singleLine, SubheadingOld, subtitle1 } from '../styles/typography'
+import { SubheadingOld, singleLine, subtitle1 } from '../styles/typography'
 
 const Container = styled.div`
   max-width: 600px;
@@ -52,11 +51,11 @@ const StatusContainer = styled.div`
   margin-left: 16px;
 `
 
-const StyledSuccessIcon = styled(SuccessIcon)`
+const StyledSuccessIcon = styled(MaterialIcon).attrs({ icon: 'check_circle' })`
   color: ${colorSuccess};
 `
 
-const StyledErrorIcon = styled(ErrorIcon)`
+const StyledErrorIcon = styled(MaterialIcon).attrs({ icon: 'error' })`
   color: ${colorError};
 `
 

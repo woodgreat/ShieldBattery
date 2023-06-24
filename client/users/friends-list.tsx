@@ -8,11 +8,7 @@ import { SbUserId } from '../../common/users/sb-user'
 import { useSelfUser } from '../auth/state-hooks'
 import { ConnectedAvatar } from '../avatars/avatar'
 import { useObservedDimensions } from '../dom/dimension-hooks'
-import CheckIcon from '../icons/material/check-24px.svg'
-import CloseIcon from '../icons/material/close-24px.svg'
-import FriendsIcon from '../icons/material/group-24px.svg'
-import FriendAddIcon from '../icons/material/group_add-24px.svg'
-import FriendSettingsIcon from '../icons/material/manage_accounts-24px.svg'
+import { MaterialIcon } from '../icons/material/material-icon'
 import { JsonLocalStorageValue } from '../local-storage'
 import { HotkeyProp, IconButton, useButtonHotkey } from '../material/button'
 import { Popover, useAnchorPosition, usePopoverController } from '../material/popover'
@@ -20,8 +16,8 @@ import { ScrollDivider, useScrollIndicatorState } from '../material/scroll-indic
 import { TabItem, Tabs } from '../material/tabs'
 import { Tooltip } from '../material/tooltip'
 import { useAppDispatch, useAppSelector } from '../redux-hooks'
-import { openSettingsDialog } from '../settings/action-creators'
-import { openSnackbar, TIMING_LONG } from '../snackbars/action-creators'
+import { openSettings } from '../settings/action-creators'
+import { TIMING_LONG, openSnackbar } from '../snackbars/action-creators'
 import { useForceUpdate, useStableCallback } from '../state-hooks'
 import { alphaDisabled, colorDividers, colorTextFaint, colorTextSecondary } from '../styles/colors'
 import { body2, headline6, overline, singleLine, subtitle1 } from '../styles/typography'
@@ -39,15 +35,15 @@ import { ConnectedUserProfileOverlay } from './user-profile-overlay'
 
 const ALT_E: HotkeyProp = { keyCode: keycode('e'), altKey: true }
 
-const FadedFriendsIcon = styled(FriendsIcon)`
+const FadedFriendsIcon = styled(MaterialIcon).attrs({ icon: 'group' })`
   color: ${colorTextSecondary};
 `
 
-const FadedFriendAddIcon = styled(FriendAddIcon)`
+const FadedFriendAddIcon = styled(MaterialIcon).attrs({ icon: 'group_add' })`
   color: ${colorTextSecondary};
 `
 
-const FadedFriendSettingsIcon = styled(FriendSettingsIcon)`
+const FadedFriendSettingsIcon = styled(MaterialIcon).attrs({ icon: 'manage_accounts' })`
   color: ${colorTextSecondary};
 `
 
@@ -177,9 +173,9 @@ export function FriendsPopover({ onDismiss }: { onDismiss: () => void }) {
   const activeTab = savedFriendsListTab.getValue() ?? FriendsListTab.List
   const onTabChange = useStableCallback((tab: FriendsListTab) => {
     if (tab === FriendsListTab.Settings) {
-      // TODO(tec27): Open to the correct part of settings once it's there
       onDismiss()
-      dispatch(openSettingsDialog())
+      // TODO(tec27): Open to the correct part of settings once it's there
+      dispatch(openSettings())
       return
     }
 
@@ -434,7 +430,7 @@ function FriendRequestsList({ height }: { height: number }) {
           row.relationship.fromId === selfUser.id ? (
             <>
               <IconButton
-                icon={<CloseIcon />}
+                icon={<MaterialIcon icon='close' />}
                 title='Remove'
                 onClick={() => {
                   dispatch(
@@ -459,7 +455,7 @@ function FriendRequestsList({ height }: { height: number }) {
           ) : (
             <>
               <IconButton
-                icon={<CloseIcon />}
+                icon={<MaterialIcon icon='close' />}
                 title='Decline'
                 onClick={() => {
                   dispatch(
@@ -481,7 +477,7 @@ function FriendRequestsList({ height }: { height: number }) {
                 }}
               />
               <IconButton
-                icon={<CheckIcon />}
+                icon={<MaterialIcon icon='check' />}
                 title='Accept'
                 onClick={() => {
                   dispatch(

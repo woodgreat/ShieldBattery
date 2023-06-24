@@ -12,19 +12,14 @@ import { ActivityButton } from './activities/activity-button'
 import { ActivityOverlay } from './activities/activity-overlay'
 import { ActivityOverlayType } from './activities/activity-overlay-type'
 import { VersionText } from './activities/version-text'
-import { IsAdminFilter } from './admin/admin-route-filters'
+import { useIsAdmin } from './admin/admin-permissions'
 import { openChangelogIfNecessary } from './changelog/action-creators'
 import { ChannelRouteComponent } from './chat/route'
 import { openDialog } from './dialogs/action-creators'
 import { DialogType } from './dialogs/dialog-type'
 import { DispatchFunction } from './dispatch-registry'
 import { GamesRouteComponent } from './games/route'
-import DownloadIcon from './icons/material/get_app-36px.svg'
-import LobbiesIcon from './icons/material/holiday_village-36px.svg'
 import { MaterialIcon } from './icons/material/material-icon'
-import ReplaysIcon from './icons/material/movie-36px.svg'
-import SettingsIcon from './icons/material/settings-24px.svg'
-import LeaguesIcon from './icons/material/social_leaderboard-36px.svg'
 import FindMatchIcon from './icons/shieldbattery/ic_satellite_dish_black_36px.svg'
 import { useKeyListener } from './keyboard/key-listener'
 import { navigateToLadder } from './ladder/action-creators'
@@ -39,7 +34,6 @@ import MatchmakingView from './matchmaking/view'
 import { IconButton, useButtonHotkey } from './material/button'
 import { Tooltip } from './material/tooltip'
 import { ConnectedLeftNav } from './navigation/connected-left-nav'
-import { ConditionalRoute } from './navigation/custom-routes'
 import Index from './navigation/index'
 import { replace } from './navigation/routing'
 import { addLocalNotification } from './notifications/action-creators'
@@ -53,10 +47,9 @@ import {
 } from './policies/action-creators'
 import LoadingIndicator from './progress/dots'
 import { useAppDispatch, useAppSelector } from './redux-hooks'
-import { openSettingsDialog } from './settings/action-creators'
+import { openSettings } from './settings/action-creators'
 import { isShieldBatteryHealthy, isStarcraftHealthy } from './starcraft/is-starcraft-healthy'
 import { StarcraftStatus } from './starcraft/starcraft-reducer'
-import { colorTextSecondary } from './styles/colors'
 import { FlexSpacer } from './styles/flex-spacer'
 import { FriendsListActivityButton } from './users/friends-list'
 import { ProfileRouteComponent } from './users/route'
@@ -114,10 +107,6 @@ const MiniActivityButtonsContainer = styled.div`
   justify-content: center;
 `
 
-const FadedSettingsIcon = styled(SettingsIcon)`
-  color: ${colorTextSecondary};
-`
-
 /**
  * Tracks if this is the first time this user has logged in on this client. Pretty dumb, if we need
  * more smarts we can add it as a Context var or put it in the store or something.
@@ -152,6 +141,7 @@ function useHealthyStarcraftCallback<T extends (...args: any[]) => any>(
 
 export function MainLayout() {
   const dispatch = useAppDispatch()
+  const isAdmin = useIsAdmin()
   const inGameplayActivity = useAppSelector(s => s.gameplayActivity.inGameplayActivity)
   const isEmailVerified = useAppSelector(s => s.auth.user.emailVerified)
   const isMatchmakingSearching = useAppSelector(s => !!s.matchmaking.searchInfo)
@@ -316,7 +306,7 @@ export function MainLayout() {
         findMatchButton,
         <ActivityButton
           key='lobbies'
-          icon={<LobbiesIcon />}
+          icon={<MaterialIcon icon='holiday_village' size={36} />}
           label='Lobbies'
           onClick={onLobbiesClick}
           hotkey={ALT_B}
@@ -331,7 +321,7 @@ export function MainLayout() {
         />,
         <ActivityButton
           key='replays'
-          icon={<ReplaysIcon />}
+          icon={<MaterialIcon icon='movie' size={36} />}
           label='Replays'
           onClick={onReplaysClick}
           hotkey={ALT_R}
@@ -345,7 +335,7 @@ export function MainLayout() {
         />,
         <ActivityButton
           key='leagues'
-          icon={<LeaguesIcon />}
+          icon={<MaterialIcon icon='social_leaderboard' size={36} />}
           label='Leagues'
           onClick={() => navigateToLeaguesList()}
           hotkey={ALT_G}
@@ -355,7 +345,7 @@ export function MainLayout() {
     : [
         <ActivityButton
           key='download'
-          icon={<DownloadIcon />}
+          icon={<MaterialIcon icon='download' size={36} />}
           label='Download'
           onClick={() => dispatch(openDialog({ type: DialogType.Download }))}
           hotkey={ALT_O}
@@ -369,7 +359,7 @@ export function MainLayout() {
         />,
         <ActivityButton
           key='leagues'
-          icon={<LeaguesIcon />}
+          icon={<MaterialIcon icon='social_leaderboard' size={36} />}
           label='Leagues'
           onClick={() => navigateToLeaguesList()}
           hotkey={ALT_G}
@@ -382,11 +372,7 @@ export function MainLayout() {
       <ConnectedLeftNav />
       <Content>
         <Switch>
-          <ConditionalRoute
-            path='/admin/:rest*'
-            filters={[IsAdminFilter]}
-            component={LoadableAdminPanel}
-          />
+          {isAdmin ? <Route path='/admin/:rest*' component={LoadableAdminPanel} /> : null}
           <Route path='/chat/:rest*' component={ChannelRouteComponent} />
           <Route path='/games/:rest*' component={GamesRouteComponent} />
           <Route path='/ladder/:rest*' component={LadderRouteComponent} />
@@ -412,8 +398,8 @@ export function MainLayout() {
             <IconButton
               key='settings'
               ref={settingsButtonRef}
-              icon={<FadedSettingsIcon />}
-              onClick={() => dispatch(openSettingsDialog())}
+              icon={<MaterialIcon icon='settings' />}
+              onClick={() => dispatch(openSettings())}
             />
           </Tooltip>
           <FriendsListActivityButton />

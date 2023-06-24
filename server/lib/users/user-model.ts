@@ -34,6 +34,7 @@ interface UserInternal {
   acceptedUsePolicyVersion: number
   acceptedTermsVersion: number
   acceptedPrivacyVersion: number
+  locale: string
 }
 
 type DbUser = Dbify<UserInternal>
@@ -60,6 +61,7 @@ function convertUserFromDb(dbUser: DbUser): UserInternal {
     acceptedPrivacyVersion: dbUser.accepted_privacy_version,
     acceptedTermsVersion: dbUser.accepted_terms_version,
     acceptedUsePolicyVersion: dbUser.accepted_use_policy_version,
+    locale: dbUser.locale,
   }
 }
 
@@ -83,6 +85,7 @@ function convertToExternalSelf(userInternal: UserInternal): SelfUser {
     acceptedPrivacyVersion: userInternal.acceptedPrivacyVersion,
     acceptedTermsVersion: userInternal.acceptedTermsVersion,
     acceptedUsePolicyVersion: userInternal.acceptedUsePolicyVersion,
+    locale: userInternal.locale,
   }
 }
 
@@ -105,6 +108,7 @@ export async function createUser({
   ipAddress,
   createdDate = new Date(),
   clientIds,
+  locale,
 }: {
   name: string
   email: string
@@ -112,6 +116,7 @@ export async function createUser({
   ipAddress: string
   createdDate?: Date
   clientIds: ReadonlyArray<[type: number, hashStr: string]>
+  locale?: string
 }): Promise<{ user: SelfUser; permissions: SbPermissions }> {
   const transactionCompleted = createDeferred<void>()
   transactionCompleted.catch(swallowNonBuiltins)
@@ -119,9 +124,9 @@ export async function createUser({
   try {
     const transactionResult = await transact(async client => {
       const result = await client.query<DbUser>(sql`
-      INSERT INTO users (name, email, created, signup_ip_address, email_verified,
+      INSERT INTO users (name, email, created, signup_ip_address, email_verified, locale,
         accepted_privacy_version, accepted_terms_version, accepted_use_policy_version)
-      VALUES (${name}, ${email}, ${createdDate}, ${ipAddress}, false,
+      VALUES (${name}, ${email}, ${createdDate}, ${ipAddress}, false, ${locale},
         ${PRIVACY_POLICY_VERSION}, ${TERMS_OF_SERVICE_VERSION}, ${ACCEPTABLE_USE_VERSION})
       RETURNING *
     `)
@@ -169,7 +174,7 @@ export type UserUpdatables = Omit<
  * This should only be called for the currently active user.
  */
 export async function updateUser(
-  id: number,
+  id: SbUserId,
   updates: Partial<UserUpdatables>,
 ): Promise<SelfUser | undefined> {
   let updatedPassword: string | undefined
@@ -215,6 +220,11 @@ export async function updateUser(
       case 'acceptedUsePolicyVersion':
         query.append(sql`
           accepted_use_policy_version = ${value}
+        `)
+        break
+      case 'locale':
+        query.append(sql`
+          locale = ${value}
         `)
         break
       default:
@@ -341,20 +351,27 @@ export async function findUserByName(name: string): Promise<SbUser | undefined> 
 }
 
 /**
- * Returns a `Map` of name -> `User` for a given list of names. Any names that can't be found won't
- * be present in the resulting `Map`.
+ * Returns the data for all users with the specified names. If a user cannot be found it will not
+ * be included in the result. The order of the result is not guaranteed.
  */
-export async function findUsersByName(names: string[]): Promise<Map<string, SbUser>> {
-  // TODO(tec27): Should this just return an array and let callers make the Map if they want?
+export async function findUsersByName(names: string[]): Promise<SbUser[]> {
   const { client, done } = await db()
   try {
     const result = await client.query<DbUser>(sql`SELECT * FROM users WHERE name = ANY (${names})`)
-    return new Map<string, SbUser>(
-      result.rows.map(row => [row.name, convertToExternal(convertUserFromDb(row))]),
-    )
+    return result.rows.map(r => convertToExternal(convertUserFromDb(r)))
   } finally {
     done()
   }
+}
+
+/**
+ * Returns a `Map` of name -> `SbUser` for a given list of names. Any names that can't be found
+ * won't be present in the resulting `Map`. If you don't need a `Map`, see `findUsersByName`
+ * instead.
+ */
+export async function findUsersByNameAsMap(names: string[]): Promise<Map<string, SbUser>> {
+  const result = await findUsersByName(names)
+  return new Map<string, SbUser>(result.map(u => [u.name, u]))
 }
 
 /**

@@ -16,7 +16,7 @@ import { DisabledCard, DisabledOverlay, DisabledText } from '../activities/disab
 import { useForm } from '../forms/form-hook'
 import { SubmitOnEnter } from '../forms/submit-on-enter'
 import { composeValidators, maxLength, required } from '../forms/validators'
-import ArrowBack from '../icons/material/arrow_back-24px.svg'
+import { MaterialIcon } from '../icons/material/material-icon'
 import MapSelect from '../maps/map-select'
 import { useAutoFocusRef } from '../material/auto-focus'
 import { RaisedButton, TextButton } from '../material/button'
@@ -27,7 +27,7 @@ import { TextField } from '../material/text-field'
 import { LoadingDotsArea } from '../progress/dots'
 import { useAppDispatch, useAppSelector } from '../redux-hooks'
 import { useValueAsRef } from '../state-hooks'
-import { headline5, Headline5, subtitle1 } from '../styles/typography'
+import { Headline5, headline5, subtitle1 } from '../styles/typography'
 import {
   createLobby,
   getLobbyPreferences,
@@ -86,7 +86,7 @@ const SectionHeader = styled.div`
 
 const lobbyNameValidator = composeValidators(
   required('Enter a lobby name'),
-  maxLength(LOBBY_NAME_MAXLENGTH, `Enter at most ${LOBBY_NAME_MAXLENGTH} characters`),
+  maxLength(LOBBY_NAME_MAXLENGTH),
 )
 const selectedMapValidator = required('Select a map to play')
 
@@ -363,7 +363,7 @@ export function CreateLobby(props: CreateLobbyProps) {
         <TextButton
           color='normal'
           label='Back to list'
-          iconStart={<ArrowBack />}
+          iconStart={<MaterialIcon icon='arrow_back' />}
           onClick={props.onNavigateToList}
         />
         <Title>Create lobby</Title>

@@ -4,7 +4,7 @@ import { PartyEvent } from '../../common/parties'
 import audioManager, { AvailableSound } from '../audio/audio-manager'
 import { openDialog } from '../dialogs/action-creators'
 import { DialogType } from '../dialogs/dialog-type'
-import { dispatch, Dispatchable } from '../dispatch-registry'
+import { Dispatchable, dispatch } from '../dispatch-registry'
 import { openSnackbar } from '../snackbars/action-creators'
 import windowFocus from '../window-focus'
 import { navigateToParty } from './action-creators'
@@ -132,6 +132,7 @@ const eventToAction: EventToActionMap = {
       dispatch({
         type: '@parties/updateChatMessage',
         payload: event,
+        meta: { partyId },
       })
 
       if (!isBlocked && (!current?.activated || !windowFocus.isFocused())) {

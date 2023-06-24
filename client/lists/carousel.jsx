@@ -1,9 +1,9 @@
 import PropTypes from 'prop-types'
 import React from 'react'
+import { withTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import WindowListener from '../dom/window-listener'
-import CarouselPrev from '../icons/material/chevron_left-24px.svg'
-import CarouselNext from '../icons/material/chevron_right-24px.svg'
+import { MaterialIcon } from '../icons/material/material-icon'
 import { IconButton, Label } from '../material/button'
 import { fastOutSlowIn } from '../material/curve-constants'
 import { colorTextSecondary } from '../styles/colors'
@@ -56,6 +56,7 @@ const CarouselButton = styled(IconButton)`
   }
 `
 
+@withTranslation()
 export default class Carousel extends React.Component {
   static propTypes = {
     isLoading: PropTypes.bool,
@@ -124,7 +125,7 @@ export default class Carousel extends React.Component {
   }
 
   render() {
-    const { isLoading, hasMoreItems, onLoadMoreData } = this.props
+    const { isLoading, hasMoreItems, onLoadMoreData, t } = this.props
     const { translateWidth, hasPrevItems, hasNextItems } = this.state
 
     const contentStyle = { transform: `translateX(${translateWidth}px)` }
@@ -135,7 +136,11 @@ export default class Carousel extends React.Component {
       <CarouselContainer ref={this._carouselRef} className={this.props.className}>
         <WindowListener event='resize' listener={this._calcCarouselWidth} />
         {showPrevButton ? (
-          <CarouselButton icon={<CarouselPrev />} title='Previous' onClick={this.onPrev} />
+          <CarouselButton
+            icon={<MaterialIcon icon='chevron_left' />}
+            title={t('common.actions.previous', 'Previous')}
+            onClick={this.onPrev}
+          />
         ) : null}
         <CarouselContentMask showLeft={showPrevButton} showRight={showNextButton}>
           <CarouselContent ref={this._contentRef} style={contentStyle}>
@@ -150,7 +155,11 @@ export default class Carousel extends React.Component {
           </CarouselContent>
         </CarouselContentMask>
         {showNextButton ? (
-          <CarouselButton icon={<CarouselNext />} title='Next' onClick={this.onNext} />
+          <CarouselButton
+            icon={<MaterialIcon icon='chevron_right' />}
+            title={t('common.actions.next', 'Next')}
+            onClick={this.onNext}
+          />
         ) : null}
       </CarouselContainer>
     )

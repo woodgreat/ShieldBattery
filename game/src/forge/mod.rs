@@ -11,12 +11,13 @@ use winapi::shared::windef::{HMENU, HWND};
 use winapi::um::wingdi::DEVMODEW;
 use winapi::um::winuser::*;
 
+use crate::bw::{Bw, get_bw};
 use crate::game_thread::{send_game_msg_to_async, GameThreadMessage};
 
 mod scr_hooks {
     use super::{c_void, ATOM, DEVMODEW, HINSTANCE, HMENU, HWND, WNDCLASSEXW};
 
-    whack_hooks!(stdcall, 0,
+    system_hooks!(
         !0 => CreateWindowExW(
             u32, *const u16, *const u16, u32, i32, i32, i32, i32, HWND, HMENU, HINSTANCE, *mut c_void,
         ) -> HWND;
@@ -103,6 +104,8 @@ unsafe extern "system" fn wnd_proc_scr(
         None
     });
     if let Some(ret) = ret {
+        ret
+    } else if let Some(ret) = get_bw().window_proc_hook(window, msg, wparam, lparam) {
         ret
     } else {
         let orig_wnd_proc = with_forge(|f| f.orig_wnd_proc);

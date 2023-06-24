@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ffi::CStr;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,9 +8,12 @@ use bw_dat::UnitId;
 use libc::{c_void, sockaddr};
 use once_cell::sync::OnceCell;
 use quick_error::quick_error;
+use winapi::shared::windef::{HWND};
 
 use crate::app_messages::{MapInfo, Settings};
+use crate::bw_scr::BwScr;
 
+pub mod apm_stats;
 pub mod commands;
 pub mod list;
 pub mod unit;
@@ -17,14 +21,14 @@ pub mod unit;
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct StormPlayerId(pub u8);
 
-static BW_IMPL: OnceCell<&'static dyn Bw> = OnceCell::new();
+static BW_IMPL: OnceCell<&'static BwScr> = OnceCell::new();
 
 /// Gets access to the object that is used for actually manipulating Broodwar state.
-pub fn get_bw() -> &'static dyn Bw {
+pub fn get_bw() -> &'static BwScr {
     *BW_IMPL.get().unwrap()
 }
 
-pub fn set_bw_impl(bw: &'static dyn Bw) {
+pub fn set_bw_impl(bw: &'static BwScr) {
     let _ = BW_IMPL.set(bw);
 }
 
@@ -100,6 +104,14 @@ pub trait Bw: Sync + Send {
     unsafe fn free(&self, ptr: *mut u8);
 
     unsafe fn call_original_status_screen_fn(&self, unit_id: UnitId, dialog: *mut Dialog);
+
+    unsafe fn window_proc_hook(
+        &self,
+        window: HWND,
+        msg: u32,
+        wparam: usize,
+        lparam: isize,
+    ) -> Option<isize>;
 }
 
 /// One bool for state that doesn't require specific handling based on version.
@@ -202,8 +214,6 @@ impl LobbyCreateError {
     }
 }
 
-pub const GAME_STATE_ACTIVE: u32 = 0x04;
-
 pub const PLAYER_TYPE_NONE: u8 = 0x0;
 pub const PLAYER_TYPE_HUMAN: u8 = 0x2;
 pub const PLAYER_TYPE_LOBBY_COMPUTER: u8 = 0x5;
@@ -250,29 +260,10 @@ pub struct LobbyGameInitData {
 }
 
 #[repr(C)]
-#[derive(Clone)]
-pub struct SnpGameInfo {
-    pub index: u32,
-    pub game_state: u32,
-    pub unk1: u32,
-    pub host_addr: sockaddr,
-    pub unk2: u32,
-    pub update_time: u32,
-    pub unk3: u32,
-    pub game_name: [u8; 128],
-    pub game_stats: [u8; 128],
-    pub next: *mut SnpGameInfo,
-    pub extra: *mut c_void,
-    pub extra_size: u32,
-    pub product_code: u32,
-    pub version_code: u32,
-}
-
-#[repr(C)]
 pub struct SnpFunctions {
     pub unk0: usize,
-    pub free_packet: unsafe extern "stdcall" fn(*mut sockaddr, *const u8, u32) -> i32,
-    pub initialize: unsafe extern "stdcall" fn(
+    pub free_packet: unsafe extern "system" fn(*mut sockaddr, *const u8, u32) -> i32,
+    pub initialize: unsafe extern "system" fn(
         *const crate::bw::ClientInfo,
         *mut c_void,
         *mut c_void,
@@ -280,10 +271,10 @@ pub struct SnpFunctions {
     ) -> i32,
     pub unk0c: usize,
     pub receive_packet:
-        unsafe extern "stdcall" fn(*mut *mut sockaddr, *mut *const u8, *mut u32) -> i32,
-    pub send_packet: unsafe extern "stdcall" fn(*const sockaddr, *const u8, u32) -> i32,
+        unsafe extern "system" fn(*mut *mut sockaddr, *mut *const u8, *mut u32) -> i32,
+    pub send_packet: unsafe extern "system" fn(*const sockaddr, *const u8, u32) -> i32,
     pub unk18: usize,
-    pub broadcast_game: unsafe extern "stdcall" fn(
+    pub broadcast_game: unsafe extern "system" fn(
         *const u8,
         *const u8,
         *const u8,
@@ -295,26 +286,14 @@ pub struct SnpFunctions {
         *mut c_void,
         u32,
     ) -> i32,
-    pub stop_broadcasting_game: unsafe extern "stdcall" fn() -> i32,
+    pub stop_broadcasting_game: unsafe extern "system" fn() -> i32,
     pub unk24: usize,
     pub unk28: usize,
-    pub joined_game: Option<unsafe extern "stdcall" fn(*const u8, usize) -> i32>,
+    pub joined_game: Option<unsafe extern "system" fn(*const u8, usize) -> i32>,
     pub unk30: usize,
     pub unk34: usize,
-    pub start_listening_for_games: Option<unsafe extern "stdcall" fn() -> i32>,
+    pub start_listening_for_games: Option<unsafe extern "system" fn() -> i32>,
     pub future_padding: [usize; 0x10],
-}
-
-#[repr(C)]
-pub struct SnpListEntry {
-    pub prev: *mut SnpListEntry,
-    pub next: *mut SnpListEntry,
-    pub file_path: [u8; 260],
-    pub index: u32,
-    pub identifier: u32,
-    pub name: [u8; 128],
-    pub description: [u8; 128],
-    pub capabilities: SnpCapabilities,
 }
 
 #[repr(C)]
@@ -431,24 +410,28 @@ pub struct UnitStatusFunc {
 
 unsafe impl Send for SnpFunctions {}
 unsafe impl Sync for SnpFunctions {}
-unsafe impl Send for SnpListEntry {}
-unsafe impl Sync for SnpListEntry {}
-unsafe impl Send for SnpGameInfo {}
-unsafe impl Sync for SnpGameInfo {}
 unsafe impl Send for ClientInfo {}
 unsafe impl Sync for ClientInfo {}
 
 #[test]
 fn struct_sizes() {
     use std::mem::size_of;
-    assert_eq!(size_of::<SnpGameInfo>(), 0x13c);
+    #[cfg(target_arch = "x86")]
+    fn size(value: usize, _: usize) -> usize {
+        value
+    }
+    #[cfg(target_arch = "x86_64")]
+    fn size(_: usize, value: usize) -> usize {
+        value
+    }
+
     assert_eq!(size_of::<StormPlayer>(), 0x22);
     assert_eq!(size_of::<BwGameData>(), 0x8d);
     assert_eq!(size_of::<GameTemplate>(), 0x20);
-    assert_eq!(size_of::<FowSprite>(), 0x10);
-    assert_eq!(size_of::<ReplayData>(), 0x20);
+    assert_eq!(size_of::<FowSprite>(), size(0x10, 0x20));
+    assert_eq!(size_of::<ReplayData>(), size(0x20, 0x30));
     assert_eq!(size_of::<ReplayHeader>(), 0x279);
-    assert_eq!(size_of::<UnitStatusFunc>(), 0xc);
+    assert_eq!(size_of::<UnitStatusFunc>(), size(0xc, 0x18));
 }
 
 pub struct FowSpriteIterator(*mut FowSprite);
@@ -471,4 +454,30 @@ impl Iterator for FowSpriteIterator {
         }
         Some(fow)
     }
+}
+
+pub unsafe fn player_name(player: *mut Player) -> Cow<'static, str> {
+    let name_length = (*player).name.iter().position(|&x| x == 0).unwrap_or((*player).name.len());
+    let name = &(*player).name[..name_length];
+    String::from_utf8_lossy(name)
+}
+
+pub unsafe fn player_color(
+    game: bw_dat::Game,
+    main_palette: *mut u8,
+    use_rgb_colors: u8,
+    rgb_colors: *mut [[f32; 4]; 8],
+    player_id: u8,
+) -> [u8; 3] {
+    let color = if use_rgb_colors == 0 {
+        (**game).player_minimap_color.get(player_id as usize)
+            .map(|&s| {
+                let color = main_palette.add(4 * s as usize);
+                [*color, *color.add(1), *color.add(2)]
+            })
+    } else {
+        (*rgb_colors).get(player_id as usize)
+            .map(|x| [(x[0] * 255.0) as u8, (x[1] * 255.0) as u8, (x[2] * 255.0) as u8])
+    };
+    color.unwrap_or([0xff, 0xff, 0xff])
 }

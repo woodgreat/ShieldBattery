@@ -1,5 +1,6 @@
 import keycode from 'keycode'
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { UseTransitionProps } from 'react-spring'
 import styled from 'styled-components'
 import { useLocation } from 'wouter'
@@ -22,17 +23,14 @@ import GitHubIcon from '../icons/brands/github.svg'
 import KofiColorIcon from '../icons/brands/kofi-color.svg'
 import PatreonIcon from '../icons/brands/patreon.svg'
 import TwitterIcon from '../icons/brands/twitter.svg'
-import EditIcon from '../icons/material/edit-24px.svg'
 import { MaterialIcon } from '../icons/material/material-icon'
-import ChangelogIcon from '../icons/material/new_releases-24px.svg'
-import PortraitIcon from '../icons/material/portrait-24px.svg'
-import LogoutIcon from '../icons/material/power_settings-24px.svg'
 import { leaveLobby } from '../lobbies/action-creators'
 import LobbyNavEntry from '../lobbies/nav-entry'
 import { cancelFindMatch } from '../matchmaking/action-creators'
 import { isMatchmakingLoading } from '../matchmaking/matchmaking-reducer'
 import { SearchingMatchNavEntry } from '../matchmaking/searching-match-nav-entry'
 import { RaisedButton, useButtonHotkey } from '../material/button'
+import { ClickableSubheader } from '../material/left-nav/clickable-subheader'
 import LeftNav from '../material/left-nav/left-nav'
 import Section from '../material/left-nav/section'
 import Subheader from '../material/left-nav/subheader'
@@ -46,7 +44,7 @@ import { Tooltip } from '../material/tooltip'
 import { leaveParty } from '../parties/action-creators'
 import { PartyNavEntry } from '../parties/party-nav-entry'
 import { useAppDispatch, useAppSelector } from '../redux-hooks'
-import { openSnackbar, TIMING_LONG } from '../snackbars/action-creators'
+import { TIMING_LONG, openSnackbar } from '../snackbars/action-creators'
 import { colorTextSecondary } from '../styles/colors'
 import { overline, singleLine } from '../styles/typography'
 import { getBatchUserInfo, navigateToUserProfile } from '../users/action-creators'
@@ -186,6 +184,7 @@ function SearchingMatchSection() {
 }
 
 function LoadingGameSection() {
+  const { t } = useTranslation()
   const isLobbyLoading = useAppSelector(s => s.lobby.info.isLoading)
   const lobbyName = useAppSelector(s => s.lobby.info.name)
   const isMatchLoading = useAppSelector(s => isMatchmakingLoading(s.matchmaking))
@@ -201,9 +200,12 @@ function LoadingGameSection() {
   let title: string
   if (isLobbyLoading) {
     link = urlPath`/lobbies/${lobbyName}/loading-game`
-    title = 'Custom game'
+    title = t('navigation.leftNav.customGame', 'Custom game')
   } else if (isMatchLoading) {
-    title = `Ranked ${matchmakingType ? matchmakingTypeToLabel(matchmakingType) : ''}`
+    title = t('navigation.leftNav.rankedGame', {
+      defaultValue: 'Ranked {{matchmakingType}}',
+      matchmakingType: matchmakingType ? matchmakingTypeToLabel(matchmakingType, t) : '',
+    })
 
     if (matchmakingLaunching) {
       link = '/matchmaking/countdown'
@@ -227,7 +229,7 @@ function LoadingGameSection() {
           link={link}
           currentPath={currentPath}
           title={title}
-          subtitle='Loading…'
+          subtitle={t('navigation.leftNav.loadingGame', 'Loading…')}
         />
       </Section>
       <SectionSpacer key='loading-game-divider' />
@@ -236,6 +238,7 @@ function LoadingGameSection() {
 }
 
 function ActiveGameSection() {
+  const { t } = useTranslation()
   const isActive = useAppSelector(s => s.activeGame.isActive)
   const gameInfo = useAppSelector(s => s.activeGame.info)
   const [currentPath] = useLocation()
@@ -248,10 +251,13 @@ function ActiveGameSection() {
   let title: string
   if (gameInfo.type === 'lobby') {
     link = urlPath`/lobbies/${gameInfo.extra.lobby.info.name}/active-game`
-    title = 'Custom game'
+    title = t('navigation.leftNav.customGame', 'Custom game')
   } else if (gameInfo.type === 'matchmaking') {
     link = '/matchmaking/active-game'
-    title = `Ranked ${matchmakingTypeToLabel(gameInfo.extra.match.type)}`
+    title = t('navigation.leftNav.rankedGame', {
+      defaultValue: 'Ranked {{matchmakingType}}',
+      matchmakingType: matchmakingTypeToLabel(gameInfo.extra.match.type, t),
+    })
   } else {
     return null
   }
@@ -264,7 +270,7 @@ function ActiveGameSection() {
           link={link}
           currentPath={currentPath}
           title={title}
-          subtitle='Game in progress…'
+          subtitle={t('navigation.leftNav.gameInProgress', 'Game in progress…')}
         />
       </Section>
       <SectionSpacer key='active-game-divider' />
@@ -273,6 +279,7 @@ function ActiveGameSection() {
 }
 
 function LobbySection() {
+  const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const lobbyName = useAppSelector(s => s.lobby.info.name)
   const hasUnread = useAppSelector(s => s.lobby.hasUnread)
@@ -289,7 +296,7 @@ function LobbySection() {
 
   return (
     <>
-      <Subheader key='lobby-header'>Lobby</Subheader>
+      <Subheader key='lobby-header'>{t('navigation.leftNav.lobby', 'Lobby')}</Subheader>
       <Section key='lobby-section'>
         <LobbyNavEntry
           key='lobby'
@@ -347,14 +354,15 @@ function ConnectedChatNavEntry({
   channelId: SbChannelId
   onLeave: (channelId: SbChannelId) => void
 }) {
-  const channelInfo = useAppSelector(s => s.chat.idToInfo.get(channelId))
+  const { t } = useTranslation()
+  const channelInfo = useAppSelector(s => s.chat.idToBasicInfo.get(channelId))
   const hasUnread = useAppSelector(s => s.chat.unreadChannels.has(channelId))
   const [pathname] = useLocation()
 
   return (
     <ChatNavEntry
       channelId={channelId}
-      channelName={channelInfo?.name ?? 'Loading...'}
+      channelName={channelInfo?.name ?? t('navigation.leftNav.loadingChannel', 'Loading…')}
       currentPath={pathname}
       hasUnread={hasUnread}
       onLeave={onLeave}
@@ -391,6 +399,7 @@ function ConnectedWhisperNavEntry({
 }
 
 export function ConnectedLeftNav() {
+  const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const selfUser = useSelfUser()!
   const chatChannels = useAppSelector(s => s.chat.joinedChannels)
@@ -433,9 +442,6 @@ export function ConnectedLeftNav() {
     </>
   )
 
-  const onJoinChannelClick = useCallback(() => {
-    dispatch(openDialog({ type: DialogType.ChannelJoin }))
-  }, [dispatch])
   const onChannelLeave = useCallback(
     (channelId: SbChannelId) => {
       dispatch(leaveChannel(channelId))
@@ -453,7 +459,10 @@ export function ConnectedLeftNav() {
           onError: err => {
             dispatch(
               openSnackbar({
-                message: `Error closing whisper session: ${err.message}`,
+                message: t('navigation.leftNav.whisperCloseError', {
+                  defaultValue: 'Error closing whisper session: {{errorMessage}}',
+                  errorMessage: err.message,
+                }),
                 time: TIMING_LONG,
               }),
             )
@@ -461,20 +470,13 @@ export function ConnectedLeftNav() {
         }),
       )
     },
-    [dispatch],
+    [dispatch, t],
   )
 
-  const joinChannelButton = (
-    <Tooltip text='Join a channel (Alt + H)' position='right'>
-      <SubheaderButton
-        ref={joinChannelButtonRef}
-        icon={<MaterialIcon icon='add' />}
-        onClick={onJoinChannelClick}
-      />
-    </Tooltip>
-  )
   const addWhisperButton = (
-    <Tooltip text='Start a whisper (Alt + W)' position='right'>
+    <Tooltip
+      text={t('navigation.leftNav.startWhisper', 'Start a whisper (Alt + W)')}
+      position='right'>
       <SubheaderButton
         ref={startWhisperButtonRef}
         icon={<MaterialIcon icon='add' />}
@@ -490,14 +492,29 @@ export function ConnectedLeftNav() {
       {IS_ELECTRON ? <ActiveGameSection /> : null}
       {IS_ELECTRON ? <LobbySection /> : null}
       {IS_ELECTRON ? <PartySection /> : null}
-      <Subheader button={MULTI_CHANNEL ? joinChannelButton : null}>Chat channels</Subheader>
+      {MULTI_CHANNEL ? (
+        <Tooltip
+          text={t('navigation.leftNav.joinChannel', 'Join a channel (Alt + H)')}
+          position='right'>
+          <ClickableSubheader
+            ref={joinChannelButtonRef}
+            to={urlPath`/chat/list`}
+            icon={<MaterialIcon icon='add' />}>
+            {t('navigation.leftNav.chatChannels', 'Chat channels')}
+          </ClickableSubheader>
+        </Tooltip>
+      ) : (
+        <Subheader>{t('navigation.leftNav.chatChannels', 'Chat channels')}</Subheader>
+      )}
       <Section>
         {Array.from(chatChannels.values(), c => (
           <ConnectedChatNavEntry key={c} channelId={c} onLeave={onChannelLeave} />
         ))}
       </Section>
       <SectionSpacer />
-      <Subheader button={addWhisperButton}>Whispers</Subheader>
+      <Subheader button={addWhisperButton}>
+        {t('navigation.leftNav.whispers', 'Whispers')}
+      </Subheader>
       <Section>
         {Array.from(whisperSessions.values(), w => (
           <ConnectedWhisperNavEntry key={w} userId={w} onClose={onWhisperClose} />
@@ -511,11 +528,27 @@ export function ConnectedLeftNav() {
         }}
         anchor={profileEntryRef.current}
         username={selfUser.name}>
-        <MenuItem icon={<PortraitIcon />} text='View profile' onClick={onViewProfileClick} />
-        <MenuItem icon={<ChangelogIcon />} text='View changelog' onClick={onChangelogClick} />
-        <MenuItem icon={<EditIcon />} text='Edit account' onClick={onEditAccountClick} />
+        <MenuItem
+          icon={<MaterialIcon icon='account_box' />}
+          text={t('navigation.leftNav.viewProfile', 'View profile')}
+          onClick={onViewProfileClick}
+        />
+        <MenuItem
+          icon={<MaterialIcon icon='new_releases' />}
+          text={t('navigation.leftNav.viewChangelog', 'View changelog')}
+          onClick={onChangelogClick}
+        />
+        <MenuItem
+          icon={<MaterialIcon icon='edit' />}
+          text={t('navigation.leftNav.editAccount', 'Edit account')}
+          onClick={onEditAccountClick}
+        />
         <MenuDivider />
-        <MenuItem icon={<LogoutIcon />} text='Log out' onClick={onLogOutClick} />
+        <MenuItem
+          icon={<MaterialIcon icon='logout' />}
+          text={t('navigation.leftNav.logOut', 'Log out')}
+          onClick={onLogOutClick}
+        />
       </SelfProfileOverlay>
     </LeftNav>
   )
@@ -529,9 +562,13 @@ const LoggedOutFooter = styled.div`
 `
 
 export function LoggedOutLeftNav() {
+  const { t } = useTranslation()
   const footer = (
     <LoggedOutFooter>
-      <RaisedButton label='Log in' onClick={() => redirectToLogin(push)} />
+      <RaisedButton
+        label={t('navigation.leftNav.logIn', 'Log in')}
+        onClick={() => redirectToLogin(push)}
+      />
     </LoggedOutFooter>
   )
 

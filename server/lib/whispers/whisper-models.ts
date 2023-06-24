@@ -1,6 +1,7 @@
 import sql from 'sql-template-strings'
+import { SbChannelId } from '../../../common/chat'
 import { SbUser, SbUserId } from '../../../common/users/sb-user'
-import { WhisperMessageData } from '../../../common/whispers'
+import { WhisperMessageType } from '../../../common/whispers'
 import db from '../db'
 import { Dbify } from '../db/types'
 
@@ -55,6 +56,33 @@ export async function closeWhisperSession(userId: SbUserId, targetId: SbUserId):
   }
 }
 
+interface BaseWhisperMessageData {
+  readonly type: WhisperMessageType
+}
+
+interface WhisperTextMessageData extends BaseWhisperMessageData {
+  type: typeof WhisperMessageType.TextMessage
+  /**
+   * A processed contents of the text message, where all user and channel mentions are replaced
+   * with a custom piece of markup.
+   */
+  text: string
+  /**
+   * An array of user IDs that were mentioned in the text message. Will be `undefined` if there were
+   * no users mentioned in this message.
+   *
+   * For legacy reasons the name of the field is just "mentions".
+   */
+  mentions?: SbUserId[]
+  /**
+   * An array of channel IDs that were mentioned in the text message. Will be `undefined` if there
+   * were no channels mentioned in this message.
+   */
+  channelMentions?: SbChannelId[]
+}
+
+type WhisperMessageData = WhisperTextMessageData
+
 export interface WhisperMessage {
   id: string
   from: SbUser
@@ -100,8 +128,8 @@ export async function addMessageToWhisper(
   try {
     const result = await client.query<DbWhisperMessage>(sql`
       WITH ins AS (
-        INSERT INTO whisper_messages (id, from_id, to_id, sent, data)
-        VALUES (uuid_generate_v4(), ${fromId}, ${toId},
+        INSERT INTO whisper_messages (from_id, to_id, sent, data)
+        VALUES (${fromId}, ${toId},
           CURRENT_TIMESTAMP AT TIME ZONE 'UTC', ${messageData})
         RETURNING id, from_id, to_id, sent, data
       )

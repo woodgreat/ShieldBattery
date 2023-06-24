@@ -1,7 +1,9 @@
 import React from 'react'
 import styled from 'styled-components'
+import { useObservedDimensions } from '../../dom/dimension-hooks'
+import { fastOutSlowIn } from '../../material/curve-constants'
 
-const IconRoot = styled.span<{ $size: number; $filled: boolean; $invertColor: boolean }>`
+export const IconRoot = styled.span<{ $size: number; $filled: boolean; $invertColor: boolean }>`
   font-family: 'Material Symbols Outlined';
   font-weight: normal;
   font-style: normal;
@@ -22,6 +24,8 @@ const IconRoot = styled.span<{ $size: number; $filled: boolean; $invertColor: bo
   font-variation-settings: 'FILL' ${props => (props.$filled ? 1 : 0)},
     'opsz' ${props => Math.min(48, Math.max(20, props.$size))},
     'GRAD' ${props => (props.$invertColor ? 0 : -25)};
+
+  transition: font-variation-settings 125ms ${fastOutSlowIn};
 `
 
 export interface MaterialIconProps {
@@ -42,21 +46,47 @@ export interface MaterialIconProps {
   className?: string
 }
 
-export function MaterialIcon({
-  icon,
-  size = 24,
-  filled = true,
-  invertColor = false,
-  className,
-}: MaterialIconProps) {
-  return (
-    <IconRoot
-      className={className}
-      aria-hidden={true}
-      $size={size}
-      $filled={filled}
-      $invertColor={invertColor}>
-      {icon}
-    </IconRoot>
-  )
-}
+export const MaterialIcon = React.forwardRef(
+  (
+    { icon, size = 24, filled = true, invertColor = false, className }: MaterialIconProps,
+    ref: React.ForwardedRef<HTMLSpanElement>,
+  ) => {
+    return (
+      <IconRoot
+        ref={ref}
+        className={className}
+        aria-hidden={true}
+        $size={size}
+        $filled={filled}
+        $invertColor={invertColor}>
+        {icon}
+      </IconRoot>
+    )
+  },
+)
+
+const AutoSizeContainer = styled.div`
+  width: 100%;
+  height: auto;
+`
+
+/**
+ * A `MaterialIcon` that will size itself to fit its container (by width).
+ *
+ * **Note:** `className` will be applied to the container, not the icon itself.
+ */
+export const AutoSizeMaterialIcon = React.forwardRef(
+  (
+    { className, ...iconProps }: Omit<MaterialIconProps, 'size'>,
+    ref: React.ForwardedRef<HTMLSpanElement>,
+  ) => {
+    const [containerRef, size] = useObservedDimensions()
+    return (
+      <AutoSizeContainer ref={containerRef} className={className}>
+        {size ? (
+          <MaterialIcon {...iconProps} size={Math.floor(size?.width)} ref={ref} />
+        ) : undefined}
+      </AutoSizeContainer>
+    )
+  },
+)

@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { GameRecordJson, getGameTypeLabel } from '../../common/games/games'
-import { getResultLabel, ReconciledResult } from '../../common/games/results'
+import { ReconciledResult, getResultLabel } from '../../common/games/results'
 import { RaceChar } from '../../common/races'
 import { SbUser, SbUserId } from '../../common/users/sb-user'
 import { navigateToGameResults } from '../games/action-creators'
@@ -77,7 +77,7 @@ export function MiniMatchHistory({ forUserId, games }: MiniMatchHistoryProps) {
           />
         ))}
         {games.length === 0 ? (
-          <EmptyListText>{t('common.emptyListMessage', 'Nothing to see here')}</EmptyListText>
+          <EmptyListText>{t('user.miniMatchHistory.noGames', 'Nothing to see here')}</EmptyListText>
         ) : null}
       </GameList>
       <ConnectedGamePreview game={activeGame}></ConnectedGamePreview>
@@ -173,7 +173,7 @@ export function ConnectedGameListEntry({
   }, [results, forUserId])
 
   const matchType = getGameTypeLabel(game, t)
-  const mapName = map?.name ?? t('common.mapNameUnknown', 'Unknown map')
+  const mapName = map?.name ?? t('game.mapName.unknown', 'Unknown map')
 
   return (
     <GameListEntryRoot {...buttonProps} $active={active}>
@@ -269,14 +269,20 @@ const GamePreviewPlayerAssignedRace = styled(RaceIcon)`
 
 const GamePreviewPlayerRandomIcon = styled(RaceIcon)`
   position: absolute;
-  bottom: 0;
+  /*
+    NOTE(tec27): For reasons I don't fully understand, 0 positions this at a place where it is
+    clipped by the parent element.
+  */
+  bottom: 2px;
   right: 0;
-  width: auto;
-  height: 12px;
 
-  & path:not([fill='none']) {
-    stroke: rgba(0, 0, 0, 0.36);
-    stroke-width: 2px;
+  && {
+    width: 12px;
+    height: 12px;
+  }
+
+  & > * {
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.7);
   }
 `
 
@@ -346,9 +352,7 @@ export function ConnectedGamePreview({ game }: ConnectedGamePreviewProps) {
     return (
       <GamePreviewRoot>
         <GamePreviewDetails>
-          <NoGameText>
-            {t('games.miniMatchHistory.noGameSelectedText', 'No game selected')}
-          </NoGameText>
+          <NoGameText>{t('user.miniMatchHistory.noGameSelected', 'No game selected')}</NoGameText>
         </GamePreviewDetails>
       </GamePreviewRoot>
     )
@@ -358,7 +362,7 @@ export function ConnectedGamePreview({ game }: ConnectedGamePreviewProps) {
   if (game.config.gameType === 'topVBottom') {
     playerElems.push(
       <GamePreviewTeamOverline key={'team-top'}>
-        {t('common.teamNameTop', 'Top')}
+        {t('game.teamName.top', 'Top')}
       </GamePreviewTeamOverline>,
     )
     playerElems.push(
@@ -369,8 +373,8 @@ export function ConnectedGamePreview({ game }: ConnectedGamePreviewProps) {
             <GamePreviewPlayerRace race={result?.race ?? p.race} isRandom={p.race === 'r'} />
             <span>
               {p.isComputer
-                ? t('common.playerNameComputer', 'Computer')
-                : playersMapping.get(p.id)?.name ?? t('common.playerNameUnknown', 'Unknown player')}
+                ? t('game.playerName.computer', 'Computer')
+                : playersMapping.get(p.id)?.name ?? t('game.playerName.unknown', 'Unknown player')}
             </span>
           </GamePreviewPlayer>
         )
@@ -379,7 +383,7 @@ export function ConnectedGamePreview({ game }: ConnectedGamePreviewProps) {
 
     playerElems.push(
       <GamePreviewTeamOverline key={'team-bottom'}>
-        {t('common.teamNameBottom', 'Bottom')}
+        {t('game.teamName.bottom', 'Bottom')}
       </GamePreviewTeamOverline>,
     )
     playerElems.push(
@@ -390,8 +394,8 @@ export function ConnectedGamePreview({ game }: ConnectedGamePreviewProps) {
             <GamePreviewPlayerRace race={result?.race ?? p.race} isRandom={p.race === 'r'} />
             <span>
               {p.isComputer
-                ? t('common.playerNameComputer', 'Computer')
-                : playersMapping.get(p.id)?.name ?? t('common.playerNameUnknown', 'Unknown player')}
+                ? t('game.playerName.computer', 'Computer')
+                : playersMapping.get(p.id)?.name ?? t('game.playerName.unknown', 'Unknown player')}
             </span>
           </GamePreviewPlayer>
         )
@@ -408,9 +412,9 @@ export function ConnectedGamePreview({ game }: ConnectedGamePreviewProps) {
               <GamePreviewPlayerRace race={result?.race ?? p.race} isRandom={p.race === 'r'} />
               <span>
                 {p.isComputer
-                  ? t('common.playerNameComputer', 'Computer')
+                  ? t('game.playerName.computer', 'Computer')
                   : playersMapping.get(p.id)?.name ??
-                    t('common.playerNameUnknown', 'Unknown player')}
+                    t('game.playerName.unknown', 'Unknown player')}
               </span>
             </GamePreviewPlayer>
           )
@@ -433,7 +437,7 @@ export function ConnectedGamePreview({ game }: ConnectedGamePreviewProps) {
         <GamePreviewPlayers>{playerElems}</GamePreviewPlayers>
       </GamePreviewDetails>
       <TextButton
-        label={t('games.miniMatchHistory.buttonDetails', 'View details')}
+        label={t('user.miniMatchHistory.viewDetails', 'View details')}
         onClick={onViewDetails}
       />
     </GamePreviewRoot>

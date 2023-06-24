@@ -1,5 +1,4 @@
 import {
-  ChannelInfo,
   ChatBanEvent,
   ChatInitEvent,
   ChatJoinEvent,
@@ -11,9 +10,12 @@ import {
   ChatUserActiveEvent,
   ChatUserIdleEvent,
   ChatUserOfflineEvent,
+  GetBatchedChannelInfosResponse,
   GetChannelHistoryServerResponse,
+  GetChannelInfoResponse,
   GetChatUserProfileResponse,
   SbChannelId,
+  SearchChannelsResponse,
 } from '../../common/chat'
 import { SbUser } from '../../common/users/sb-user'
 import { BaseFetchFailure } from '../network/fetch-errors'
@@ -38,6 +40,7 @@ export type ChatActions =
   | GetChannelInfo
   | GetBatchChannelInfoSuccess
   | GetBatchChannelInfoFailure
+  | SearchChannels
   | ActivateChannel
   | DeactivateChannel
   | InitChannel
@@ -200,11 +203,12 @@ export interface GetChatUserProfile {
 }
 
 /**
- * Get the publicly available info for a specific channel.
+ * Get the information for a specific channel. Includes joined data if the user is in the channel.
  */
 export interface GetChannelInfo {
   type: '@chat/getChannelInfo'
-  payload: ChannelInfo
+  payload: GetChannelInfoResponse
+  meta: { channelId: SbChannelId }
 }
 
 /**
@@ -212,11 +216,19 @@ export interface GetChannelInfo {
  */
 export interface GetBatchChannelInfoSuccess {
   type: '@chat/getBatchChannelInfo'
-  payload: ChannelInfo[]
+  payload: GetBatchedChannelInfosResponse
   error?: false
 }
 
 export type GetBatchChannelInfoFailure = BaseFetchFailure<'@chat/getBatchChannelInfo'>
+
+/**
+ * The server returned a response to our request for channel search.
+ */
+export interface SearchChannels {
+  type: '@chat/searchChannels'
+  payload: SearchChannelsResponse
+}
 
 /**
  * Activate a particular chat channel. This is a purely client-side action which marks the channel

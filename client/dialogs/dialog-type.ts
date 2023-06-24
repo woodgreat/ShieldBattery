@@ -9,7 +9,6 @@ export enum DialogType {
   AcceptMatch = 'acceptMatch',
   Account = 'account',
   Changelog = 'changelog',
-  ChannelJoin = 'channelJoin',
   ChannelBanUser = 'channelBanUser',
   Download = 'download',
   ExternalLink = 'externalLink',
@@ -20,11 +19,9 @@ export enum DialogType {
   PartyInvite = 'partyInvite',
   PostMatch = 'postMatch',
   PrivacyPolicy = 'privacyPolicy',
-  Settings = 'settings',
   Simple = 'simple',
   ShieldBatteryHealth = 'shieldBatteryHealth',
   StarcraftHealth = 'starcraftHealth',
-  StarcraftPath = 'starcraftPath',
   TermsOfService = 'termsOfService',
   Whispers = 'whispers',
 }
@@ -37,7 +34,6 @@ type AcceptableUseDialogPayload = BaseDialogPayload<typeof DialogType.Acceptable
 type AcceptMatchDialogPayload = BaseDialogPayload<typeof DialogType.AcceptMatch>
 type AccountDialogPayload = BaseDialogPayload<typeof DialogType.Account>
 type ChangelogDialogPayload = BaseDialogPayload<typeof DialogType.Changelog>
-type ChannelJoinDialogPayload = BaseDialogPayload<typeof DialogType.ChannelJoin>
 type ChannelBanUserDialogPayload = BaseDialogPayload<
   typeof DialogType.ChannelBanUser,
   {
@@ -79,7 +75,6 @@ export type PostMatchDialogPayload = BaseDialogPayload<
   }
 >
 type PrivacyPolicyDialogPayload = BaseDialogPayload<typeof DialogType.PrivacyPolicy>
-type SettingsDialogPayload = BaseDialogPayload<typeof DialogType.Settings>
 type SimpleDialogPayload = BaseDialogPayload<
   typeof DialogType.Simple,
   {
@@ -90,7 +85,6 @@ type SimpleDialogPayload = BaseDialogPayload<
 >
 type ShieldBatteryHealthDialogPayload = BaseDialogPayload<typeof DialogType.ShieldBatteryHealth>
 type StarcraftHealthDialogPayload = BaseDialogPayload<typeof DialogType.StarcraftHealth>
-type StarcraftPathDialogPayload = BaseDialogPayload<typeof DialogType.StarcraftPath>
 type TermsOfServiceDialogPayload = BaseDialogPayload<typeof DialogType.TermsOfService>
 type WhispersDialogPayload = BaseDialogPayload<typeof DialogType.Whispers>
 
@@ -99,7 +93,6 @@ export type DialogPayload =
   | AcceptMatchDialogPayload
   | AccountDialogPayload
   | ChangelogDialogPayload
-  | ChannelJoinDialogPayload
   | ChannelBanUserDialogPayload
   | DownloadDialogPayload
   | ExternalLinkDialogPayload
@@ -110,10 +103,8 @@ export type DialogPayload =
   | PartyInviteDialogPayload
   | PostMatchDialogPayload
   | PrivacyPolicyDialogPayload
-  | SettingsDialogPayload
   | SimpleDialogPayload
   | ShieldBatteryHealthDialogPayload
   | StarcraftHealthDialogPayload
-  | StarcraftPathDialogPayload
   | TermsOfServiceDialogPayload
   | WhispersDialogPayload

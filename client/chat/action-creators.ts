@@ -1,31 +1,86 @@
 import {
-  ChannelInfo,
   ChannelModerationAction,
+  ChatServiceErrorCode,
+  GetBatchedChannelInfosResponse,
   GetChannelHistoryServerResponse,
+  GetChannelInfoResponse,
   GetChatUserProfileResponse,
+  JoinChannelResponse,
   ModerateChannelUserServerRequest,
   SbChannelId,
+  SearchChannelsResponse,
   SendChatMessageServerRequest,
 } from '../../common/chat'
 import { apiUrl, urlPath } from '../../common/urls'
 import { SbUser, SbUserId } from '../../common/users/sb-user'
 import { ThunkAction } from '../dispatch-registry'
+import i18n from '../i18n/i18next'
 import logger from '../logging/logger'
 import { push, replace } from '../navigation/routing'
-import { abortableThunk, RequestHandlingSpec } from '../network/abortable-thunk'
+import { RequestHandlingSpec, abortableThunk } from '../network/abortable-thunk'
 import { MicrotaskBatchRequester } from '../network/batch-requests'
 import { encodeBodyAsParams, fetchJson } from '../network/fetch'
+import { isFetchError } from '../network/fetch-errors'
+import { TIMING_LONG, openSnackbar } from '../snackbars/action-creators'
 import { ActivateChannel, DeactivateChannel } from './actions'
 
+/**
+ * Makes a request to join a user to the channel. The caller is expected to handle errors.
+ */
 export function joinChannel(
   channelName: string,
-  spec: RequestHandlingSpec<ChannelInfo>,
+  spec: RequestHandlingSpec<JoinChannelResponse>,
 ): ThunkAction {
   return abortableThunk(spec, async () => {
-    return fetchJson<ChannelInfo>(apiUrl`chat/join/${channelName}`, {
+    return await fetchJson(apiUrl`chat/join/${channelName}`, {
       method: 'POST',
       signal: spec.signal,
     })
+  })
+}
+
+/**
+ * Makes a request to join a user to the channel. This function has built-in error handling.
+ */
+export function joinChannelWithErrorHandling(
+  channelName: string,
+  spec: RequestHandlingSpec<void>,
+): ThunkAction {
+  return abortableThunk(spec, async dispatch => {
+    return fetchJson<JoinChannelResponse>(apiUrl`chat/join/${channelName}`, {
+      method: 'POST',
+      signal: spec.signal,
+    })
+      .then(channel => navigateToChannel(channel.channelInfo.id, channel.channelInfo.name))
+      .catch(err => {
+        let message = i18n.t('chat.joinChannel.genericError', {
+          defaultValue: 'An error occurred while joining #{{channelName}}',
+          channelName,
+        })
+
+        if (isFetchError(err) && err.code) {
+          if (err.code === ChatServiceErrorCode.MaximumJoinedChannels) {
+            message = i18n.t(
+              'chat.joinChannel.maximumChannelsError',
+              'You have reached the limit of joined channels. ' +
+                'You must leave one before you can join another.',
+            )
+          } else if (err.code === ChatServiceErrorCode.UserBanned) {
+            message = i18n.t('chat.joinChannel.bannedError', {
+              defaultValue: 'You are banned from #{{channelName}}',
+              channelName,
+            })
+          } else {
+            logger.error(`Unhandled code when joining ${channelName}: ${err.code}`)
+          }
+        } else {
+          logger.error(`Error when joining ${channelName}: ${err.stack ?? err}`)
+        }
+
+        dispatch(openSnackbar({ message, time: TIMING_LONG }))
+
+        throw err
+      })
   })
 }
 
@@ -184,10 +239,11 @@ export function getChannelInfo(
   return abortableThunk(spec, async dispatch => {
     dispatch({
       type: '@chat/getChannelInfo',
-      payload: await fetchJson<ChannelInfo>(apiUrl`chat/${channelId}`, {
+      payload: await fetchJson<GetChannelInfoResponse>(apiUrl`chat/${channelId}`, {
         method: 'GET',
         signal: spec.signal,
       }),
+      meta: { channelId },
     })
   })
 }
@@ -198,7 +254,9 @@ const channelsBatchRequester = new MicrotaskBatchRequester<SbChannelId>(
   MAX_BATCH_CHANNEL_REQUESTS,
   (dispatch, items) => {
     const params = items.map(c => urlPath`c=${c}`).join('&')
-    const promise = fetchJson<ChannelInfo[]>(apiUrl`chat/batch-info` + '?' + params)
+    const promise = fetchJson<GetBatchedChannelInfosResponse>(
+      apiUrl`chat/batch-info` + '?' + params,
+    )
     dispatch({
       type: '@chat/getBatchChannelInfo',
       payload: promise,
@@ -218,13 +276,35 @@ const channelsBatchRequester = new MicrotaskBatchRequester<SbChannelId>(
 export function getBatchChannelInfo(channelId: SbChannelId): ThunkAction {
   return (dispatch, getState) => {
     const {
-      chat: { idToInfo },
+      chat: { idToBasicInfo, idToDetailedInfo },
     } = getState()
 
-    if (!idToInfo.has(channelId)) {
+    if (!idToBasicInfo.has(channelId) || !idToDetailedInfo.has(channelId)) {
       channelsBatchRequester.request(dispatch, channelId)
     }
   }
+}
+
+export function searchChannels(
+  searchQuery: string,
+  offset: number,
+  spec: RequestHandlingSpec<SearchChannelsResponse>,
+): ThunkAction {
+  return abortableThunk(spec, async dispatch => {
+    const result = await fetchJson<SearchChannelsResponse>(
+      apiUrl`chat/?q=${searchQuery}&offset=${offset}`,
+      {
+        signal: spec.signal,
+      },
+    )
+
+    dispatch({
+      type: '@chat/searchChannels',
+      payload: result,
+    })
+
+    return result
+  })
 }
 
 export function activateChannel(channelId: SbChannelId): ActivateChannel {
@@ -242,7 +322,7 @@ export function deactivateChannel(channelId: SbChannelId): DeactivateChannel {
 }
 
 export function navigateToChannel(channelId: SbChannelId, channelName: string) {
-  push(urlPath`/chat/${channelId}/$(channelName}`)
+  push(urlPath`/chat/${channelId}/${channelName}`)
 }
 
 /**

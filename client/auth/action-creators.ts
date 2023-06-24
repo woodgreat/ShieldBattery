@@ -5,7 +5,8 @@ import { SbUserId, SelfUser } from '../../common/users/sb-user'
 import { ClientSessionInfo } from '../../common/users/session'
 import type { PromisifiedAction, ReduxAction } from '../action-types'
 import type { ThunkAction } from '../dispatch-registry'
-import { abortableThunk, RequestHandlingSpec } from '../network/abortable-thunk'
+import { maybeChangeLanguageLocally } from '../i18n/action-creators'
+import { RequestHandlingSpec, abortableThunk } from '../network/abortable-thunk'
 import { encodeBodyAsParams, fetchJson } from '../network/fetch'
 import { AccountUpdateSuccess, AuthChangeBegin } from './actions'
 import { getBrowserprint } from './browserprint'
@@ -70,7 +71,12 @@ async function getExtraSessionData() {
 }
 
 export function logIn(
-  { username, password, remember }: { username: string; password: string; remember: boolean },
+  {
+    username,
+    password,
+    remember,
+    locale,
+  }: { username: string; password: string; remember: boolean; locale?: string },
   spec: RequestHandlingSpec,
 ): ThunkAction {
   return abortableThunk(spec, async dispatch => {
@@ -81,14 +87,16 @@ export function logIn(
         username,
         password,
         remember: !!remember,
+        locale,
       }),
     })
-    sessionStorage.clear()
 
     dispatch({
       type: '@auth/loadCurrentSession',
       payload: result,
     })
+
+    dispatch(maybeChangeLanguageLocally(result.user.locale))
   })
 }
 
@@ -97,40 +105,60 @@ export function logOut() {
     const result = await fetchJson<void>(apiUrl`sessions`, {
       method: 'delete',
     })
-    sessionStorage.clear()
+
     return result
   })
 }
 
 export function signUp(
-  { username, email, password }: { username: string; email: string; password: string },
+  {
+    username,
+    email,
+    password,
+    locale,
+  }: { username: string; email: string; password: string; locale?: string },
   spec: RequestHandlingSpec,
 ): ThunkAction {
   return abortableThunk(spec, async dispatch => {
     const result = await fetchJson<ClientSessionInfo>(apiUrl`users`, {
       method: 'post',
-      body: JSON.stringify({ ...(await getExtraSessionData()), username, email, password }),
+      body: JSON.stringify({
+        ...(await getExtraSessionData()),
+        username,
+        email,
+        password,
+        locale,
+      }),
     })
     window.fathom?.trackGoal('YTZ0JAUE', 0)
-    sessionStorage.clear()
 
     dispatch({
       type: '@auth/loadCurrentSession',
       payload: result,
     })
+
+    dispatch(maybeChangeLanguageLocally(result.user.locale))
   })
 }
 
-export function getCurrentSession(spec: RequestHandlingSpec): ThunkAction {
+export function getCurrentSession(
+  { locale }: { locale?: string },
+  spec: RequestHandlingSpec,
+): ThunkAction {
   return abortableThunk(spec, async dispatch => {
-    const result = await fetchJson<ClientSessionInfo>(apiUrl`sessions?date=${Date.now()}`, {
-      method: 'get',
-    })
+    const result = await fetchJson<ClientSessionInfo>(
+      apiUrl`sessions?date=${Date.now()}&locale=${locale}`,
+      {
+        method: 'get',
+      },
+    )
 
     dispatch({
       type: '@auth/loadCurrentSession',
       payload: result,
     })
+
+    dispatch(maybeChangeLanguageLocally(result.user.locale))
   })
 }
 

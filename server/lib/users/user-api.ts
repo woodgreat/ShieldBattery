@@ -17,6 +17,7 @@ import {
   USERNAME_PATTERN,
 } from '../../../common/constants'
 import { toGameRecordJson } from '../../../common/games/games'
+import { ALL_TRANSLATION_LANGUAGES } from '../../../common/i18n'
 import { LadderPlayer } from '../../../common/ladder'
 import { toMapInfoJson } from '../../../common/maps'
 import {
@@ -42,6 +43,8 @@ import {
   AdminGetUserIpsResponse,
   AdminUpdatePermissionsRequest,
   AuthEvent,
+  ChangeLanguageRequest,
+  ChangeLanguagesResponse,
   GetBatchUserInfoResponse,
   GetUserProfileResponse,
   SbUser,
@@ -57,6 +60,7 @@ import transact from '../db/transaction'
 import { getRecentGamesForUser } from '../games/game-models'
 import { httpApi, httpBeforeAll } from '../http/http-api'
 import { httpBefore, httpDelete, httpGet, httpPatch, httpPost } from '../http/route-decorators'
+import { joiLocale } from '../i18n/locale-validator'
 import sendMail from '../mail/mailer'
 import { getMapInfo } from '../maps/map-models'
 import { getRankForUser } from '../matchmaking/models'
@@ -166,6 +170,7 @@ interface SignupRequestBody {
   password: string
   email: string
   clientIds: [type: number, hash: string][]
+  locale?: string
 }
 
 @httpApi('/users')
@@ -196,10 +201,11 @@ export class UserApi {
           .trim()
           .required(),
         clientIds: joiClientIdentifiers().required(),
+        locale: joiLocale(),
       }),
     })
 
-    const { username, password, email, clientIds } = body
+    const { username, password, email, clientIds, locale } = body
 
     if (!isElectronClient(ctx)) {
       const [suspicious, signupAllowed] = await Promise.all([
@@ -233,6 +239,7 @@ export class UserApi {
         hashedPassword,
         ipAddress: ctx.ip,
         clientIds,
+        locale,
       })
     } catch (err: any) {
       if (err.code && err.code === UNIQUE_VIOLATION) {
@@ -252,6 +259,7 @@ export class UserApi {
     }
 
     const sessionInfo: ClientSessionInfo = {
+      sessionId: '',
       user: createdUser.user,
       permissions: createdUser.permissions,
       lastQueuedMatchmakingType: MatchmakingType.Match1v1,
@@ -261,6 +269,7 @@ export class UserApi {
     // share a session ID
     await ctx.regenerateSession()
     initSession(ctx, sessionInfo)
+    sessionInfo.sessionId = ctx.sessionId!
 
     const code = cuid()
     await addEmailVerificationCode({ userId: createdUser.user.id, email, code, ip: ctx.ip })
@@ -538,6 +547,32 @@ export class UserApi {
     ctx.session!.acceptedPrivacyVersion = user.acceptedPrivacyVersion
     ctx.session!.acceptedTermsVersion = user.acceptedTermsVersion
     ctx.session!.acceptedUsePolicyVersion = user.acceptedUsePolicyVersion
+
+    return { user }
+  }
+
+  @httpPost('/:id/language')
+  @httpBefore(ensureLoggedIn)
+  async changeLanguage(ctx: RouterContext): Promise<ChangeLanguagesResponse> {
+    const { params, body } = validateRequest(ctx, {
+      params: Joi.object<{ id: SbUserId }>({
+        id: joiUserId().required(),
+      }),
+      body: Joi.object<ChangeLanguageRequest>({
+        language: Joi.valid(...ALL_TRANSLATION_LANGUAGES).required(),
+      }),
+    })
+
+    if (params.id !== ctx.session!.userId) {
+      throw new httpErrors.Unauthorized("Can't change another user's language")
+    }
+
+    const user = await updateUser(params.id, { locale: body.language })
+    if (!user) {
+      throw new Error("Current user couldn't be found for updating")
+    }
+
+    ctx.session!.locale = user.locale
 
     return { user }
   }

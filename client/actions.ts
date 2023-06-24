@@ -23,9 +23,6 @@ export const ADMIN_MATCHMAKING_TIMES_GET_PAST = 'ADMIN_MATCHMAKING_TIMES_GET_PAS
 // The AudioManager has finished initializing and is ready to play sounds
 export const AUDIO_MANAGER_INITIALIZED = 'AUDIO_MANAGER_INITIALIZED'
 
-// The server has finished giving us our initial chat data (e.g what channels we are in) on connect
-export const CHAT_LOADING_COMPLETE = 'CHAT_LOADING_COMPLETE'
-
 // The server has sent us an updated count on the number of active lobbies
 export const LOBBIES_COUNT_UPDATE = 'LOBBIES_COUNT_UPDATE'
 
@@ -148,25 +145,11 @@ export const LOBBY_PREFERENCES_UPDATE_BEGIN = 'LOBBY_PREFERENCES_UPDATE_BEGIN'
 // The server has responded with success/failure to us updating the lobby preferences
 export const LOBBY_PREFERENCES_UPDATE = 'LOBBY_PREFERENCES_UPDATE'
 
-// We are starting the process of saving the local settings
-export const LOCAL_SETTINGS_SET_BEGIN = 'LOCAL_SETTINGS_SET_BEGIN'
-// The client has responded with success/failure to our local settings saving
-export const LOCAL_SETTINGS_SET = 'LOCAL_SETTINGS_SET'
-// The local settings pertaining to this computer only have changed
-export const LOCAL_SETTINGS_UPDATE = 'LOCAL_SETTINGS_UPDATE'
-
 export const NETWORK_SITE_CONNECTED = 'NETWORK_SITE_CONNECTED'
 export const NETWORK_SITE_DISCONNECTED = 'NETWORK_SITE_DISCONNECTED'
 
 // We have started the process of launching the game with the selected replay in it
 export const REPLAYS_START_REPLAY = 'REPLAYS_START_REPLAY'
-
-// We are starting the process of saving the SC:R settings
-export const SCR_SETTINGS_SET_BEGIN = 'SCR_SETTINGS_SET_BEGIN'
-// The client has responded with success/failure to our SC:R settings saving
-export const SCR_SETTINGS_SET = 'SCR_SETTINGS_SET'
-// The SC:R settings pertaining to this computer only have changed
-export const SCR_SETTINGS_UPDATE = 'SCR_SETTINGS_UPDATE'
 
 export const SERVER_STATUS = 'SERVER_STATUS'
 
@@ -183,13 +166,3 @@ export const STARCRAFT_PATH_VALIDITY = 'STARCRAFT_PATH_VALIDITY'
 // An updated StarCraft version validity status, stating whether or not the StarCraft exe at the
 // current path is a version we are compatible with
 export const STARCRAFT_VERSION_VALIDITY = 'STARCRAFT_VERSION_VALIDITY'
-
-// The server has finished subscribing this particular client to the things it needs to be in (e.g.
-// lobbies) and giving it initial data
-export const SUBSCRIPTIONS_CLIENT_LOADING_COMPLETE = 'SUBSCRIPTIONS_CLIENT_LOADING_COMPLETE'
-// The server has finished subscribing this user (across clients) to the things it needs
-export const SUBSCRIPTIONS_USER_LOADING_COMPLETE = 'SUBSCRIPTIONS_USER_LOADING_COMPLETE'
-
-// The server has finished giving us our initial whispers data (eg. the list of users we had the
-// whisper window opened with when we last used the site) upon connecting
-export const WHISPERS_LOADING_COMPLETE = 'WHISPERS_LOADING_COMPLETE'

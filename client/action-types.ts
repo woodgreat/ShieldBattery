@@ -6,10 +6,12 @@ import { DialogActions } from './dialogs/actions'
 import { GamesActions } from './games/actions'
 import { LadderActions } from './ladder/actions'
 import { LeaguesActions } from './leagues/actions'
+import { LoadingActions } from './loading/actions'
 import { MapsActions } from './maps/actions'
 import { MatchmakingActions } from './matchmaking/actions'
 import { NotificationActions } from './notifications/actions'
 import { PartyActions } from './parties/actions'
+import { SettingsActions } from './settings/actions'
 import { UserActions } from './users/actions'
 import { WhisperActions } from './whispers/actions'
 
@@ -22,10 +24,12 @@ type AllActions =
   | GamesActions
   | LadderActions
   | LeaguesActions
+  | LoadingActions
   | MapsActions
   | MatchmakingActions
   | NotificationActions
   | PartyActions
+  | SettingsActions
   | UserActions
   | WhisperActions
 

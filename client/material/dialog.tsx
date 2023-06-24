@@ -1,11 +1,12 @@
 import keycode from 'keycode'
 import { rgba } from 'polished'
 import React, { useCallback, useContext } from 'react'
+import { useTranslation } from 'react-i18next'
 import { animated } from 'react-spring'
 import styled, { css } from 'styled-components'
-import CloseDialogIcon from '../icons/material/close-24px.svg'
+import { MaterialIcon } from '../icons/material/material-icon'
 import { useKeyListener } from '../keyboard/key-listener'
-import { background900, CardLayer, colorDividers } from '../styles/colors'
+import { CardLayer, background900, colorDividers } from '../styles/colors'
 import { headline5 } from '../styles/typography'
 import { IconButton } from './button'
 import { useScrollIndicatorState } from './scroll-indicator'
@@ -190,6 +191,7 @@ export function Dialog({
   onCancel,
   alwaysHasTopDivider = false,
 }: DialogProps) {
+  const { t } = useTranslation()
   const dialogContext = useContext(DialogContext)
 
   useKeyListener({
@@ -208,7 +210,11 @@ export function Dialog({
   const [isAtTop, isAtBottom, topNode, bottomNode] = useScrollIndicatorState()
 
   const closeButton = showCloseButton ? (
-    <CloseButton icon={<CloseDialogIcon />} title='Close dialog' onClick={onCancel} />
+    <CloseButton
+      icon={<MaterialIcon icon='close' />}
+      title={t('material.dialog.closeDialog', 'Close dialog')}
+      onClick={onCancel}
+    />
   ) : null
 
   return (

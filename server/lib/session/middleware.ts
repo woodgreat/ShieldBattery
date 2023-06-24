@@ -1,4 +1,3 @@
-import cuid from 'cuid'
 import { Context } from 'koa'
 import session, { SessionOptions } from 'koa-generic-session'
 import { isElectronClient } from '../network/only-web-clients'
@@ -12,6 +11,7 @@ const SESSION_KEY = 's'
 const cookieOptions: SessionOptions['cookie'] = {
   maxAge: SESSION_TTL_SECONDS * 1000,
   sameSite: 'lax',
+  signed: false,
 }
 
 export default session({
@@ -19,7 +19,6 @@ export default session({
   store,
   cookie: cookieOptions,
   rolling: true,
-  genSid: () => cuid(),
   beforeSave: (ctx, session) => {
     if (isElectronClient(ctx)) {
       // Can't set SameSite: lax cookies on cross-origin requests, which is all requests for the
@@ -27,6 +26,9 @@ export default session({
       session.cookie.sameSite = 'none'
       session.cookie.secure = true
     }
+
+    // Migrate old cookies to not expect signatures
+    session.cookie.signed = false
   },
   // This is the default session store except we don't try to set cookies if a handler says not
   // to (usually because it needed to flush the headers prematurely)

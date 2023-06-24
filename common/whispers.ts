@@ -1,31 +1,32 @@
+import { TFunction } from 'i18next'
 import { assertUnreachable } from './assert-unreachable'
+import { BasicChannelInfo, SbChannelId } from './chat'
 import { SbUser, SbUserId } from './users/sb-user'
 
 export enum WhisperMessageType {
   TextMessage = 'message',
 }
 
-export interface BaseWhisperMessageData {
-  readonly type: WhisperMessageType
-}
-
-export interface WhisperTextMessageData extends BaseWhisperMessageData {
-  type: typeof WhisperMessageType.TextMessage
-  text: string
-  // TODO(tec27): This should probably only be optional at the DB level, clients should see this
-  // as always present (since we deal with old messages at the API layer). Need to keep separate
-  // model types vs API types like in chat, though.
-  mentions?: SbUserId[]
-}
-
-export type WhisperMessageData = WhisperTextMessageData
-
-export interface WhisperMessage {
+export interface BaseWhisperMessage {
   id: string
+  type: WhisperMessageType
   from: SbUser
   to: SbUser
-  sent: number
-  data: WhisperMessageData
+  time: number
+}
+
+/** A common text message that was sent from one user to another. */
+export interface WhisperTextMessage extends BaseWhisperMessage {
+  type: typeof WhisperMessageType.TextMessage
+  text: string
+}
+
+export type WhisperMessage = WhisperTextMessage
+
+export interface WhispersReadyEvent {
+  type: 'whispersReady'
+  /** Ordered list of target IDs that the user has session with. */
+  targetIds: SbUserId[]
 }
 
 export interface WhisperSessionInitEvent {
@@ -38,20 +39,19 @@ export interface WhisperSessionCloseEvent {
   target: SbUserId
 }
 
-export interface WhisperMessageUpdateEvent {
+export interface WhisperMessageEvent {
   action: 'message'
   /** A whisper message that was received. */
-  message: WhisperMessage
+  message: WhisperTextMessage
   /** A list of user infos participating in the received message. */
   users: SbUser[]
   /** User infos for all whisper users that were mentioned in the message, if any. */
   mentions: SbUser[]
+  /** Basic channel data for all channels that were mentioned in the message, if any. */
+  channelMentions: BasicChannelInfo[]
 }
 
-export type WhisperEvent =
-  | WhisperSessionInitEvent
-  | WhisperSessionCloseEvent
-  | WhisperMessageUpdateEvent
+export type WhisperEvent = WhisperSessionInitEvent | WhisperSessionCloseEvent | WhisperMessageEvent
 
 export interface SendWhisperMessageRequest {
   message: string
@@ -70,6 +70,10 @@ export interface GetSessionHistoryResponse {
   users: SbUser[]
   /** A list of user infos for all whisper users that were mentioned in the messages, if any. */
   mentions: SbUser[]
+  /** A list of basic channel data for all channels that were mentioned in the messages, if any. */
+  channelMentions: BasicChannelInfo[]
+  /** A list of channel IDs saved in various whisper messages that no longer exist. */
+  deletedChannels: SbChannelId[]
 }
 
 export enum WhisperServiceErrorCode {
@@ -87,19 +91,23 @@ function isWhisperServiceErrorCode(code: string): code is WhisperServiceErrorCod
 
 export function whisperServiceErrorToString(
   code: WhisperServiceErrorCode | string | undefined,
+  t: TFunction,
 ): string {
   if (code !== undefined && isWhisperServiceErrorCode(code)) {
     switch (code) {
       case WhisperServiceErrorCode.UserNotFound:
-        return 'User not found'
+        return t('whispers.errors.userNotFound', 'User not found')
       case WhisperServiceErrorCode.NoSelfMessaging:
-        return 'Cannot send messages to yourself'
+        return t('whispers.errors.noSelfMessaging', 'Cannot send messages to yourself')
       case WhisperServiceErrorCode.InvalidGetSessionHistoryAction:
-        return 'Must have an active whisper session with a user to retrieve message history'
+        return t(
+          'whispers.errors.invalidAction',
+          'Must have an active whisper session with a user to retrieve message history',
+        )
       default:
         return assertUnreachable(code)
     }
   } else {
-    return 'Unknown error'
+    return t('whispers.errors.unknownError', 'Unknown error')
   }
 }

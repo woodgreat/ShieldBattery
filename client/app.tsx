@@ -4,17 +4,17 @@ import { Route, Switch, useRoute } from 'wouter'
 import { isLoggedIn } from './auth/auth-utils'
 import { EmailVerificationUi } from './auth/email-verification'
 import { ForgotPassword, ForgotUser, ResetPassword } from './auth/forgot'
-import LoggedInFilter from './auth/logged-in-filter'
-import Login from './auth/login'
-import Signup from './auth/signup'
+import { LoggedInFilter } from './auth/logged-in-filter'
+import { Login } from './auth/login'
+import { Signup } from './auth/signup'
 import { ConnectedDialogOverlay } from './dialogs/connected-dialog-overlay'
 import { usePixelShover } from './dom/pixel-shover'
 import { DownloadPage } from './download/download-page'
 import { UpdateOverlay } from './download/update-overlay'
 import { KeyListenerBoundary } from './keyboard/key-listener'
-import Faq from './landing/faq'
-import Splash from './landing/splash'
-import LoadingFilter from './loading/loading-filter'
+import { Faq } from './landing/faq'
+import { Splash } from './landing/splash'
+import { LoadingFilter } from './loading/loading-filter'
 import { LoggedOutContent } from './logged-out-content'
 import { MainLayout } from './main-layout'
 import { LoginRoute } from './navigation/custom-routes'
@@ -27,6 +27,7 @@ import {
 import { LoadingDotsArea } from './progress/dots'
 import { useAppSelector } from './redux-hooks'
 import { RootErrorBoundary } from './root-error-boundary'
+import { ConnectedSettings } from './settings/settings'
 import ConnectedSnackbar from './snackbars/connected-snackbar'
 import GlobalStyle from './styles/global'
 import ResetStyle from './styles/reset'
@@ -114,6 +115,7 @@ export default function App() {
                   <MainContent />
                 </Route>
               </Switch>
+              <ConnectedSettings />
               <ConnectedSnackbar />
               <ConnectedDialogOverlay />
             </React.Suspense>

@@ -1,44 +1,30 @@
 import { Immutable } from 'immer'
 import { rgba } from 'polished'
 import React, { useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { MapInfoJson } from '../../common/maps'
-import ImageIcon from '../icons/material/image-24px.svg'
-import { MaterialIcon } from '../icons/material/material-icon'
-import MapActionsIcon from '../icons/material/more_vert-24px.svg'
-import FavoritedIcon from '../icons/material/star-24px.svg'
-import UnfavoritedIcon from '../icons/material/star_border-24px.svg'
+import { IconRoot, MaterialIcon } from '../icons/material/material-icon'
 import { IconButton } from '../material/button'
 import { MenuItem } from '../material/menu/item'
 import { MenuList } from '../material/menu/menu'
 import { Popover, useAnchorPosition, usePopoverController } from '../material/popover'
-import { amberA100, background700, background900, colorTextPrimary } from '../styles/colors'
+import {
+  amberA100,
+  background700,
+  background900,
+  colorTextFaint,
+  colorTextPrimary,
+} from '../styles/colors'
 import { singleLine, subtitle2 } from '../styles/typography'
 import MapImage from './map-image'
 
 const Container = styled.div`
   position: relative;
   width: 100%;
-  height: auto;
+  height: 100%;
   border-radius: 2px;
   contain: content;
-`
-
-const NoImageContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  background-color: ${background700};
-
-  & > svg {
-    width: 96px;
-    height: 96px;
-    opacity: 0.5;
-    margin-bottom: 24px;
-  }
 `
 
 const TEXT_PROTECTION_HEIGHT_PX = 48
@@ -55,6 +41,12 @@ const SelectedIcon = styled.span<{ $isSelected?: boolean; $textProtection?: bool
   & > svg {
     width: 100%;
     height: 100%;
+  }
+
+  & > ${IconRoot} {
+    width: 100%;
+    height: 100%;
+    font-size: var(--sb-map-thumbnail-selected-icon-size, 64px);
   }
 `
 
@@ -158,9 +150,26 @@ const MapActionButton = styled(IconButton)`
   margin-left: 4px;
 `
 
+const NoImageContainer = styled.div`
+  width: 100%;
+  height: 100%;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  background-color: ${background700};
+  color: ${colorTextFaint};
+`
+
+const NoImageIcon = styled(MaterialIcon).attrs({ icon: 'image', size: 96 })`
+  margin-bottom: 24px;
+`
+
 const NoImage = () => (
   <NoImageContainer>
-    <ImageIcon />
+    <NoImageIcon />
   </NoImageContainer>
 )
 
@@ -201,6 +210,7 @@ export function MapThumbnail({
   onRemove,
   onRegenMapImage,
 }: MapThumbnailProps) {
+  const { t } = useTranslation()
   const [menuOpen, openMenu, closeMenu] = usePopoverController()
   const [anchorRef, anchorX, anchorY] = useAnchorPosition('right', 'top')
 
@@ -215,19 +225,19 @@ export function MapThumbnail({
   const actions = useMemo(() => {
     const mapActions: Array<[text: string, handler: () => void]> = []
     if (onMapDetails) {
-      mapActions.push(['View map details', onMapDetails])
+      mapActions.push([t('maps.thumbnail.viewMapDetails', 'View map details'), onMapDetails])
     }
     if (onRegenMapImage) {
-      mapActions.push(['Regenerate image', onRegenMapImage])
+      mapActions.push([t('maps.thumbnail.regenerateImage', 'Regenerate image'), onRegenMapImage])
     }
     if (onRemove) {
-      mapActions.push(['Remove', onRemove])
+      mapActions.push([t('common.actions.remove', 'Remove'), onRemove])
     }
 
     return mapActions.map(([text, handler], i) => (
       <MenuItem key={i} text={text} onClick={() => onActionClick(handler)} />
     ))
-  }, [onMapDetails, onRegenMapImage, onRemove, onActionClick])
+  }, [onMapDetails, onRegenMapImage, onRemove, t, onActionClick])
 
   return (
     <Container className={className} style={style}>
@@ -251,15 +261,19 @@ export function MapThumbnail({
       {onPreview ? (
         <MapPreviewIcon
           icon={<MaterialIcon icon='zoom_in' />}
-          title={'Show map preview'}
+          title={t('maps.thumbnail.showMapPreview', 'Show map preview')}
           onClick={onPreview}
         />
       ) : null}
       {onToggleFavorite ? (
         <FavoriteActionIcon
           disabled={isFavoriting}
-          icon={map.isFavorited ? <FavoritedIcon /> : <UnfavoritedIcon />}
-          title={map.isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+          icon={<MaterialIcon icon='star' filled={map.isFavorited} />}
+          title={
+            map.isFavorited
+              ? t('maps.thumbnail.removeFromFavorites', 'Remove from favorites')
+              : t('maps.thumbnail.addToFavorites', 'Add to favorites')
+          }
           onClick={onToggleFavorite}
         />
       ) : null}
@@ -270,8 +284,8 @@ export function MapThumbnail({
             <>
               <MapActionButton
                 ref={anchorRef}
-                icon={<MapActionsIcon />}
-                title='Map actions'
+                icon={<MaterialIcon icon='more_vert' />}
+                title={t('maps.thumbnail.mapActions', 'Map actions')}
                 onClick={openMenu}
               />
               <Popover

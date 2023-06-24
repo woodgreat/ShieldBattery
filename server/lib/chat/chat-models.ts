@@ -1,9 +1,12 @@
 import sql from 'sql-template-strings'
 import { MergeExclusive } from 'type-fest'
 import {
-  ChannelInfo,
+  BasicChannelInfo,
   ChannelPermissions,
-  JoinedChannelData,
+  DetailedChannelInfo,
+  JoinedChannelInfo,
+  MAXIMUM_JOINED_CHANNELS,
+  MAXIMUM_OWNED_CHANNELS,
   SbChannelId,
   ServerChatMessageType,
 } from '../../../common/chat'
@@ -80,8 +83,9 @@ export async function getUsersForChannel(channelId: SbChannelId): Promise<SbUser
 export async function getUserChannelEntryForUser(
   userId: SbUserId,
   channelId: SbChannelId,
+  withClient?: DbClient,
 ): Promise<UserChannelEntry | null> {
-  const { client, done } = await db()
+  const { client, done } = await db(withClient)
   try {
     const result = await client.query<DbUserChannelEntry>(sql`
       SELECT *
@@ -94,59 +98,131 @@ export async function getUserChannelEntryForUser(
   }
 }
 
-type DbChannel = Dbify<ChannelInfo & JoinedChannelData>
+/**
+ * Gets user channel entries for a particular user in all of the provided channels.
+ */
+export async function getUserChannelEntriesForUser(
+  userId: SbUserId,
+  channelIds: SbChannelId[],
+  withClient?: DbClient,
+): Promise<UserChannelEntry[]> {
+  const { client, done } = await db(withClient)
+  try {
+    const result = await client.query<DbUserChannelEntry>(sql`
+      SELECT *
+      FROM channel_users
+      WHERE user_id = ${userId} AND channel_id = ANY(${channelIds});
+    `)
+    return result.rows.map(row => convertUserChannelEntryFromDb(row))
+  } finally {
+    done()
+  }
+}
 
-function convertChannelFromDb(props: DbChannel): ChannelInfo {
+/**
+ * A type that contains a full and flattened list of channel fields.
+ *
+ * This is only meant to be used internally on the server side; if you need to send any channel
+ * information to the client use the helper methods below.
+ */
+export type FullChannelInfo = BasicChannelInfo & DetailedChannelInfo & JoinedChannelInfo
+
+/** Takes the full channel info and returns only the basic fields. */
+export function toBasicChannelInfo(channel: FullChannelInfo): BasicChannelInfo {
+  return {
+    id: channel.id,
+    name: channel.name,
+    private: channel.private,
+    official: channel.official,
+  }
+}
+
+// TODO(2Pac): Add the missing fields here after #909 is done.
+/** Takes the full channel info and returns only the detailed fields. */
+export function toDetailedChannelInfo(channel: FullChannelInfo): DetailedChannelInfo {
+  return {
+    id: channel.id,
+    userCount: channel.userCount,
+  }
+}
+
+/** Takes the full channel info and returns only the joined fields. */
+export function toJoinedChannelInfo(channel: FullChannelInfo): JoinedChannelInfo {
+  return {
+    id: channel.id,
+    ownerId: channel.ownerId,
+    topic: channel.topic,
+  }
+}
+
+type DbChannel = Dbify<FullChannelInfo>
+
+function convertChannelFromDb(props: DbChannel): FullChannelInfo {
   return {
     id: props.id,
     name: props.name,
     private: props.private,
     official: props.official,
     userCount: props.user_count,
-    joinedChannelData: {
-      ownerId: props.owner_id,
-      topic: props.topic,
-    },
+    ownerId: props.owner_id,
+    topic: props.topic,
   }
 }
 
+/**
+ * Attempts to create a new channel. Returns the channel info if it was successfully created, or
+ * `undefined` if the user reached the limit of created channels.
+ *
+ * NOTE: This method doesn't add user to the new channel. Use `addUserToChannel` for that.
+ */
 export async function createChannel(
   userId: SbUserId,
   channelName: string,
   withClient?: DbClient,
-): Promise<ChannelInfo> {
+): Promise<FullChannelInfo | undefined> {
   const { client, done } = await db(withClient)
   try {
     const result = await client.query<DbChannel>(sql`
       INSERT INTO channels (name, owner_id)
-      VALUES (${channelName}, ${userId})
+      SELECT ${channelName}, ${userId}
+      WHERE (
+        SELECT COUNT(*)
+        FROM channels
+        WHERE owner_id = ${userId}
+      ) < ${MAXIMUM_OWNED_CHANNELS}
       RETURNING *;
     `)
 
-    return convertChannelFromDb(result.rows[0])
+    return result.rows.length > 0 ? convertChannelFromDb(result.rows[0]) : undefined
   } finally {
     done()
   }
 }
 
+/**
+ * Attempts to add a user to a channel. Returns user channel entry if it was successfully added, or
+ * `undefined` if the user reached the limit of joined channels.
+ */
 export async function addUserToChannel(
   userId: SbUserId,
   channelId: SbChannelId,
   withClient?: DbClient,
-): Promise<UserChannelEntry> {
+): Promise<UserChannelEntry | undefined> {
   const { client, done } = await db(withClient)
   try {
     const result = await client.query<DbUserChannelEntry>(sql`
       INSERT INTO channel_users (user_id, channel_id, join_date)
-      VALUES (${userId}, ${channelId}, CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+      SELECT ${userId}, ${channelId}, CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
+      WHERE (
+        SELECT COUNT(*)
+        FROM channel_users cu
+        INNER JOIN channels c ON cu.channel_id = c.id
+        WHERE cu.user_id = ${userId} AND c.official = false
+      ) < ${MAXIMUM_JOINED_CHANNELS}
       RETURNING *;
     `)
 
-    if (result.rows.length < 1) {
-      throw new Error('No rows returned')
-    }
-
-    return convertUserChannelEntryFromDb(result.rows[0])
+    return result.rows.length > 0 ? convertUserChannelEntryFromDb(result.rows[0]) : undefined
   } finally {
     done()
   }
@@ -158,8 +234,21 @@ export interface BaseMessageData {
 
 export interface TextMessageData extends BaseMessageData {
   type: typeof ServerChatMessageType.TextMessage
+  /**
+   * A processed contents of the text message, where all user and channel mentions are replaced
+   * with a custom piece of markup.
+   */
   text: string
+  /**
+   * An array of user IDs that were mentioned in the text message. Will be `undefined` if there were
+   * no users mentioned in this message.
+   */
   mentions?: SbUserId[]
+  /**
+   * An array of channel IDs that were mentioned in the text message. Will be `undefined` if there
+   * were no channels mentioned in this message.
+   */
+  channelMentions?: SbChannelId[]
 }
 
 export interface JoinChannelData extends BaseMessageData {
@@ -188,8 +277,8 @@ export async function addMessageToChannel<T extends ChatMessageData>(
   const doIt = async (client: DbClient) => {
     const result = await client.query<DbChatMessage>(sql`
       WITH ins AS (
-        INSERT INTO channel_messages (id, user_id, channel_id, sent, data)
-        SELECT uuid_generate_v4(), ${userId}, ${channelId},
+        INSERT INTO channel_messages (user_id, channel_id, sent, data)
+        SELECT ${userId}, ${channelId},
           CURRENT_TIMESTAMP AT TIME ZONE 'UTC', ${messageData}
         WHERE EXISTS (
           SELECT 1 FROM channel_users WHERE user_id = ${userId} AND channel_id = ${channelId}
@@ -544,7 +633,7 @@ export async function isUserBannedFromChannel(
 export async function getChannelInfo(
   channelId: SbChannelId,
   withClient?: DbClient,
-): Promise<ChannelInfo | undefined> {
+): Promise<FullChannelInfo | undefined> {
   const { client, done } = await db(withClient)
   try {
     const result = await client.query<DbChannel>(sql`
@@ -566,7 +655,7 @@ export async function getChannelInfo(
 export async function getChannelInfos(
   channelIds: SbChannelId[],
   withClient?: DbClient,
-): Promise<ChannelInfo[]> {
+): Promise<FullChannelInfo[]> {
   const { client, done } = await db(withClient)
   try {
     const result = await client.query<DbChannel>(sql`
@@ -581,51 +670,11 @@ export async function getChannelInfos(
   }
 }
 
-/**
- * Returns the data for all channels with the specified IDs. The channels are returned in the same
- * order they were passed in. If one of the channels could not be found, it will not be included in
- * the result.
- */
-export async function getChannelInfosInOrder(
-  channelIds: SbChannelId[],
-  withClient?: DbClient,
-): Promise<ChannelInfo[]> {
-  const { client, done } = await db(withClient)
-  try {
-    const result = await client.query<DbChannel>(sql`
-      SELECT *
-      FROM channels
-      WHERE id = ANY(${channelIds});
-    `)
-
-    if (result.rows.length < 1) {
-      return []
-    }
-
-    const channelInfos = await Promise.all(result.rows.map(c => convertChannelFromDb(c)))
-    const idToChannelInfo = new Map<SbChannelId, ChannelInfo>()
-    for (const channelInfo of channelInfos) {
-      idToChannelInfo.set(channelInfo.id, channelInfo)
-    }
-
-    const orderedChannelInfos = []
-    for (const id of channelIds) {
-      const info = idToChannelInfo.get(id)
-      if (info) {
-        orderedChannelInfos.push(info)
-      }
-    }
-
-    return orderedChannelInfos
-  } finally {
-    done()
-  }
-}
-
+/** Returns a chat channel with the matching name if it exists. */
 export async function findChannelByName(
   channelName: string,
   withClient?: DbClient,
-): Promise<ChannelInfo | undefined> {
+): Promise<FullChannelInfo | undefined> {
   const { client, done } = await db(withClient)
   try {
     const result = await client.query<DbChannel>(sql`
@@ -641,21 +690,42 @@ export async function findChannelByName(
 }
 
 /**
- * Returns a full list of chat channels, optionally filtered by a `searchStr`. Only admins should be
- * able to call this function.
+ * Returns the data for all channels with the specified names. If a channel cannot be found it will
+ * not be included in the result. The order of the result is not guaranteed.
  */
-export async function searchChannelsAsAdmin(
+export async function findChannelsByName(
+  names: string[],
+  withClient?: DbClient,
+): Promise<FullChannelInfo[]> {
+  const { client, done } = await db(withClient)
+  try {
+    const result = await client.query<DbChannel>(sql`
+      SELECT *
+      FROM channels
+      WHERE name = ANY (${names});
+    `)
+
+    return result.rows.map(row => convertChannelFromDb(row))
+  } finally {
+    done()
+  }
+}
+
+/**
+ * Returns a list of chat channels, optionally filtered by a `searchStr`.
+ */
+export async function searchChannels(
   {
     limit,
-    pageNumber,
+    offset,
     searchStr,
   }: {
     limit: number
-    pageNumber: number
+    offset: number
     searchStr?: string
   },
   withClient?: DbClient,
-): Promise<ChannelInfo[]> {
+): Promise<FullChannelInfo[]> {
   const { client, done } = await db(withClient)
   try {
     const query = sql`
@@ -670,10 +740,10 @@ export async function searchChannelsAsAdmin(
     query.append(sql`
       ORDER BY user_count DESC, name
       LIMIT ${limit}
-      OFFSET ${pageNumber * limit}
+      OFFSET ${offset}
     `)
 
-    const result = await client.query<DbChannel>(query)
+    const result = await client.query<DbChannel & { joined: boolean }>(query)
 
     return result.rows.map(row => convertChannelFromDb(row))
   } finally {

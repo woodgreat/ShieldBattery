@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
-import LinkIcon from '../icons/material/link-24px.svg'
+import i18n from '../i18n/i18next'
+import { MaterialIcon } from '../icons/material/material-icon'
 import { IconButton } from '../material/button'
 import { Tooltip, TooltipPosition } from '../material/tooltip'
 import { makeServerUrl } from '../network/server-url'
@@ -33,8 +34,8 @@ export interface CopyLinkButtonProps {
 export function CopyLinkButton({
   className,
   tooltipPosition,
-  startingText = 'Copy link',
-  copiedText = 'Copied!',
+  startingText = i18n.t('navigation.copyLink.defaultText', 'Copy link'),
+  copiedText = i18n.t('navigation.copyLink.copiedText', 'Copied!'),
 }: CopyLinkButtonProps) {
   const [text, setText] = useState(startingText)
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>()
@@ -67,7 +68,11 @@ export function CopyLinkButton({
 
   return (
     <Tooltip text={text} position={tooltipPosition}>
-      <StyledIconButton className={className} icon={<LinkIcon />} onClick={onClick} />
+      <StyledIconButton
+        className={className}
+        icon={<MaterialIcon icon='link' />}
+        onClick={onClick}
+      />
     </Tooltip>
   )
 }

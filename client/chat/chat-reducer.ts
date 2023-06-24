@@ -1,16 +1,19 @@
 import cuid from 'cuid'
 import { Immutable } from 'immer'
 import {
-  ChannelInfo,
+  BasicChannelInfo,
   ChannelModerationAction,
   ChannelPermissions,
   ChatMessage,
   ChatUserProfileJson,
   ClientChatMessageType,
+  DetailedChannelInfo,
+  InitialChannelData,
+  JoinedChannelInfo,
   SbChannelId,
 } from '../../common/chat'
 import { SbUserId } from '../../common/users/sb-user'
-import { NETWORK_SITE_CONNECTED } from '../actions'
+import { LOBBY_UPDATE_CHAT_MESSAGE, NETWORK_SITE_CONNECTED } from '../actions'
 import { immerKeyedReducer } from '../reducers/keyed-reducer'
 
 // How many messages should be kept for inactive channels
@@ -33,33 +36,42 @@ export interface MessagesState {
 }
 
 export interface ChatState {
-  /* A set of joined chat channels */
+  /** A set of joined chat channels */
   joinedChannels: Set<SbChannelId>
-  /* A map of channel ID -> channel info (includes both joined and unjoined chat channels) */
-  idToInfo: Map<SbChannelId, ChannelInfo>
-  /* A map of channel ID -> channel users */
+  /** A map of channel ID -> basic channel info (used in channel mentions, etc.) */
+  idToBasicInfo: Map<SbChannelId, BasicChannelInfo>
+  /** A map of channel ID -> detailed channel info (used in channel info card, etc.) */
+  idToDetailedInfo: Map<SbChannelId, DetailedChannelInfo>
+  /** A map of channel ID -> joined channel info (used in user's joined channel page, etc.) */
+  idToJoinedInfo: Map<SbChannelId, JoinedChannelInfo>
+  /** A map of channel ID -> channel users */
   idToUsers: Map<SbChannelId, UsersState>
-  /* A map of channel ID -> channel messages */
+  /** A map of channel ID -> channel messages */
   idToMessages: Map<SbChannelId, MessagesState>
-  /* A nested map of channel ID -> a map of user ID -> chat channel user profile */
+  /** A nested map of channel ID -> a map of user ID -> chat channel user profile */
   idToUserProfiles: Map<SbChannelId, Map<SbUserId, ChatUserProfileJson>>
-  /* A map of channel ID -> your own permissions for this chat channel */
+  /** A map of channel ID -> your own permissions for this chat channel */
   idToSelfPermissions: Map<SbChannelId, ChannelPermissions>
-  /* A set of joined chat channels that are activated */
+  /** A set of joined chat channels that are activated */
   activatedChannels: Set<SbChannelId>
-  /* A set of joined chat channels that are unread */
+  /** A set of joined chat channels that are unread */
   unreadChannels: Set<SbChannelId>
+  /** A set of channel IDs saved in various chat messages that no longer exist. */
+  deletedChannels: Set<SbChannelId>
 }
 
 const DEFAULT_CHAT_STATE: Immutable<ChatState> = {
   joinedChannels: new Set(),
-  idToInfo: new Map(),
+  idToBasicInfo: new Map(),
+  idToDetailedInfo: new Map(),
+  idToJoinedInfo: new Map(),
   idToUsers: new Map(),
   idToMessages: new Map(),
   idToUserProfiles: new Map(),
   idToSelfPermissions: new Map(),
   activatedChannels: new Set(),
   unreadChannels: new Set(),
+  deletedChannels: new Set(),
 }
 
 function removeUserFromChannel(
@@ -69,10 +81,10 @@ function removeUserFromChannel(
   newOwnerId?: SbUserId,
   reason?: ChannelModerationAction,
 ) {
-  const channelInfo = state.idToInfo.get(channelId)
+  const joinedChannelInfo = state.idToJoinedInfo.get(channelId)
   const channelUsers = state.idToUsers.get(channelId)
   const channelUserProfiles = state.idToUserProfiles.get(channelId)
-  if (!channelInfo || !channelInfo.joinedChannelData || !channelUsers || !channelUserProfiles) {
+  if (!joinedChannelInfo || !channelUsers || !channelUserProfiles) {
     return
   }
 
@@ -102,7 +114,7 @@ function removeUserFromChannel(
   )
 
   if (newOwnerId) {
-    channelInfo.joinedChannelData.ownerId = newOwnerId
+    joinedChannelInfo.ownerId = newOwnerId
 
     updateMessages(state, channelId, true, m =>
       m.concat({
@@ -118,6 +130,7 @@ function removeUserFromChannel(
 
 function removeSelfFromChannel(state: ChatState, channelId: SbChannelId) {
   state.joinedChannels.delete(channelId)
+  state.idToJoinedInfo.delete(channelId)
   state.idToUsers.delete(channelId)
   state.idToMessages.delete(channelId)
   state.idToUserProfiles.delete(channelId)
@@ -164,38 +177,74 @@ function updateMessages(
   channelMessages.hasHistory = channelMessages.hasHistory || sliced
 }
 
+function updateChannelInfos(
+  state: ChatState,
+  basicChannelInfos: BasicChannelInfo[],
+  detailedChannelInfos: DetailedChannelInfo[] = [],
+  joinedChannelInfos: JoinedChannelInfo[] = [],
+) {
+  for (const channel of basicChannelInfos) {
+    state.idToBasicInfo.set(channel.id, channel)
+    state.deletedChannels.delete(channel.id)
+  }
+  for (const channel of detailedChannelInfos) {
+    state.idToDetailedInfo.set(channel.id, channel)
+  }
+  for (const channel of joinedChannelInfos) {
+    state.idToJoinedInfo.set(channel.id, channel)
+  }
+}
+
+function updateDeletedChannels(state: ChatState, deletedChannels: SbChannelId[]) {
+  for (const channelId of deletedChannels) {
+    state.deletedChannels.add(channelId)
+  }
+}
+
+function initChannel(state: ChatState, channelId: SbChannelId, data: InitialChannelData) {
+  const { channelInfo, detailedChannelInfo, joinedChannelInfo, activeUserIds, selfPermissions } =
+    data
+
+  const channelUsers: UsersState = {
+    active: new Set(activeUserIds),
+    idle: new Set(),
+    offline: new Set(),
+    hasLoadedUserList: false,
+    loadingUserList: false,
+  }
+  const messagesState: MessagesState = {
+    messages: [],
+    loadingHistory: false,
+    hasHistory: true,
+  }
+  state.joinedChannels.add(channelId)
+  state.idToBasicInfo.set(channelId, channelInfo)
+  state.idToDetailedInfo.set(channelId, detailedChannelInfo)
+  state.idToJoinedInfo.set(channelId, joinedChannelInfo)
+  state.idToUsers.set(channelId, channelUsers)
+  state.idToMessages.set(channelId, messagesState)
+  state.idToUserProfiles.set(channelId, new Map())
+  state.idToSelfPermissions.set(channelId, selfPermissions)
+
+  updateMessages(state, channelId, false, m =>
+    m.concat({
+      id: cuid(),
+      type: ClientChatMessageType.SelfJoinChannel,
+      channelId,
+      time: Date.now(),
+    }),
+  )
+}
+
 export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
+  ['@loading/chatReady'](state, action) {
+    for (const channel of action.payload.channels) {
+      initChannel(state, channel.channelInfo.id, channel)
+    }
+  },
+
   ['@chat/initChannel'](state, action) {
-    const { channelInfo, activeUserIds, selfPermissions } = action.payload
-    const { channelId } = action.meta
-
-    const channelUsers: UsersState = {
-      active: new Set(activeUserIds),
-      idle: new Set(),
-      offline: new Set(),
-      hasLoadedUserList: false,
-      loadingUserList: false,
-    }
-    const messagesState: MessagesState = {
-      messages: [],
-      loadingHistory: false,
-      hasHistory: true,
-    }
-    state.joinedChannels.add(channelId)
-    state.idToInfo.set(channelId, channelInfo)
-    state.idToUsers.set(channelId, channelUsers)
-    state.idToMessages.set(channelId, messagesState)
-    state.idToUserProfiles.set(channelId, new Map())
-    state.idToSelfPermissions.set(channelId, selfPermissions)
-
-    updateMessages(state, channelId, false, m =>
-      m.concat({
-        id: cuid(),
-        type: ClientChatMessageType.SelfJoinChannel,
-        channelId,
-        time: Date.now(),
-      }),
-    )
+    initChannel(state, action.meta.channelId, action.payload)
   },
 
   ['@chat/updateJoin'](state, action) {
@@ -252,10 +301,11 @@ export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
   },
 
   ['@chat/updateMessage'](state, action) {
-    const { message: newMessage } = action.payload
+    const { message: newMessage, channelMentions } = action.payload
     const { channelId } = action.meta
 
     updateMessages(state, channelId, true, m => m.concat(newMessage))
+    updateChannelInfos(state, channelMentions)
   },
 
   ['@chat/updateUserActive'](state, action) {
@@ -334,6 +384,8 @@ export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
     }
 
     updateMessages(state, channelId, false, messages => newMessages.concat(messages))
+    updateChannelInfos(state, action.payload.channelMentions)
+    updateDeletedChannels(state, action.payload.deletedChannels)
   },
 
   ['@chat/updateMessageDeleted'](state, action) {
@@ -391,7 +443,14 @@ export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
   },
 
   ['@chat/getChannelInfo'](state, action) {
-    state.idToInfo.set(action.payload.id, action.payload)
+    const { channelInfo, detailedChannelInfo, joinedChannelInfo } = action.payload
+
+    updateChannelInfos(
+      state,
+      [channelInfo],
+      detailedChannelInfo ? [detailedChannelInfo] : undefined,
+      joinedChannelInfo ? [joinedChannelInfo] : undefined,
+    )
   },
 
   ['@chat/getBatchChannelInfo'](state, action) {
@@ -399,9 +458,15 @@ export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
       return
     }
 
-    for (const channel of action.payload) {
-      state.idToInfo.set(channel.id, channel)
-    }
+    const { channelInfos, detailedChannelInfos, joinedChannelInfos } = action.payload
+
+    updateChannelInfos(state, channelInfos, detailedChannelInfos, joinedChannelInfos)
+  },
+
+  ['@chat/searchChannels'](state, action) {
+    const { channelInfos, detailedChannelInfos, joinedChannelInfos } = action.payload
+
+    updateChannelInfos(state, channelInfos, detailedChannelInfos, joinedChannelInfos)
   },
 
   ['@chat/activateChannel'](state, action) {
@@ -430,6 +495,23 @@ export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
     const { channelId } = action.meta
 
     state.idToSelfPermissions.set(channelId, action.payload.selfPermissions)
+  },
+
+  ['@whispers/updateMessage'](state, action) {
+    updateChannelInfos(state, action.payload.channelMentions)
+  },
+
+  ['@whispers/loadMessageHistory'](state, action) {
+    updateChannelInfos(state, action.payload.channelMentions)
+    updateDeletedChannels(state, action.payload.deletedChannels)
+  },
+
+  ['@parties/updateChatMessage'](state, action) {
+    updateChannelInfos(state, action.payload.channelMentions)
+  },
+
+  [LOBBY_UPDATE_CHAT_MESSAGE as any](state: any, action: any) {
+    updateChannelInfos(state, action.payload.channelMentions)
   },
 
   [NETWORK_SITE_CONNECTED as any]() {

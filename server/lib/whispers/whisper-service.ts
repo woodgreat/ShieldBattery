@@ -1,5 +1,8 @@
-import { Map as IMap, OrderedSet, Set as ISet } from 'immutable'
+import { Map as IMap, Set as ISet, OrderedSet } from 'immutable'
 import { singleton } from 'tsyringe'
+import { assertUnreachable } from '../../../common/assert-unreachable'
+import { SbChannelId } from '../../../common/chat'
+import { subtract } from '../../../common/data-structures/sets'
 import { urlPath } from '../../../common/urls'
 import { SbUser, SbUserId } from '../../../common/users/sb-user'
 import {
@@ -9,7 +12,9 @@ import {
   WhisperMessageType,
   WhisperServiceErrorCode,
   WhisperSessionInitEvent,
+  WhispersReadyEvent,
 } from '../../../common/whispers'
+import { getChannelInfos, toBasicChannelInfo } from '../chat/chat-models'
 import logger from '../logging/logger'
 import filterChatMessage from '../messaging/filter-chat-message'
 import { processMessageContents } from '../messaging/process-chat-message'
@@ -19,9 +24,9 @@ import { TypedPublisher } from '../websockets/typed-publisher'
 import {
   addMessageToWhisper,
   closeWhisperSession as dbCloseWhisperSession,
+  startWhisperSession as dbStartWhisperSession,
   getMessagesForWhisperSession,
   getWhisperSessionsForUser,
-  startWhisperSession as dbStartWhisperSession,
 } from './whisper-models'
 
 export class WhisperServiceError extends Error {
@@ -111,12 +116,14 @@ export default class WhisperService {
     ])
 
     const text = filterChatMessage(message)
-    const [processedText, mentionedUsers] = await processMessageContents(text)
-    const mentions = Array.from(mentionedUsers.values())
+    const [processedText, userMentions, channelMentions] = await processMessageContents(text)
+    const mentionedUserIds = userMentions.map(u => u.id)
+    const mentionedChannelIds = channelMentions.map(c => c.id)
     const result = await addMessageToWhisper(user.id, target.id, {
       type: WhisperMessageType.TextMessage,
       text: processedText,
-      mentions: mentions.map(m => m.id),
+      mentions: mentionedUserIds.length > 0 ? mentionedUserIds : undefined,
+      channelMentions: mentionedChannelIds.length > 0 ? mentionedChannelIds : undefined,
     })
 
     // TODO(tec27): This makes the start throttle rather useless, doesn't it? Think of a better way
@@ -130,13 +137,15 @@ export default class WhisperService {
       action: 'message',
       message: {
         id: result.id,
+        type: result.data.type,
         from: result.from,
         to: result.to,
-        sent: Number(result.sent),
-        data: result.data,
+        time: Number(result.sent),
+        text: result.data.text,
       },
       users: [user, target],
-      mentions,
+      mentions: userMentions,
+      channelMentions: channelMentions.map(c => toBasicChannelInfo(c)),
     })
   }
 
@@ -166,27 +175,54 @@ export default class WhisperService {
     )
 
     const messages: WhisperMessage[] = []
-    const mentionIds = new Set<SbUserId>()
+    const userMentionIds = new Set<SbUserId>()
+    const channelMentionIds = new Set<SbChannelId>()
 
     for (const msg of dbMessages) {
-      messages.push({
-        id: msg.id,
-        from: msg.from,
-        to: msg.to,
-        sent: Number(msg.sent),
-        data: msg.data,
-      })
-      for (const mention of msg.data.mentions ?? []) {
-        mentionIds.add(mention)
+      switch (msg.data.type) {
+        case WhisperMessageType.TextMessage:
+          messages.push({
+            id: msg.id,
+            type: msg.data.type,
+            from: msg.from,
+            to: msg.to,
+            time: Number(msg.sent),
+            text: msg.data.text,
+          })
+          for (const mention of msg.data.mentions ?? []) {
+            userMentionIds.add(mention)
+          }
+          for (const mention of msg.data.channelMentions ?? []) {
+            channelMentionIds.add(mention)
+          }
+          break
+
+        default:
+          return assertUnreachable(msg.data.type)
       }
     }
 
-    const mentions = await findUsersById(Array.from(mentionIds))
+    const [userMentions, channelMentions] = await Promise.all([
+      findUsersById(Array.from(userMentionIds)),
+      getChannelInfos(Array.from(channelMentionIds)),
+    ])
+
+    const deletedChannels =
+      channelMentionIds.size === channelMentions.length
+        ? []
+        : Array.from(
+            subtract(
+              channelMentionIds,
+              channelMentions.map(c => c.id),
+            ),
+          )
 
     return {
       messages,
       users: [user, target],
-      mentions,
+      mentions: userMentions,
+      channelMentions: channelMentions.map(c => toBasicChannelInfo(c)),
+      deletedChannels,
     }
   }
 
@@ -240,10 +276,8 @@ export default class WhisperService {
       return
     }
 
-    this.userSessions = this.userSessions.set(
-      userSockets.userId,
-      OrderedSet(whisperSessions.map(s => s.targetId)),
-    )
+    const targetIdsSet = OrderedSet(whisperSessions.map(s => s.targetId))
+    this.userSessions = this.userSessions.set(userSockets.userId, targetIdsSet)
     for (const session of whisperSessions) {
       // Add the new user to all of the sessions they have opened
       this.sessionUsers = this.sessionUsers.update(session.targetId, ISet(), s =>
@@ -255,7 +289,10 @@ export default class WhisperService {
       })
     }
 
-    userSockets.subscribe(`${userSockets.getPath()}/whispers`, () => ({ type: 'whispersReady' }))
+    userSockets.subscribe<WhispersReadyEvent>(`${userSockets.getPath()}/whispers`, () => ({
+      type: 'whispersReady',
+      targetIds: this.userSessions.get(userSockets.userId)?.toArray() ?? [],
+    }))
   }
 
   private async handleUserQuit(userId: SbUserId) {

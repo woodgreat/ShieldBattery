@@ -1,88 +1,169 @@
 import React, { useEffect, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { ChatServiceErrorCode, SbChannelId } from '../../common/chat'
-import ChannelIcon from '../icons/material/image-24px.svg'
+import { urlPath } from '../../common/urls'
+import { hasAnyPermission } from '../admin/admin-permissions'
 import { MaterialIcon } from '../icons/material/material-icon'
-import { RaisedButton } from '../material/button'
+import { IconButton, RaisedButton } from '../material/button'
 import Card from '../material/card'
+import { MenuItem } from '../material/menu/item'
+import { MenuList } from '../material/menu/menu'
+import { Popover, useAnchorPosition, usePopoverController } from '../material/popover'
+import { shadow2dp } from '../material/shadows'
+import { push } from '../navigation/routing'
 import { isFetchError } from '../network/fetch-errors'
 import { LoadingDotsArea } from '../progress/dots'
 import { useAppDispatch, useAppSelector } from '../redux-hooks'
 import { useStableCallback } from '../state-hooks'
-import { colorError } from '../styles/colors'
-import { body1, Body1, Headline6 } from '../styles/typography'
-import { getChannelInfo, joinChannel, navigateToChannel } from './action-creators'
+import { colorTextFaint } from '../styles/colors'
+import { FlexSpacer } from '../styles/flex-spacer'
+import { body1, caption, headline6 } from '../styles/typography'
+import {
+  getBatchChannelInfo,
+  joinChannelWithErrorHandling,
+  navigateToChannel,
+} from './action-creators'
+import { ChannelBadge } from './channel-badge'
+import { ChannelBanner, ChannelBannerPlaceholderImage } from './channel-banner'
 
-const Container = styled(Card)`
-  width: 100%;
-  max-width: 440px;
-  min-width: 220px;
-  padding: 16px;
+const ChannelCardRoot = styled(Card)`
+  position: relative;
+  width: 352px;
+  padding: 0;
 
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-`
-
-const StyledLoadingDotsArea = styled(LoadingDotsArea)`
-  width: 100%;
-`
-
-const StyledChannelIcon = styled.svg`
-  width: 56px;
-  height: auto;
-  flex-shrink: 0;
-`
-
-const ErrorChannelIcon = styled(MaterialIcon)`
-  flex-shrink: 0;
-  color: ${colorError};
-`
-
-const ChannelInfoContainer = styled.div`
-  flex-grow: 1;
   display: flex;
   flex-direction: column;
-  margin: 0 8px;
+
+  contain: content;
 `
 
-const ErrorText = styled.div`
+const OverflowMenuButton = styled(IconButton)`
+  position: absolute;
+  top: 4px;
+  right: 4px;
+`
+
+const ChannelBannerAndBadge = styled.div`
+  box-sizing: content-box;
+  position: relative;
+  padding-bottom: 20px;
+`
+
+const ChannelCardBadge = styled.div`
+  ${shadow2dp};
+  position: absolute;
+  left: 12px;
+  bottom: 0;
+  width: 52px;
+  height: 52px;
+  padding: 6px;
+
+  background: var(--sb-color-background);
+  border-radius: 9999px;
+`
+
+const ChannelName = styled.div`
+  ${headline6};
+  margin-top: 4px;
+  padding: 0 16px;
+`
+
+const ChannelUserCount = styled.div`
+  ${caption};
+  padding: 0 16px;
+`
+
+const PrivateChannelDescriptionContainer = styled.div`
   ${body1};
-  color: ${colorError};
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 16px;
+`
+
+const PrivateChannelIcon = styled(MaterialIcon).attrs({ icon: 'lock' })`
+  margin-bottom: 8px;
+  color: ${colorTextFaint};
+`
+
+const PrivateChannelDescriptionText = styled.span`
+  color: ${colorTextFaint};
+  text-align: center;
+`
+
+const ChannelDescriptionContainer = styled.div`
+  ${body1};
+  margin-top: 16px;
+  padding: 0 16px;
+
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  line-clamp: 3;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`
+
+const NoChannelDescriptionText = styled.span`
+  color: ${colorTextFaint};
+`
+
+const ChannelActions = styled.div`
+  padding: 16px 16px 10px 16px;
+
+  display: flex;
+  justify-content: space-between;
+`
+
+const JoinedIndicator = styled.div`
+  ${body1};
+
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  color: ${colorTextFaint};
 `
 
 export interface ConnectedChannelInfoCardProps {
+  /**
+   * The ID of a channel for which we want to display info for. In case the channel with this ID is
+   * not found, the card will display an error.
+   */
   channelId: SbChannelId
+  /**
+   * A channel name which is usually received from the URL route and is mostly used for decorative
+   * purposes.
+   */
   channelName: string
 }
 
+/**
+ * A component which finds a channel for a given channel ID and displays its info. Allows users to
+ * join the channel if they're not already in it, and handles errors in case the channel is not
+ * found etc.
+ */
 export function ConnectedChannelInfoCard({
   channelId,
   channelName,
 }: ConnectedChannelInfoCardProps) {
+  const { t } = useTranslation()
   const dispatch = useAppDispatch()
-  const channelInfo = useAppSelector(s => s.chat.idToInfo.get(channelId))
+  const basicChannelInfo = useAppSelector(s => s.chat.idToBasicInfo.get(channelId))
+  const detailedChannelInfo = useAppSelector(s => s.chat.idToDetailedInfo.get(channelId))
   const isUserInChannel = useAppSelector(s => s.chat.joinedChannels.has(channelId))
+  const isAdmin = useAppSelector(s => hasAnyPermission(s.auth, 'moderateChatChannels'))
 
-  const [findChannelError, setFindChannelError] = useState<Error>()
-  const [joinChannelError, setJoinChannelError] = useState<Error>()
+  const [overflowMenuOpen, openOverflowMenu, closeOverflowMenu] = usePopoverController()
+  const [anchor, anchorX, anchorY] = useAnchorPosition('left', 'top')
+
   const [isJoinInProgress, setIsJoinInProgress] = useState(false)
+  const [isUserBanned, setIsUserBanned] = useState(false)
 
   useEffect(() => {
-    const abortController = new AbortController()
-
-    dispatch(
-      getChannelInfo(channelId, {
-        signal: abortController.signal,
-        onSuccess: () => setFindChannelError(undefined),
-        onError: err => setFindChannelError(err),
-      }),
-    )
-
-    return () => {
-      abortController.abort()
-    }
-  }, [channelId, dispatch])
+    dispatch(getBatchChannelInfo(channelId))
+  }, [dispatch, channelId])
 
   const onViewClick = useStableCallback(() => {
     navigateToChannel(channelId, channelName)
@@ -91,69 +172,139 @@ export function ConnectedChannelInfoCard({
   const onJoinClick = useStableCallback(() => {
     setIsJoinInProgress(true)
     dispatch(
-      joinChannel(channelName, {
-        onSuccess: channel => navigateToChannel(channel.id, channel.name),
+      joinChannelWithErrorHandling(channelName, {
+        onSuccess: () => {},
         onError: err => {
-          setJoinChannelError(err)
           setIsJoinInProgress(false)
+
+          // NOTE(2Pac): We assume the error has been handled in the action creator, we just need to
+          // deal with the ban case in this UI.
+          if (isFetchError(err) && err.code === ChatServiceErrorCode.UserBanned) {
+            setIsUserBanned(true)
+          }
         },
       }),
     )
   })
 
-  const isChannelNotFound =
-    isFetchError(findChannelError) && findChannelError.code === ChatServiceErrorCode.ChannelNotFound
-  const isUserBanned =
-    isFetchError(joinChannelError) && joinChannelError.code === ChatServiceErrorCode.UserBanned
+  const onAdminViewClick = useStableCallback(() => {
+    push(urlPath`/chat/admin/${channelId}/${channelName}/view`)
+  })
 
-  const icon =
-    channelInfo && (!channelInfo.private || isUserInChannel) ? (
-      <StyledChannelIcon as={ChannelIcon} />
-    ) : (
-      <ErrorChannelIcon icon='warning' size={56} />
+  let channelDescription
+  if (!basicChannelInfo) {
+    channelDescription = <LoadingDotsArea />
+  } else if (basicChannelInfo.private && !isUserInChannel) {
+    channelDescription = (
+      <PrivateChannelDescriptionContainer>
+        <PrivateChannelIcon size={40} />
+        <PrivateChannelDescriptionText>
+          {t(
+            'chat.channelInfoCard.private',
+            'This channel is private and requires an invite to join.',
+          )}
+        </PrivateChannelDescriptionText>
+      </PrivateChannelDescriptionContainer>
     )
-
-  let subtitle
-  if (isChannelNotFound) {
-    subtitle = (
-      <ErrorText>
-        This channel could not be found. It might not exist, or it may have been re-created by
-        someone else.
-      </ErrorText>
+  } else if (detailedChannelInfo?.description) {
+    channelDescription = (
+      <ChannelDescriptionContainer>
+        <span>{detailedChannelInfo.description}</span>
+      </ChannelDescriptionContainer>
     )
-  } else if (channelInfo?.private && !isUserInChannel) {
-    subtitle = <ErrorText>This channel is private and requires an invite to join.</ErrorText>
-  } else if (isUserBanned) {
-    subtitle = <ErrorText>You are banned from this channel.</ErrorText>
-  } else if (channelInfo?.userCount) {
-    subtitle = (
-      <Body1>{`${channelInfo.userCount} member${channelInfo.userCount > 1 ? 's' : ''}`}</Body1>
+  } else {
+    channelDescription = (
+      <ChannelDescriptionContainer>
+        <NoChannelDescriptionText>
+          {t('chat.channelInfoCard.noDescription', 'This channel has no description.')}
+        </NoChannelDescriptionText>
+      </ChannelDescriptionContainer>
     )
   }
 
   let action
   if (isUserInChannel) {
-    action = <RaisedButton label='View' onClick={onViewClick} />
-  } else if (channelInfo?.private || isUserBanned) {
-    action = <RaisedButton label='Join' disabled={true} />
-  } else if (channelInfo) {
-    action = <RaisedButton label='Join' disabled={isJoinInProgress} onClick={onJoinClick} />
+    action = <RaisedButton label={t('common.actions.view', 'View')} onClick={onViewClick} />
+  } else if (basicChannelInfo?.private || isUserBanned) {
+    action = <RaisedButton label={t('common.actions.join', 'Join')} disabled={true} />
+  } else if (basicChannelInfo) {
+    action = (
+      <RaisedButton
+        label={t('common.actions.join', 'Join')}
+        disabled={isJoinInProgress}
+        onClick={onJoinClick}
+      />
+    )
   }
 
   return (
-    <Container>
-      {!channelInfo && !findChannelError ? (
-        <StyledLoadingDotsArea />
-      ) : (
-        <>
-          {icon}
-          <ChannelInfoContainer>
-            <Headline6>{channelName}</Headline6>
-            {subtitle}
-          </ChannelInfoContainer>
-          {action}
-        </>
-      )}
-    </Container>
+    <ChannelCardRoot>
+      {isAdmin ? (
+        <Popover
+          open={overflowMenuOpen}
+          onDismiss={closeOverflowMenu}
+          anchorX={anchorX ?? 0}
+          anchorY={anchorY ?? 0}
+          originX={'left'}
+          originY={'top'}>
+          <MenuList>
+            <MenuItem
+              text={t('chat.channelInfoCard.adminView', 'Admin view')}
+              onClick={onAdminViewClick}
+            />
+          </MenuList>
+        </Popover>
+      ) : null}
+
+      <ChannelBannerAndBadge>
+        {detailedChannelInfo?.bannerPath ? (
+          <ChannelBanner src={detailedChannelInfo.bannerPath} />
+        ) : (
+          <ChannelBannerPlaceholderImage />
+        )}
+        {basicChannelInfo ? (
+          <ChannelCardBadge>
+            <ChannelBadge
+              basicChannelInfo={basicChannelInfo}
+              detailedChannelInfo={detailedChannelInfo}
+            />
+          </ChannelCardBadge>
+        ) : null}
+      </ChannelBannerAndBadge>
+      <ChannelName>{basicChannelInfo?.name ?? channelName}</ChannelName>
+
+      {detailedChannelInfo?.userCount ? (
+        <ChannelUserCount>
+          <Trans
+            t={t}
+            i18nKey='chat.channelInfoCard.userCount'
+            count={detailedChannelInfo.userCount}>
+            {{ count: detailedChannelInfo.userCount }} member
+          </Trans>
+        </ChannelUserCount>
+      ) : null}
+      {channelDescription}
+      <FlexSpacer />
+      <ChannelActions>
+        {isUserInChannel ? (
+          <JoinedIndicator>
+            <MaterialIcon icon='check' />
+            <span>{t('chat.channelInfoCard.joined', 'Joined')}</span>
+          </JoinedIndicator>
+        ) : (
+          <div />
+        )}
+        {action}
+      </ChannelActions>
+
+      {isAdmin ? (
+        <OverflowMenuButton
+          ref={anchor}
+          icon={<MaterialIcon icon='more_vert' />}
+          title={t('chat.channelInfoCard.moreActions', 'More actions')}
+          onClick={openOverflowMenu}
+        />
+      ) : null}
+    </ChannelCardRoot>
   )
 }

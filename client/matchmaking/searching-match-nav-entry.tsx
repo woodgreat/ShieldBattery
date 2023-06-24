@@ -1,11 +1,12 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { MatchmakingType, matchmakingTypeToLabel } from '../../common/matchmaking'
-import CancelSearchIcon from '../icons/material/close-24px.svg'
+import { MaterialIcon } from '../icons/material/material-icon'
 import { SubheaderButton } from '../material/left-nav/subheader-button'
 import { useStableCallback } from '../state-hooks'
 import { colorTextSecondary } from '../styles/colors'
-import { body2, cabin, TitleOld } from '../styles/typography'
+import { TitleOld, body2, cabin } from '../styles/typography'
 import { ElapsedTime } from './elapsed-time'
 
 const SearchingContainer = styled.div`
@@ -42,6 +43,7 @@ export interface SearchingMatchNavEntryProps {
 }
 
 export function SearchingMatchNavEntry(props: SearchingMatchNavEntryProps) {
+  const { t } = useTranslation()
   const onCancelClick = useStableCallback(props.onCancelSearch)
 
   return (
@@ -49,13 +51,16 @@ export function SearchingMatchNavEntry(props: SearchingMatchNavEntryProps) {
       <SearchingContainer>
         <SearchTitle>
           {props.isMatched
-            ? 'Match found!'
-            : `Searching for ${matchmakingTypeToLabel(props.matchmakingType)}`}
+            ? t('matchmaking.navEntry.matchFound', 'Match found!')
+            : t('matchmaking.navEntry.searchingForMatch', {
+                defaultValue: 'Searching for {{matchmakingType}}',
+                matchmakingType: matchmakingTypeToLabel(props.matchmakingType, t),
+              })}
         </SearchTitle>
         {!props.isMatched ? (
           <SubheaderButton
-            icon={<CancelSearchIcon />}
-            title='Cancel search'
+            icon={<MaterialIcon icon='close' />}
+            title={t('matchmaking.navEntry.cancelSearch', 'Cancel search')}
             onClick={onCancelClick}
           />
         ) : null}
@@ -63,7 +68,10 @@ export function SearchingMatchNavEntry(props: SearchingMatchNavEntryProps) {
       {props.isMatched ? (
         <AcceptingText>&hellip;</AcceptingText>
       ) : (
-        <StyledElapsedTime prefix={'Time: '} startTimeMs={props.startTime} />
+        <StyledElapsedTime
+          prefix={t('matchmaking.navEntry.elapsedTime', 'Time: ')}
+          startTimeMs={props.startTime}
+        />
       )}
     </>
   )

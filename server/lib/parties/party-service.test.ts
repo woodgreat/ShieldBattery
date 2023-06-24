@@ -1,4 +1,5 @@
 import { NydusServer } from 'nydus'
+import { makeSbChannelId } from '../../../common/chat'
 import {
   MatchmakingPreferences,
   MatchmakingServiceErrorCode,
@@ -6,7 +7,8 @@ import {
 } from '../../../common/matchmaking'
 import { NotificationType } from '../../../common/notifications'
 import { asMockedFunction } from '../../../common/testing/mocks'
-import { makeSbUserId, SbUser, SbUserId } from '../../../common/users/sb-user'
+import { SbUser, makeSbUserId } from '../../../common/users/sb-user'
+import { FullChannelInfo, findChannelsByName, toBasicChannelInfo } from '../chat/chat-models'
 import { GameplayActivityRegistry } from '../games/gameplay-activity-registry'
 import { MatchmakingServiceError } from '../matchmaking/matchmaking-service-error'
 import NotificationService from '../notifications/notification-service'
@@ -16,19 +18,18 @@ import { findUsersByIdAsMap, findUsersByName } from '../users/user-model'
 import { RequestSessionLookup } from '../websockets/session-lookup'
 import { ClientSocketsManager } from '../websockets/socket-groups'
 import {
-  clearTestLogs,
-  createFakeNydusServer,
   InspectableNydusClient,
   NydusConnector,
+  clearTestLogs,
+  createFakeNydusServer,
 } from '../websockets/testing/websockets'
 import { TypedPublisher } from '../websockets/typed-publisher'
-import PartyService, { getPartyPath, PartyRecord, toPartyJson } from './party-service'
+import PartyService, { PartyRecord, getPartyPath, toPartyJson } from './party-service'
 
-jest.mock('../users/user-model', () => ({
-  findUsersByName: jest.fn(),
-  findUsersByIdAsMap: jest.fn(),
-}))
+jest.mock('../chat/chat-models')
+jest.mock('../users/user-model')
 
+const findChannelsByNameMock = asMockedFunction(findChannelsByName)
 const findUsersByNameMock = asMockedFunction(findUsersByName)
 const findUsersByIdAsMapMock = asMockedFunction(findUsersByIdAsMap)
 
@@ -140,6 +141,7 @@ describe('parties/party-service', () => {
     webClient = connector.connectClient(webUser, WEB_USER_CLIENT_ID, 'web')
 
     clearTestLogs(nydus)
+    findChannelsByNameMock.mockClear()
     findUsersByNameMock.mockClear()
     findUsersByIdAsMapMock.mockClear()
     findUsersByIdAsMapMock.mockResolvedValue(new Map())
@@ -647,11 +649,12 @@ describe('parties/party-service', () => {
     })
 
     test('should publish "chatMessage" event to the party path', async () => {
-      findUsersByNameMock.mockResolvedValue(new Map())
+      findUsersByNameMock.mockResolvedValue([])
+      findChannelsByNameMock.mockResolvedValue([])
 
       await partyService.sendChatMessage(party.id, user2, 'Hello World!')
 
-      expect(nydus.publish).toHaveBeenCalledWith(getPartyPath(party.id), {
+      expect(client2.publish).toHaveBeenCalledWith(getPartyPath(party.id), {
         type: 'chatMessage',
         message: {
           partyId: party.id,
@@ -660,44 +663,52 @@ describe('parties/party-service', () => {
           text: 'Hello World!',
         },
         mentions: [],
+        channelMentions: [],
       })
     })
 
     test('should process the user mentions in chat message', async () => {
-      findUsersByNameMock.mockResolvedValue(
-        new Map([['test', { id: 123 as SbUserId, name: 'test' }]]),
-      )
+      findUsersByNameMock.mockResolvedValue([user1])
+      findChannelsByNameMock.mockResolvedValue([])
 
-      await partyService.sendChatMessage(party.id, user2, 'Hello @test and @non-existing')
+      await partyService.sendChatMessage(party.id, user2, `Hello @${user1.name} and @non-existing`)
 
-      expect(nydus.publish).toHaveBeenCalledWith(getPartyPath(party.id), {
+      expect(client2.publish).toHaveBeenCalledWith(getPartyPath(party.id), {
         type: 'chatMessage',
         message: {
           partyId: party.id,
           user: user2,
           time: clock.now(),
-          text: 'Hello <@123> and @non-existing',
+          text: `Hello <@${user1.id}> and @non-existing`,
         },
-        mentions: [{ id: 123, name: 'test' }],
+        mentions: [user1],
+        channelMentions: [],
       })
     })
 
-    test('should process the user mentions with non-matching casing in chat message', async () => {
-      findUsersByNameMock.mockResolvedValue(
-        new Map([['test', { id: 123 as SbUserId, name: 'test' }]]),
-      )
+    test('should process the channel mentions in chat message', async () => {
+      const channel: FullChannelInfo = {
+        id: makeSbChannelId(1),
+        name: 'test',
+        private: false,
+        official: false,
+        userCount: 2,
+      }
+      findUsersByNameMock.mockResolvedValue([])
+      findChannelsByNameMock.mockResolvedValue([channel])
 
-      await partyService.sendChatMessage(party.id, user2, 'Hello @TEST and @TeSt')
+      await partyService.sendChatMessage(party.id, user2, `Join #${channel.name} and #non-existing`)
 
-      expect(nydus.publish).toHaveBeenCalledWith(getPartyPath(party.id), {
+      expect(client2.publish).toHaveBeenCalledWith(getPartyPath(party.id), {
         type: 'chatMessage',
         message: {
           partyId: party.id,
           user: user2,
           time: clock.now(),
-          text: 'Hello <@123> and <@123>',
+          text: `Join <#${channel.id}> and #non-existing`,
         },
-        mentions: [{ id: 123, name: 'test' }],
+        mentions: [],
+        channelMentions: [toBasicChannelInfo(channel)],
       })
     })
   })

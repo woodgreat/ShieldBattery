@@ -118,6 +118,7 @@ export default function applyRoutes(app: Koa, websocketServer: WebsocketServer) 
       }
       if (ctx.session?.userId) {
         initData.session = {
+          sessionId: ctx.sessionId!,
           user: {
             id: ctx.session.userId,
             name: ctx.session.userName,
@@ -126,6 +127,7 @@ export default function applyRoutes(app: Koa, websocketServer: WebsocketServer) 
             acceptedPrivacyVersion: ctx.session.acceptedPrivacyVersion,
             acceptedTermsVersion: ctx.session.acceptedTermsVersion,
             acceptedUsePolicyVersion: ctx.session.acceptedUsePolicyVersion,
+            locale: ctx.session.locale,
           },
           permissions: ctx.session.permissions,
           lastQueuedMatchmakingType: ctx.session.lastQueuedMatchmakingType,

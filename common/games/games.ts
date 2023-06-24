@@ -1,10 +1,10 @@
-import { TFunction } from 'i18next'
+import type { TFunction } from 'i18next'
 import { Immutable } from 'immer'
 import { assertUnreachable } from '../assert-unreachable'
 import { Jsonify } from '../json'
 import { ClientLeagueUserChangeJson, LeagueJson } from '../leagues'
 import { MapInfoJson } from '../maps'
-import { matchmakingTypeToLabel, PublicMatchmakingRatingChangeJson } from '../matchmaking'
+import { PublicMatchmakingRatingChangeJson, matchmakingTypeToLabel } from '../matchmaking'
 import { SbUser, SbUserId } from '../users/sb-user'
 import { GameConfig, GameSource } from './configuration'
 import { ReconciledPlayerResult } from './results'
@@ -49,9 +49,9 @@ export function toGameRecordJson(game: GameRecord): GameRecordJson {
 export function getGameTypeLabel(game: Immutable<GameRecordJson>, t: TFunction): string {
   // TODO(tec27): show mode (UMS, Top v Bottom, etc.?)
   if (game.config.gameSource === GameSource.Lobby) {
-    return t('common.gameTypeCustom', 'Custom game')
+    return t('game.gameSource.custom', 'Custom game')
   } else if (game.config.gameSource === GameSource.Matchmaking) {
-    return t('common.gameTypeRanked', {
+    return t('game.gameSource.ranked', {
       defaultValue: `Ranked {{matchmakingType}}`,
       matchmakingType: matchmakingTypeToLabel(game.config.gameSourceExtra.type, t),
     })

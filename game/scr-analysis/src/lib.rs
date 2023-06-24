@@ -11,13 +11,26 @@
 pub use samase_scarf::scarf;
 pub use samase_scarf::{DatTablePtr, DatType};
 
-use scarf::exec_state::VirtualAddress as VirtualAddressTrait;
-use scarf::{BinaryFile, ExecutionStateX86, MemAccessSize, Operand, OperandCtx, VirtualAddress};
+use scarf::exec_state::ExecutionState as _;
+use scarf::exec_state::VirtualAddress as _;
+use scarf::{BinaryFile, MemAccessSize, Operand, OperandCtx};
+
+#[cfg(target_arch = "x86")]
+use scarf::ExecutionStateX86 as ExecutionState;
+
+#[cfg(target_arch = "x86_64")]
+use scarf::ExecutionStateX86_64 as ExecutionState;
+
+#[cfg(target_arch = "x86")]
+pub use scarf::VirtualAddress;
+
+#[cfg(target_arch = "x86_64")]
+pub use scarf::VirtualAddress64 as VirtualAddress;
 
 pub type Patch = samase_scarf::Patch<VirtualAddress>;
 
 pub struct Analysis<'e>(
-    samase_scarf::Analysis<'e, ExecutionStateX86<'e>>,
+    samase_scarf::Analysis<'e, ExecutionState<'e>>,
     &'e BinaryFile<VirtualAddress>,
     OperandCtx<'e>,
 );
@@ -36,9 +49,8 @@ impl<'e> Analysis<'e> {
         Some(euds.euds.get(index)?.operand)
     }
 
-    #[cfg(target_arch = "x86")]
     fn mem_word(&self, op: Operand<'e>) -> Operand<'e> {
-        self.2.mem32(op, 0)
+        self.2.mem_any(ExecutionState::WORD_SIZE, op, 0)
     }
 
     pub fn game(&mut self) -> Option<Operand<'e>> {
@@ -58,7 +70,7 @@ impl<'e> Analysis<'e> {
     }
 
     pub fn storm_players(&mut self) -> Option<Operand<'e>> {
-        self.0.net_players().map(|x| x.0)
+        self.0.net_players()
     }
 
     pub fn init_net_player(&mut self) -> Option<VirtualAddress> {
@@ -225,14 +237,18 @@ impl<'e> Analysis<'e> {
 
     pub fn get_tls_index(&self) -> Option<*mut u32> {
         let binary = self.1;
-        let base = binary.base;
+        let base = binary.base();
         let pe_start = binary.read_u32(base + 0x3c).ok()?;
+        let tls_offset_in_header = match VirtualAddress::SIZE == 4 {
+            true => 0xc0,
+            false => 0xd0,
+        };
         let tls_offset = binary
-            .read_u32(base + pe_start + 0xc0)
+            .read_u32(base + pe_start + tls_offset_in_header)
             .ok()
             .filter(|&offset| offset != 0)?;
         let tls_address = base + tls_offset;
-        let tls_ptr = binary.read_u32(tls_address + 0x8).ok()?;
+        let tls_ptr = binary.read_u32(tls_address + 2 * VirtualAddress::SIZE).ok()?;
         Some(tls_ptr as *mut u32)
     }
 
@@ -469,6 +485,10 @@ impl<'e> Analysis<'e> {
         self.0.map_width_pixels()
     }
 
+    pub fn map_height_pixels(&mut self) -> Option<Operand<'e>> {
+        self.0.map_height_pixels()
+    }
+
     pub fn screen_x(&mut self) -> Option<Operand<'e>> {
         self.0.screen_x()
     }
@@ -479,5 +499,77 @@ impl<'e> Analysis<'e> {
 
     pub fn game_screen_width_bwpx(&mut self) -> Option<Operand<'e>> {
         self.0.game_screen_width_bwpx()
+    }
+
+    pub fn game_screen_height_bwpx(&mut self) -> Option<Operand<'e>> {
+        self.0.game_screen_height_bwpx()
+    }
+
+    pub fn renderer(&mut self) -> Option<Operand<'e>> {
+        self.0.renderer()
+    }
+
+    pub fn draw_commands(&mut self) -> Option<Operand<'e>> {
+        self.0.draw_commands()
+    }
+
+    pub fn vertex_buffer(&mut self) -> Option<Operand<'e>> {
+        self.0.vertex_buffer()
+    }
+
+    pub fn get_render_target(&mut self) -> Option<VirtualAddress> {
+        self.0.get_render_target()
+    }
+
+    pub fn init_obs_ui(&mut self) -> Option<VirtualAddress> {
+        self.0.init_obs_ui()
+    }
+
+    pub fn is_replay(&mut self) -> Option<Operand<'e>> {
+        self.0.is_replay()
+    }
+
+    pub fn get_ui_consoles(&mut self) -> Option<VirtualAddress> {
+        self.0.get_ui_consoles()
+    }
+
+    pub fn load_consoles(&mut self) -> Option<VirtualAddress> {
+        self.0.load_consoles()
+    }
+
+    pub fn init_consoles(&mut self) -> Option<VirtualAddress> {
+        self.0.init_consoles()
+    }
+
+    pub fn draw_graphic_layers(&mut self) -> Option<VirtualAddress> {
+        self.0.draw_graphic_layers()
+    }
+
+    pub fn main_palette(&mut self) -> Option<Operand<'e>> {
+        self.0.main_palette()
+    }
+
+    pub fn statres_icons(&mut self) -> Option<Operand<'e>> {
+        self.0.statres_icons_ddsgrp()
+    }
+
+    pub fn cmdicons(&mut self) -> Option<Operand<'e>> {
+        self.0.cmdicons_ddsgrp()
+    }
+
+    pub fn use_rgb_colors(&mut self) -> Option<Operand<'e>> {
+        self.0.use_rgb_colors()
+    }
+
+    pub fn rgb_colors(&mut self) -> Option<Operand<'e>> {
+        self.0.rgb_colors()
+    }
+
+    pub fn decide_cursor_type(&mut self) -> Option<VirtualAddress> {
+        self.0.decide_cursor_type()
+    }
+
+    pub fn select_units(&mut self) -> Option<VirtualAddress> {
+        self.0.select_units()
     }
 }

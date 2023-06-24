@@ -3,15 +3,15 @@ import styled from 'styled-components'
 import {
   AddMatchmakingSeasonRequest,
   GetMatchmakingSeasonsResponse,
-  makeSeasonId,
   MatchmakingSeasonJson,
   SeasonId,
+  makeSeasonId,
 } from '../../common/matchmaking'
 import { apiUrl } from '../../common/urls'
 import { useForm } from '../forms/form-hook'
 import SubmitOnEnter from '../forms/submit-on-enter'
 import { longTimestamp } from '../i18n/date-formats'
-import CloseIcon from '../icons/material/close-24px.svg'
+import { MaterialIcon } from '../icons/material/material-icon'
 import { IconButton, RaisedButton, TextButton } from '../material/button'
 import CheckBox from '../material/check-box'
 import { TextField } from '../material/text-field'
@@ -19,7 +19,7 @@ import { encodeBodyAsParams, fetchJson } from '../network/fetch'
 import { useRefreshToken } from '../network/refresh-token'
 import { useStableCallback } from '../state-hooks'
 import { amberA400, colorError, colorTextSecondary } from '../styles/colors'
-import { headline5, headline6, subtitle1, Subtitle2 } from '../styles/typography'
+import { Subtitle2, headline5, headline6, subtitle1 } from '../styles/typography'
 
 const Container = styled.div`
   height: 100%;
@@ -95,7 +95,11 @@ function SeasonRow({
         {season.resetMmr ? <ModifierText> (MMR reset)</ModifierText> : undefined}
       </SeasonName>
       {season.startDate > Date.now() ? (
-        <IconButton icon={<CloseIcon />} title='Delete' onClick={() => onDeleteClick(season.id)} />
+        <IconButton
+          icon={<MaterialIcon icon='close' />}
+          title='Delete'
+          onClick={() => onDeleteClick(season.id)}
+        />
       ) : (
         <div></div>
       )}
@@ -229,7 +233,7 @@ export function AdminMatchmakingSeasons() {
             onDeleteClick={setConfirmingDeleteId}
           />
         ) : (
-          <Row>
+          <Row key={s.id}>
             <div>
               Really delete <Subtitle2 as='span'>{s.name}</Subtitle2>?
             </div>

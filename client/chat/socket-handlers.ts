@@ -1,9 +1,10 @@
 import { NydusClient, RouteInfo } from 'nydus-client'
-import { ChatEvent, ChatUserEvent, makeSbChannelId, SbChannelId } from '../../common/chat'
+import { ChatEvent, ChatUserEvent, SbChannelId, makeSbChannelId } from '../../common/chat'
 import { TypedIpcRenderer } from '../../common/ipc'
 import audioManager, { AvailableSound } from '../audio/audio-manager'
-import { dispatch, Dispatchable } from '../dispatch-registry'
-import { openSnackbar, TIMING_LONG } from '../snackbars/action-creators'
+import { Dispatchable, dispatch } from '../dispatch-registry'
+import i18n from '../i18n/i18next'
+import { TIMING_LONG, openSnackbar } from '../snackbars/action-creators'
 import windowFocus from '../window-focus'
 
 const ipcRenderer = new TypedIpcRenderer()
@@ -50,17 +51,16 @@ const eventToChatAction: EventToChatActionMap = {
   },
 
   kick: (channelId, event) => (dispatch, getState) => {
-    const { auth, chat } = getState()
-    const channelInfo = chat.idToInfo.get(channelId)
-    if (!channelInfo) {
-      return
-    }
+    const { auth } = getState()
 
     if (auth.user.id === event.targetId) {
       // It was us who has been kicked from the channel
       dispatch(
         openSnackbar({
-          message: `You have been kicked from ${channelInfo.name}.`,
+          message: i18n.t('chat.events.kick', {
+            defaultValue: 'You have been kicked from {{channelName}}.',
+            channelName: event.channelName,
+          }),
           time: TIMING_LONG,
         }),
       )
@@ -78,11 +78,7 @@ const eventToChatAction: EventToChatActionMap = {
   },
 
   ban: (channelId, event) => (dispatch, getState) => {
-    const { auth, chat } = getState()
-    const channelInfo = chat.idToInfo.get(channelId)
-    if (!channelInfo) {
-      return
-    }
+    const { auth } = getState()
 
     if (auth.user.id === event.targetId) {
       // It was us who has been banned from the channel
@@ -90,7 +86,10 @@ const eventToChatAction: EventToChatActionMap = {
       // just showing a snackbar which is easily missed if the user is not looking.
       dispatch(
         openSnackbar({
-          message: `You have been banned from ${channelInfo.name}.`,
+          message: i18n.t('chat.events.ban', {
+            defaultValue: 'You have been banned from {{channelName}}.',
+            channelName: event.channelName,
+          }),
           time: TIMING_LONG,
         }),
       )

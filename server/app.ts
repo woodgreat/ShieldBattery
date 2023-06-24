@@ -83,7 +83,6 @@ function getWebpackCompiler() {
   return webpackCompiler
 }
 
-app.keys = [process.env.SB_SESSION_SECRET!]
 app.proxy = process.env.SB_HTTPS_REVERSE_PROXY === 'true'
 
 interface PossibleHttpError extends Error {
@@ -141,7 +140,7 @@ app
       br: false,
     }),
   )
-  .use(views(path.join(__dirname, 'views'), { extension: 'jade' }))
+  .use(views(path.join(__dirname, 'views'), { extension: 'pug' }))
   .use(redirectToCanonical(process.env.SB_CANONICAL_HOST))
   .use(checkOrigin(process.env.SB_CANONICAL_HOST))
   .use(koaBody())

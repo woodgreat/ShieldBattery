@@ -3,10 +3,10 @@ import styled from 'styled-components'
 import { assertUnreachable } from '../../common/assert-unreachable'
 import { useKeyListener } from '../keyboard/key-listener'
 import {
+  CardLayer,
   amberA400,
   blue400,
   blue500,
-  CardLayer,
   colorTextFaint,
   colorTextPrimary,
   colorTextSecondary,
@@ -117,8 +117,6 @@ export function useButtonState({
 
   const handleClick = useCallback(
     (event: React.MouseEvent) => {
-      event.preventDefault()
-
       if (!event.detail) {
         // This was a programmatic click (detail = number of clicks)
         rippleRef.current?.onActivate()
@@ -600,6 +598,7 @@ export interface IconButtonProps {
   type?: 'button' | 'reset' | 'submit'
   name?: string
   testName?: string
+  ariaLabel?: string
 }
 
 /** A button that displays just an icon (with no text, and no background or elevation). */
@@ -619,6 +618,7 @@ export const IconButton = React.forwardRef(
       type,
       name,
       testName,
+      ariaLabel,
     }: IconButtonProps,
     ref: React.ForwardedRef<HTMLButtonElement>,
   ) => {
@@ -640,6 +640,7 @@ export const IconButton = React.forwardRef(
         type={type ?? 'button'}
         name={name}
         data-test={testName}
+        aria-label={ariaLabel}
         {...buttonProps}>
         {icon}
         <Ripple ref={rippleRef} disabled={disabled} />

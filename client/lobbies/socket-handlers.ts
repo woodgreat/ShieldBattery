@@ -1,4 +1,5 @@
 import { NydusClient, RouteHandler } from 'nydus-client'
+import { BasicChannelInfo } from '../../common/chat'
 import { GameLaunchConfig, GameRoute, PlayerInfo } from '../../common/game-launch-config'
 import { TypedIpcRenderer } from '../../common/ipc'
 import { getIngameLobbySlotsWithIndexes } from '../../common/lobbies'
@@ -31,7 +32,7 @@ import {
   LOBBY_UPDATE_STATUS,
 } from '../actions'
 import audioManager, { AudioManager, AvailableSound } from '../audio/audio-manager'
-import { dispatch, Dispatchable } from '../dispatch-registry'
+import { Dispatchable, dispatch } from '../dispatch-registry'
 import { replace } from '../navigation/routing'
 import { makeServerUrl } from '../network/server-url'
 import { openSnackbar } from '../snackbars/action-creators'
@@ -221,6 +222,7 @@ interface LobbyChatEvent {
   type: 'chat'
   message: LobbyChatMessage
   mentions: SbUser[]
+  channelMentions: BasicChannelInfo[]
 }
 
 interface LobbyStatusEvent {

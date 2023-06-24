@@ -10,6 +10,7 @@ export class SelfUserRecord extends Record({
   acceptedPrivacyVersion: 0,
   acceptedTermsVersion: 0,
   acceptedUsePolicyVersion: 0,
+  locale: '',
 }) {}
 
 export class PermissionsRecord
@@ -33,4 +34,5 @@ export class AuthState extends Record({
   lastFailure: null as { reqId: string; err: string; code?: string } | null,
   user: new SelfUserRecord(),
   permissions: new PermissionsRecord(),
+  sessionId: '',
 }) {}

@@ -1,4 +1,5 @@
 import i18n from 'i18next'
+import LanguageDetector from 'i18next-browser-languagedetector'
 import HttpBackend, { HttpBackendOptions } from 'i18next-http-backend'
 import { initReactI18next } from 'react-i18next'
 import {
@@ -7,11 +8,34 @@ import {
   TranslationNamespace,
 } from '../../common/i18n'
 import { makeServerUrl } from '../network/server-url'
+import { JsonSessionStorageValue } from '../session-storage'
 
 const isDev = __WEBPACK_ENV.NODE_ENV !== 'production'
 
+/**
+ * Type to use for interpolations in `Trans` components since React doesn't allow objects as
+ * children.
+ *
+ * Taken as a best solution from this comment:
+ * https://github.com/i18next/react-i18next/issues/1483#issuecomment-1268455602
+ */
+export type TransInterpolation = any
+
+/**
+ * The locale that was reported to us by the user's browser. This locale can be overwritten by
+ * user's explicit choice in the top-links dropdown. We send this locale to the server during
+ * login/signup/getCurrentSession actions.
+ */
+export const detectedLocale = new JsonSessionStorageValue<string | undefined>('detectedLocale')
+
+export const languageDetector = new LanguageDetector(null, {
+  order: ['navigator'],
+  caches: [],
+})
+
 export const i18nextPromise = i18n
   .use(HttpBackend)
+  .use(languageDetector)
   .use(initReactI18next)
   .init<HttpBackendOptions>({
     backend: {

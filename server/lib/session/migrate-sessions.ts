@@ -11,20 +11,35 @@ import { findSelfById } from '../users/user-model'
 export function migrateSessions() {
   return async (ctx: RouterContext, next: Next) => {
     if (ctx.session) {
-      let user: SelfUser | undefined
+      let retrievedUser: SelfUser | undefined
 
       if (ctx.session.userId && !ctx.session.email) {
-        const retrievedUser = user ?? (await findSelfById(ctx.session.userId))
+        retrievedUser = retrievedUser ?? (await findSelfById(ctx.session.userId))
         ctx.session.email = retrievedUser!.email
       }
       if (!ctx.session.lastQueuedMatchmakingType) {
         ctx.session.lastQueuedMatchmakingType = MatchmakingType.Match1v1
       }
       if (ctx.session.userId && !ctx.session.acceptedPrivacyVersion) {
-        const retrievedUser = user ?? (await findSelfById(ctx.session.userId))
+        retrievedUser = retrievedUser ?? (await findSelfById(ctx.session.userId))
         ctx.session.acceptedPrivacyVersion = retrievedUser!.acceptedPrivacyVersion
         ctx.session.acceptedTermsVersion = retrievedUser!.acceptedTermsVersion
         ctx.session.acceptedUsePolicyVersion = retrievedUser!.acceptedUsePolicyVersion
+      }
+      if (ctx.session.userId && !ctx.session.locale) {
+        retrievedUser = retrievedUser ?? (await findSelfById(ctx.session.userId))
+        ctx.session.locale = retrievedUser!.locale
+      }
+    }
+
+    // TODO(tec27): This code can be removed ~2 months after it has been deployed (after all old
+    // cookies would have expired)
+    if (ctx.sessionId?.startsWith('c') && ctx.sessionId?.length === 25) {
+      // CUID session ID, regenerate to get a new (more secure) ID
+      const oldSession = ctx.session!
+      await ctx.regenerateSession()
+      for (const [key, value] of Object.entries(oldSession)) {
+        ;(ctx.session as any)[key] = value
       }
     }
 

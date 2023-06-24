@@ -11,9 +11,7 @@ import {
 import { apiUrl } from '../../common/urls'
 import { useForm } from '../forms/form-hook'
 import SubmitOnEnter from '../forms/submit-on-enter'
-import CheckIcon from '../icons/material/check-24px.svg'
-import CloseIcon from '../icons/material/close-24px.svg'
-import EditIcon from '../icons/material/edit-24px.svg'
+import { MaterialIcon } from '../icons/material/material-icon'
 import { IconButton, RaisedButton, TextButton } from '../material/button'
 import CheckBox from '../material/check-box'
 import { NumberTextField } from '../material/number-text-field'
@@ -156,7 +154,7 @@ export function AddServerRow(props: {
             color='accent'
             label={
               <>
-                <CloseIcon />
+                <MaterialIcon icon='close' />
                 <span>Cancel</span>
               </>
             }
@@ -166,7 +164,7 @@ export function AddServerRow(props: {
             color='accent'
             label={
               <>
-                <CheckIcon />
+                <MaterialIcon icon='check' />
                 <span>Save</span>
               </>
             }
@@ -191,11 +189,13 @@ export function ServerRow({
 
   return (
     <Row>
-      <EnabledContent>{server.enabled ? <CheckIcon /> : <CloseIcon />}</EnabledContent>
+      <EnabledContent>
+        {server.enabled ? <MaterialIcon icon='check' /> : <MaterialIcon icon='close' />}
+      </EnabledContent>
       <DescriptionContent>{server.description}</DescriptionContent>
       <HostnameContent>{server.hostname}</HostnameContent>
       <PortContent>{server.port}</PortContent>
-      <IconButton icon={<EditIcon />} title='Edit' onClick={onClick} />
+      <IconButton icon={<MaterialIcon icon='edit' />} title='Edit' onClick={onClick} />
     </Row>
   )
 }
@@ -289,22 +289,14 @@ export function EditServerRow({
         <ButtonRow>
           <ButtonWithIcon
             color='accent'
-            label={
-              <>
-                <CloseIcon />
-                <span>Cancel</span>
-              </>
-            }
+            iconStart={<MaterialIcon icon='close' />}
+            label='Cancel'
             onClick={onCancel}
           />
           <ButtonWithIcon
             color='accent'
-            label={
-              <>
-                <CheckIcon />
-                <span>Save</span>
-              </>
-            }
+            iconStart={<MaterialIcon icon='check' />}
+            label='Save'
             onClick={onSubmit}
           />
         </ButtonRow>
