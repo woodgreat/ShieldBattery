@@ -1,10 +1,10 @@
-import React, { useCallback, useId, useState } from 'react'
+import React, { useCallback, useId, useLayoutEffect, useState } from 'react'
 import styled, { css } from 'styled-components'
 import { MaterialIcon } from '../icons/material/material-icon'
 import { useMultiRef, useStableCallback } from '../state-hooks'
 import { colorTextSecondary } from '../styles/colors'
 import { IconButton } from './button'
-import { InputBase, TEXTAREA_BOTTOM_PADDING, TEXTAREA_BOTTOM_PADDING_DENSE } from './input-base'
+import { InputBase } from './input-base'
 import { InputError } from './input-error'
 import { FloatingLabel } from './input-floating-label'
 import { Label } from './input-label'
@@ -50,10 +50,20 @@ const TextFieldContainer = styled.div<{
   ${props => {
     if (!props.$multiline) return ''
 
+    // TODO(2Pac): Rework this if/when we move to a new version of TextFields without a floating
+    // label. The only reason why we're adding the padding here instead of to the `textarea` element
+    // itself is because the floating label overlaps the scrolled content, so we have to push the
+    // scrollable content down. But that also means that the area that this padding covers is not
+    // natively clickable to focus the `textarea`. I've added a click handler below which does that
+    // manually for now, but that can also be removed if/when we move to a new version of TextField.
     if (props.$floatingLabel) {
-      return props.$dense ? 'padding: 17px 0 2px 12px' : 'padding: 25px 0 2px 12px;'
+      // NOTE(2Pac): We only set the top padding here to keep the floating label above the
+      // scrollable area.
+      return props.$dense ? 'padding-top: 17px;' : 'padding-top: 25px;'
     } else {
-      return props.$dense ? 'padding: 11px 0 2px 12px' : 'padding: 19px 0 2px 12px;'
+      // NOTE(2Pac): The padding for `textarea` without a floating label will be added to the input
+      // itself to avoid the issues described above.
+      return ''
     }
   }}
 
@@ -90,6 +100,7 @@ const TextFieldContainer = styled.div<{
   & textarea {
     -moz-appearance: none;
     -webkit-appearance: none;
+    appearance: none;
   }
 `
 
@@ -150,6 +161,7 @@ export interface TextFieldProps {
   maxRows?: number
   multiline?: boolean
   name?: string
+  testName?: string
   onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void
   onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void
   onEnterKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void
@@ -181,6 +193,7 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
       maxRows,
       multiline,
       name,
+      testName,
       onBlur,
       onChange,
       onEnterKeyDown,
@@ -197,18 +210,20 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
     const [isFocused, setIsFocused] = useState(false)
     const [inputRef, setInputRef] = useMultiRef<HTMLInputElement>(ref)
 
-    const autoSize = useCallback(
-      (elem: HTMLInputElement) => {
-        const padding = dense ? TEXTAREA_BOTTOM_PADDING_DENSE : TEXTAREA_BOTTOM_PADDING
-        // Needed in order to lower the height when deleting text
-        elem.style.height = `${rows * 20 + padding}px`
-        elem.style.height = `${elem.scrollHeight}px`
-        // Textarea doesn't scroll completely to the end when adding a new line, just to the
-        // baseline of the added text it seems, so we scroll manually to the end here
-        elem.scrollTop = elem.scrollHeight
-      },
-      [dense, rows],
-    )
+    const autoSize = useCallback((elem: HTMLInputElement) => {
+      // Needed in order to lower the height when deleting text
+      elem.style.height = 'auto'
+      elem.style.height = `${elem.scrollHeight}px`
+      // Textarea doesn't scroll completely to the end when adding a new line, just to the
+      // baseline of the added text it seems, so we scroll manually to the end here
+      elem.scrollTop = elem.scrollHeight
+    }, [])
+
+    useLayoutEffect(() => {
+      if (multiline && inputRef.current) {
+        autoSize(inputRef.current)
+      }
+    }, [autoSize, inputRef, multiline])
 
     const onInputBlur = useCallback(
       (event: React.FocusEvent<HTMLInputElement>) => {
@@ -348,7 +363,8 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
           $floatingLabel={floatingLabel}
           $dense={dense}
           $multiline={multiline}
-          $maxRows={maxRows}>
+          $maxRows={maxRows}
+          onClick={() => inputRef.current?.focus()}>
           {renderLabel}
           {leadingIconsElements.length > 0 ? leadingIconsElements : null}
           <InputBase
@@ -361,6 +377,7 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
             $multiline={multiline}
             $leadingIconsLength={leadingIcons.length}
             $trailingIconsLength={trailingIcons.length}
+            data-test={testName}
             {...inputProps}
             {...internalInputProps}
           />

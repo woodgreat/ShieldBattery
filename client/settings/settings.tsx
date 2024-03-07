@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react'
+import React, { useRef } from 'react'
 import ReactDOM from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { UseTransitionProps, animated, useTransition } from 'react-spring'
@@ -9,10 +9,12 @@ import { useExternalElementRef } from '../dom/use-external-element-ref'
 import { MaterialIcon } from '../icons/material/material-icon'
 import { KeyListenerBoundary, useKeyListener } from '../keyboard/key-listener'
 import { IconButton, useButtonState } from '../material/button'
+import { buttonReset } from '../material/button-reset'
 import { Ripple } from '../material/ripple'
 import { defaultSpring } from '../material/springs'
 import { Tooltip } from '../material/tooltip'
 import { zIndexSettings } from '../material/zindex'
+import { LoadingDotsArea } from '../progress/dots'
 import { useAppDispatch, useAppSelector } from '../redux-hooks'
 import { isStarcraftHealthy as checkIsStarcraftHealthy } from '../starcraft/is-starcraft-healthy'
 import { useStableCallback } from '../state-hooks'
@@ -40,6 +42,7 @@ import {
   SettingsSubPage,
   UserSettingsSubPage,
 } from './settings-sub-page'
+import { AccountSettings } from './user/account-settings'
 import { UserLanguageSettings } from './user/language-settings'
 
 const ESCAPE = 'Escape'
@@ -160,38 +163,38 @@ function Settings({
     },
   })
 
-  const getNavEntriesMapper = useCallback(
-    ({ disabled, hasError }: { disabled?: boolean; hasError?: boolean } = {}) => {
-      return (s: SettingsSubPage) => (
-        <NavEntry
-          key={s}
-          subPage={s}
-          isActive={subPage === s}
-          disabled={disabled}
-          hasError={hasError}
-          onChangeSubPage={onChangeSubPage}
-        />
-      )
-    },
-    [onChangeSubPage, subPage],
-  )
+  const getNavEntriesMapper = ({
+    disabled,
+    hasError,
+  }: { disabled?: boolean; hasError?: boolean } = {}) => {
+    return (s: SettingsSubPage) => (
+      <NavEntry
+        key={s}
+        subPage={s}
+        isActive={subPage === s}
+        disabled={disabled}
+        hasError={hasError}
+        onChangeSubPage={onChangeSubPage}
+      />
+    )
+  }
 
   return (
     <Container style={style}>
       <NavContainer>
-        <NavSectionTitle>{t('settings.user.label', 'User')}</NavSectionTitle>
-        {[UserSettingsSubPage.Language].map(getNavEntriesMapper())}
+        <NavSectionTitle>{t('settings.user.title', 'User')}</NavSectionTitle>
+        {[UserSettingsSubPage.Account, UserSettingsSubPage.Language].map(getNavEntriesMapper())}
 
         {IS_ELECTRON ? (
           <>
             <NavSectionSeparator />
 
-            <NavSectionTitle>{t('settings.app.label', 'App')}</NavSectionTitle>
+            <NavSectionTitle>{t('settings.app.title', 'App')}</NavSectionTitle>
             {[AppSettingsSubPage.Sound, AppSettingsSubPage.System].map(getNavEntriesMapper())}
 
             <NavSectionSeparator />
 
-            <NavSectionTitle>{t('settings.game.label', 'Game')}</NavSectionTitle>
+            <NavSectionTitle>{t('settings.game.title', 'Game')}</NavSectionTitle>
             {[GameSettingsSubPage.StarCraft].map(
               getNavEntriesMapper({ hasError: !isStarcraftHealthy }),
             )}
@@ -211,7 +214,8 @@ function Settings({
   )
 }
 
-const NavEntryRoot = styled.div<{ $isActive: boolean }>`
+const NavEntryRoot = styled.button<{ $isActive: boolean }>`
+  ${buttonReset};
   position: relative;
   width: 100%;
   height: 36px;
@@ -221,6 +225,7 @@ const NavEntryRoot = styled.div<{ $isActive: boolean }>`
   align-items: center;
 
   border-radius: 4px;
+  contain: content;
   cursor: pointer;
 
   --sb-ripple-color: ${colorTextPrimary};
@@ -307,7 +312,7 @@ const Content = styled.div`
 
 const TitleBar = styled.div`
   position: relative;
-  margin-bottom: 8px;
+  margin-bottom: 16px;
 
   display: flex;
   flex-direction: row;
@@ -358,7 +363,9 @@ function SettingsContent({
           <Title subPage={subPage} />
         </TitleBar>
 
-        <SettingsSubPageDisplay subPage={subPage} onCloseSettings={onCloseSettings} />
+        <React.Suspense fallback={<LoadingDotsArea />}>
+          <SettingsSubPageDisplay subPage={subPage} />
+        </React.Suspense>
       </Content>
 
       <LabeledCloseButton>
@@ -375,14 +382,10 @@ function SettingsContent({
   )
 }
 
-function SettingsSubPageDisplay({
-  subPage,
-  onCloseSettings,
-}: {
-  subPage: SettingsSubPage
-  onCloseSettings: () => void
-}) {
+function SettingsSubPageDisplay({ subPage }: { subPage: SettingsSubPage }) {
   switch (subPage) {
+    case UserSettingsSubPage.Account:
+      return <AccountSettings />
     case UserSettingsSubPage.Language:
       return <UserLanguageSettings />
   }
@@ -422,29 +425,32 @@ function SettingsSubPageTitle({
 
   let title
   switch (subPage) {
+    case UserSettingsSubPage.Account:
+      title = t('settings.user.account.label', 'Account')
+      break
     case UserSettingsSubPage.Language:
-      title = t('settings.user.language.label', 'Language')
+      title = t('settings.user.language.title', 'Language')
       break
     case AppSettingsSubPage.Sound:
-      title = t('settings.app.sound.label', 'Sound')
+      title = t('settings.app.sound.title', 'Sound')
       break
     case AppSettingsSubPage.System:
-      title = t('settings.app.system.label', 'System')
+      title = t('settings.app.system.title', 'System')
       break
     case GameSettingsSubPage.StarCraft:
-      title = t('settings.game.starcraft.label', 'StarCraft')
+      title = t('settings.game.starcraft.title', 'StarCraft')
       break
     case GameSettingsSubPage.Input:
-      title = t('settings.game.input.label', 'Input')
+      title = t('settings.game.input.title', 'Input')
       break
     case GameSettingsSubPage.Sound:
-      title = t('settings.game.sound.label', 'Sound')
+      title = t('settings.game.sound.title', 'Sound')
       break
     case GameSettingsSubPage.Video:
-      title = t('settings.game.video.label', 'Video')
+      title = t('settings.game.video.title', 'Video')
       break
     case GameSettingsSubPage.Gameplay:
-      title = t('settings.game.gameplay.label', 'Gameplay')
+      title = t('settings.game.gameplay.title', 'Gameplay')
       break
     default:
       assertUnreachable(subPage)

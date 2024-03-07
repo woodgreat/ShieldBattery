@@ -13,7 +13,7 @@ import {
 import { getTeamNames } from '../../common/maps'
 import { PublicMatchmakingRatingChangeJson } from '../../common/matchmaking'
 import { SbUserId } from '../../common/users/sb-user'
-import { useSelfUser } from '../auth/state-hooks'
+import { useSelfUser } from '../auth/auth-utils'
 import { Avatar } from '../avatars/avatar'
 import ComputerAvatar from '../avatars/computer-avatar'
 import { ComingSoon } from '../coming-soon/coming-soon'
@@ -180,7 +180,7 @@ export function ConnectedGameResultsPage({
   const canSearchMatchmaking = useAppSelector(s => {
     const currentParty = s.party.current
     const isSearching = !!s.matchmaking.searchInfo
-    return !isSearching && (!currentParty || currentParty.leader === s.auth.user.id)
+    return !isSearching && (!currentParty || currentParty.leader === s.auth.self?.user.id)
   })
 
   const results = game?.results
@@ -590,6 +590,7 @@ const RaceRoot = styled.div`
 const StyledRaceIcon = styled(RaceIcon)`
   width: auto;
   height: 100%;
+  aspect-ratio: 1;
 `
 
 const SelectedRandomIcon = styled(RaceIcon)`
@@ -613,7 +614,7 @@ const PlayerAvatar = styled(Avatar)`
   margin-left: 8px;
 `
 
-const StyledComputerAvatar = styled(ComputerAvatar)`
+const StyledComputerAvatar = styled(ComputerAvatar).attrs({ size: 40 })`
   width: 40px;
   height: 40px;
   margin-left: 8px;

@@ -292,23 +292,22 @@ export const HotkeyedText = React.memo(({ hotkey, text, disabled }: HotkeyedText
   }
 
   const hotkeyString = String.fromCharCode(hotkey.keyCode).toLowerCase()
-  const result = []
-  let hasFoundHotkeyChar = false
-  for (const char of text) {
-    if (!hasFoundHotkeyChar && char.toLowerCase() === hotkeyString) {
-      result.push(<u key={char}>{char}</u>)
-      hasFoundHotkeyChar = true
-    } else {
-      // The underline character eats the spaces around it, so we insert an &nbsp; here.
-      if (char === ' ') {
-        result.push('\u00A0')
-      } else {
-        result.push(char)
-      }
-    }
-  }
+  const hotkeyLocation = text.toLowerCase().indexOf(hotkeyString)
+  if (hotkeyLocation === -1) {
+    return <>{text}</>
+  } else {
+    const prefix = text.slice(0, hotkeyLocation)
+    const hotkeyChar = text.slice(hotkeyLocation, hotkeyLocation + 1)
+    const postfix = text.slice(hotkeyLocation + 1)
 
-  return <>{result}</>
+    return (
+      <>
+        <span>{prefix}</span>
+        <u>{hotkeyChar}</u>
+        <span>{postfix}</span>
+      </>
+    )
+  }
 })
 
 const IconContainer = styled.div`
@@ -351,14 +350,16 @@ const RaisedButtonRoot = styled.button<RaisedButtonStyleProps>`
     box-shadow: ${shadowDef8dp};
   }
 
-  &:disabled {
+  &:disabled,
+  &[disabled] {
     background-color: rgba(255, 255, 255, 0.12);
     box-shadow: none;
     color: ${colorTextFaint};
   }
 
   ${CardLayer} && {
-    &:disabled {
+    &:disabled,
+    &[disabled] {
       background-color: rgba(255, 255, 255, 0.08);
     }
   }
@@ -384,6 +385,8 @@ export interface RaisedButtonProps {
   title?: string
   type?: 'button' | 'reset' | 'submit'
   name?: string
+  as?: string | React.ComponentType<any>
+  children?: React.ReactNode
   testName?: string
 }
 
@@ -408,6 +411,8 @@ export const RaisedButton = React.forwardRef(
       title,
       type,
       name,
+      as = 'button',
+      children,
       testName,
     }: RaisedButtonProps,
     ref: React.ForwardedRef<HTMLButtonElement>,
@@ -424,6 +429,7 @@ export const RaisedButton = React.forwardRef(
     return (
       <RaisedButtonRoot
         ref={ref}
+        as={as}
         className={className}
         $color={color}
         tabIndex={tabIndex}
@@ -432,6 +438,7 @@ export const RaisedButton = React.forwardRef(
         name={name}
         data-test={testName}
         {...buttonProps}>
+        {children}
         <Label>
           {iconStart ? <IconContainer>{iconStart}</IconContainer> : null}
           {label}

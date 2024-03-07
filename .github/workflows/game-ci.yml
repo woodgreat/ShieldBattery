@@ -1,0 +1,76 @@
+name: Game CI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/game-ci.yml'
+      - 'game/**'
+  pull_request:
+    paths:
+      - '.github/workflows/game-ci.yml'
+      - 'game/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clippy:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: ./game
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./game
+
+      - name: clippy
+        run: cargo clippy --all-targets --workspace -- -D warnings
+
+  fmt:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: ./game
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+
+  test:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: ./game
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./game
+
+      - name: cargo test
+        run: cargo test --all-targets --no-fail-fast

@@ -1,21 +1,27 @@
+import archiver from 'archiver'
+import { BufferListStream } from 'bl'
 import crypto from 'crypto'
 import { app, BrowserWindow, dialog, Menu, protocol, screen, Session, shell } from 'electron'
 import isDev from 'electron-is-dev'
 import localShortcut from 'electron-localshortcut'
 import { autoUpdater } from 'electron-updater'
-import fs from 'fs'
-import fsPromises from 'fs/promises'
+import { readFile } from 'fs/promises'
 import ReplayParser, { ReplayHeader } from 'jssuh'
-import path from 'path'
-import { Readable } from 'stream'
+import fs, { createReadStream } from 'node:fs'
+import fsPromises, { copyFile, mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { pipeline } from 'stream/promises'
 import { container } from 'tsyringe'
 import { URL } from 'url'
 import swallowNonBuiltins from '../common/async/swallow-non-builtins'
 import { FsDirent, TypedIpcMain, TypedIpcSender } from '../common/ipc'
 import { ReplayShieldBatteryData } from '../common/replays'
+import { setAppId } from './app-id'
 import { checkShieldBatteryFiles } from './check-shieldbattery-files'
 import currentSession from './current-session'
+import { registerCurrentProgram } from './file-association'
+import { findInstallPath } from './find-install-path'
 import { ActiveGameManager } from './game/active-game-manager'
 import { checkStarcraftPath } from './game/check-starcraft-path'
 import createGameServer, { GameServer } from './game/game-server'
@@ -26,6 +32,7 @@ import { parseShieldbatteryReplayData } from './replays/parse-shieldbattery-repl
 import './security/client'
 import { collect } from './security/client'
 import { LocalSettingsManager, ScrSettingsManager } from './settings'
+import type { NewInstanceNotification } from './single-instance'
 import SystemTray from './system-tray'
 import { getUserDataPath } from './user-data-path'
 
@@ -78,6 +85,7 @@ switch ((app.name.split('-')[1] ?? '').toLowerCase()) {
     updateUrl = 'https://cdn.shieldbattery.net/app/'
     break
 }
+setAppId(modelId)
 app.setAppUserModelId(modelId)
 
 autoUpdater.logger = logger
@@ -117,7 +125,34 @@ let systemTray: SystemTray
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let gameServer: GameServer
 
-export const getMainWindow = () => mainWindow
+export function notifyNewInstance(data: NewInstanceNotification) {
+  if (mainWindow) {
+    if (!mainWindow.isVisible()) {
+      mainWindow.show()
+    } else {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore()
+      }
+      mainWindow.focus()
+    }
+  }
+
+  if (data.args.length > 1) {
+    handleLaunchArgs(data.args.slice(1))
+  }
+}
+
+function handleLaunchArgs(args: string[]) {
+  logger.info(`Handling launch args: ${JSON.stringify(args)}`)
+
+  const replays = args
+    .filter(arg => !arg.startsWith('--') && arg.toLowerCase().endsWith('.rep'))
+    .map(p => path.resolve('.', p))
+  if (replays.length) {
+    TypedIpcSender.from(mainWindow?.webContents).send('replaysOpen', replays)
+    mainWindow?.show()
+  }
+}
 
 let cachedIds: [number, string][] = []
 let cachedIdPath: string | undefined
@@ -257,7 +292,9 @@ function setupIpc(localSettings: LocalSettingsManager, scrSettings: ScrSettingsM
       updateState = 'updaterNewVersionFound'
       if (!downloadingUpdate) {
         downloadingUpdate = true
-        autoUpdater.downloadUpdate()
+        autoUpdater.downloadUpdate().catch(err => {
+          logger.error(`Error downloading update: ${err?.stack ?? err}`)
+        })
       }
       sendUpdateState()
     })
@@ -304,7 +341,9 @@ function setupIpc(localSettings: LocalSettingsManager, scrSettings: ScrSettingsM
 
   if (!isDev) {
     ipcMain.on('networkSiteConnected', () => {
-      autoUpdater.checkForUpdates()
+      autoUpdater.checkForUpdates().catch(err => {
+        logger.error(`Error checking for updates: ${err?.stack ?? err}`)
+      })
     })
   }
 
@@ -333,6 +372,19 @@ function setupIpc(localSettings: LocalSettingsManager, scrSettings: ScrSettingsM
   ipcMain.handle('securityGetClientIds', async event => {
     await cacheIdsIfNeeded((await localSettings.get()).starcraftPath)
     return cachedIds
+  })
+
+  ipcMain.handle('settingsAutoPickStarcraftPath', async event => {
+    let starcraftPath = await findInstallPath()
+    const found = !!starcraftPath
+    if (!starcraftPath) {
+      starcraftPath = process.env['ProgramFiles(x86)']
+        ? `${process.env['ProgramFiles(x86)']}\\Starcraft`
+        : `${process.env.ProgramFiles}\\Starcraft`
+    }
+    localSettings.merge({ starcraftPath }).catch(swallowNonBuiltins)
+
+    return found
   })
 
   ipcMain.handle('settingsCheckStarcraftPath', async (event, path) => {
@@ -389,6 +441,73 @@ function setupIpc(localSettings: LocalSettingsManager, scrSettings: ScrSettingsM
   ipcMain.handle('activeGameSetRoutes', (event, gameId, routes) =>
     activeGameManager.setGameRoutes(gameId, routes),
   )
+  ipcMain.handle('bugReportCollectFiles', async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'sbat-'))
+    const logsDir = path.join(getUserDataPath(), 'logs')
+    const collectedFiles: Array<{ name: string; filePath: string }> = []
+    try {
+      const filePath = path.join(tempDir, 'app.log')
+      await copyFile(path.join(logsDir, 'app.0.log'), filePath)
+      collectedFiles.push({ name: 'app.log', filePath })
+    } catch (err) {
+      logger.warning('Error copying app log: ' + (err as any).stack ?? err)
+    }
+
+    try {
+      const filePath = path.join(tempDir, 'shieldbattery.log')
+      await copyFile(path.join(logsDir, 'shieldbattery.0.log'), filePath)
+      collectedFiles.push({ name: 'shieldbattery.log', filePath })
+    } catch (err) {
+      logger.warning('Error copying game log: ' + (err as any).stack ?? err)
+    }
+
+    try {
+      const dumpPath = path.join(logsDir, 'latest_crash.dmp')
+      const stats = await fsPromises.stat(dumpPath)
+      const dayAgo = Number(Date.now() - 24 * 60 * 60 * 1000)
+      if (stats.mtimeMs >= dayAgo) {
+        const filePath = path.join(tempDir, 'latest_crash.dmp')
+        await copyFile(path.join(logsDir, 'latest_crash.dmp'), filePath)
+        collectedFiles.push({ name: 'latest_crash.dmp', filePath })
+      }
+    } catch (err) {
+      if (!('code' in (err as any)) || (err as any).code !== 'ENOENT') {
+        logger.warning('Error copying crash dump: ' + (err as any).stack ?? err)
+      }
+    }
+
+    if (!collectedFiles.length) {
+      throw new Error('No log files could be collected')
+    }
+
+    const zip = archiver('zip')
+    const result = new Promise<Uint8Array>((resolve, reject) => {
+      pipeline(
+        zip,
+        new BufferListStream((err, data) => {
+          if (err) {
+            reject(err)
+          } else {
+            resolve(data)
+          }
+        }),
+      ).catch(err => reject(err))
+    })
+
+    for (const { name, filePath } of collectedFiles) {
+      zip.append(createReadStream(filePath), { name })
+    }
+
+    await zip.finalize()
+
+    try {
+      await fsPromises.rm(tempDir, { recursive: true, force: true, maxRetries: 1 })
+    } catch (err) {
+      logger.warning(`Error removing temp logs directory: ${(err as any).stack ?? err}`)
+    }
+
+    return await result
+  })
 
   ipcMain.handle('fsReadFile', async (_, filePath) => {
     return fsPromises.readFile(filePath)
@@ -427,7 +546,7 @@ function setupIpc(localSettings: LocalSettingsManager, scrSettings: ScrSettingsM
   )
 
   ipcMain.handle('replayParseMetadata', async (event, replayPath) => {
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const parser = new ReplayParser()
       let headerData: ReplayHeader
       parser.on('replayHeader', header => {
@@ -450,9 +569,9 @@ function setupIpc(localSettings: LocalSettingsManager, scrSettings: ScrSettingsM
       })
 
       const promise = pipeline(fs.createReadStream(replayPath), parser)
+      promise.catch(err => reject(err))
 
       parser.resume()
-      await promise
     })
   })
 
@@ -483,31 +602,23 @@ function setupCspProtocol(curSession: Session) {
   // - Add fake headers to the response such that we set up CSP with a nonce (necessary for
   //   styled-components to work properly), and unfortunately not really possible to do without
   //   HTTP headers
-  curSession.protocol.registerStreamProtocol('shieldbattery', (req, cb) => {
+  curSession.protocol.handle('shieldbattery', async req => {
     const url = new URL(req.url)
 
     const pathname = path.posix.normalize(url.pathname)
 
-    if (pathname === '/index.js' || pathname.match(/^\/(assets|dist|native)\/.+$/)) {
-      cb(fs.createReadStream(path.join(__dirname, pathname)))
-    } else {
-      fs.readFile(path.join(__dirname, 'index.html'), 'utf8', (err, data) => {
-        if (err) {
-          const dataStream = new Readable()
-          dataStream.push('Error reading index.html')
-          dataStream.push(null)
-          cb({
-            statusCode: 500,
-            data: dataStream,
-          })
-          return
-        }
-
+    try {
+      if (pathname === '/index.js' || pathname.match(/^\/(assets|dist|native)\/.+$/)) {
+        const contents = await readFile(path.join(__dirname, pathname))
+        // TODO(tec27): ideally this would probably set a reasonable content type?
+        return new Response(contents)
+      } else {
+        const contents = await readFile(path.join(__dirname, 'index.html'), 'utf8')
         const nonce = crypto.randomBytes(16).toString('base64')
         const isHot = !!process.env.SB_HOT
         const hasReactDevTools = !!process.env.SB_REACT_DEV
         const analyticsId = process.env.SB_ANALYTICS_ID ?? __WEBPACK_ENV?.SB_ANALYTICS_ID ?? ''
-        const result = data
+        const result = contents
           .replace(
             /%SCRIPT_URL%/g,
             isHot ? 'http://localhost:5566/dist/bundle.js' : '/dist/bundle.js',
@@ -516,34 +627,36 @@ function setupCspProtocol(curSession: Session) {
           .replace(/%ANALYTICS_ID%/g, analyticsId)
           .replace(
             /%REACT_DEV%/g,
-            hasReactDevTools ? '<script src="http://localhost:8097"></script>' : '',
+            hasReactDevTools
+              ? `<script src="http://localhost:8097" nonce="${nonce}"></script>`
+              : '',
           )
 
-        const dataStream = new Readable()
-        dataStream.push(result)
-        dataStream.push(null)
-
-        // Allow loading things from the remote React devtools if they're enabled
-        const reactDevPolicy = hasReactDevTools ? 'http://localhost:8097' : ''
         // Allow loading extra chunks from the dev server in non-production
         const chunkPolicy = isHot ? 'http://localhost:5566' : ''
         // If hot-reloading is on, we have to allow eval so it can work
         const scriptEvalPolicy = isHot ? "'unsafe-eval'" : ''
 
-        cb({
-          statusCode: 200,
+        return new Response(result, {
           headers: {
             'content-type': 'text/html',
             'content-security-policy':
-              `script-src 'self' 'nonce-${nonce}' ${reactDevPolicy} ${chunkPolicy} ` +
+              `script-src 'self' 'nonce-${nonce}' ${chunkPolicy} ` +
               `${scriptEvalPolicy};` +
               `style-src 'self' 'nonce-${nonce}';` +
               "font-src 'self';" +
               "object-src 'none';" +
               "form-action 'none';",
           },
-          data: dataStream,
         })
+      }
+    } catch (err) {
+      logger.error(
+        `Error reading file for shieldbattery:// protocol: ${(err as any)?.stack ?? err}`,
+      )
+      return new Response('Internal Server Error', {
+        status: 500,
+        statusText: 'Internal Server Error',
       })
     }
   })
@@ -554,7 +667,7 @@ function setupAnalytics(curSession: Session) {
   // scheme, Chromium acts as if we're insecure and refuses to send the origin). So, we add in the
   // referrer manually on this request.
   const filter = {
-    urls: ['https://obs.shieldbattery.net/*'],
+    urls: ['https://cdn.usefathom.com/*'],
   }
   curSession.webRequest.onBeforeSendHeaders(filter, (details, cb) => {
     details.requestHeaders.referer = 'shieldbattery://app'
@@ -623,8 +736,13 @@ async function createWindow() {
     },
   })
 
+  let needsMaximize = false
+
   if (winMaximized) {
-    mainWindow.maximize()
+    // BrowserWindow#maximize() causes the window to show, and our content might not be ready yet
+    // (or we might be set to start minimized), so we don't want to show things yet. Instead we just
+    // mark this as needing to happen, and handle doing it in the `show` event.
+    needsMaximize = true
   }
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -678,6 +796,11 @@ async function createWindow() {
       if (systemTray) {
         systemTray.clearUnreadIcon()
       }
+      if (needsMaximize && mainWindow) {
+        mainWindow.maximize()
+        TypedIpcSender.from(mainWindow.webContents).send('windowMaximizedState', true)
+        needsMaximize = false
+      }
     })
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -694,7 +817,9 @@ async function createWindow() {
       // Whitelist safe protocols to prevent someone from e.g. linking to a local file and causing
       // users to launch it
       if (protocol === 'http:' || protocol === 'https:') {
-        shell.openExternal(url)
+        shell.openExternal(url).catch(err => {
+          logger.error('Error opening external URL: ' + err)
+        })
       }
     } catch (err) {
       logger.error('Error while parsing window.open URL: ' + err)
@@ -708,11 +833,16 @@ async function createWindow() {
   if (!process.argv.includes('--hidden')) {
     mainWindow.once('ready-to-show', () => {
       mainWindow!.show()
-      if (!isDev) {
-        ipcMain.on('networkSiteConnected', () => {
-          autoUpdater.checkForUpdates()
+    })
+  }
+
+  if (!isDev) {
+    mainWindow.once('ready-to-show', () => {
+      ipcMain.on('networkSiteConnected', () => {
+        autoUpdater.checkForUpdates().catch(err => {
+          logger.error(`Error checking for updates: ${err?.stack ?? err}`)
         })
-      }
+      })
     })
   }
 
@@ -720,42 +850,46 @@ async function createWindow() {
     mainWindow = null
   })
 
-  await mainWindow.loadURL('shieldbattery://app')
+  return mainWindow.loadURL('shieldbattery://app')
 }
 
-app.on('ready', async () => {
+app.on('ready', () => {
   const localSettingsPromise = createLocalSettings()
   const scrSettingsPromise = createScrSettings()
+  const programRegistrationPromise = registerCurrentProgram()
 
   // We don't display this anyway, and it registers shortcuts for things that we don't want (e.g.
   // Ctrl+W to close, Ctrl+R to refresh [which we don't want outside of dev])
   Menu.setApplicationMenu(null)
 
   if (!isDev) {
-    autoUpdater.checkForUpdates()
+    autoUpdater.checkForUpdates().catch(err => {
+      logger.error(`Error checking for updates: ${err?.stack ?? err}`)
+    })
   }
 
-  try {
-    const [localSettings, scrSettings] = await Promise.all([
-      localSettingsPromise,
-      scrSettingsPromise,
-    ])
+  Promise.resolve()
+    .then(async () => {
+      const [localSettings, scrSettings] = await Promise.all([
+        localSettingsPromise,
+        scrSettingsPromise,
+        programRegistrationPromise,
+      ])
 
-    container.register(LocalSettingsManager, { useValue: localSettings })
-    container.register(ScrSettingsManager, { useValue: scrSettings })
+      container.register(LocalSettingsManager, { useValue: localSettings })
+      container.register(ScrSettingsManager, { useValue: scrSettings })
 
-    const mapDirPath = path.join(app.getPath('userData'), 'maps')
-    const mapStore = new MapStore(mapDirPath)
-    container.register(MapStore, { useValue: mapStore })
+      const mapDirPath = path.join(app.getPath('userData'), 'maps')
+      const mapStore = new MapStore(mapDirPath)
+      container.register(MapStore, { useValue: mapStore })
 
-    setupIpc(localSettings, scrSettings)
-    setupCspProtocol(currentSession())
-    setupAnalytics(currentSession())
-    gameServer = createGameServer(localSettings)
-    await createWindow()
-    systemTray = new SystemTray(mainWindow, () => app.quit())
+      setupIpc(localSettings, scrSettings)
+      setupCspProtocol(currentSession())
+      setupAnalytics(currentSession())
+      gameServer = createGameServer(localSettings)
+      await createWindow()
+      systemTray = new SystemTray(mainWindow, () => app.quit())
 
-    mainWindow?.webContents.on('did-finish-load', () => {
       TypedIpcSender.from(mainWindow?.webContents).send(
         'windowMaximizedState',
         mainWindow?.isMaximized() ?? false,
@@ -764,21 +898,25 @@ app.on('ready', async () => {
         'windowFocusChanged',
         mainWindow?.isFocused() ?? false,
       )
-    })
 
-    app.on('will-quit', () => {
-      localSettings.saveSettingsToDiskSync()
-      scrSettings.saveSettingsToDiskSync()
+      if (!isDev && process.argv.length > 1) {
+        handleLaunchArgs(process.argv.slice(1))
+      }
+
+      app.on('will-quit', () => {
+        localSettings.saveSettingsToDiskSync()
+        scrSettings.saveSettingsToDiskSync()
+      })
     })
-  } catch (err: any) {
-    logger.error('Error initializing: ' + err)
-    console.error(err)
-    dialog.showErrorBox(
-      'ShieldBattery Error',
-      `There was an error initializing ShieldBattery: ${err.message}\n${err.stack}`,
-    )
-    app.quit()
-  }
+    .catch(err => {
+      logger.error(`Error initializing: ${err.stack ?? err}`)
+      console.error(err)
+      dialog.showErrorBox(
+        'ShieldBattery Error',
+        `There was an error initializing ShieldBattery: ${err.message}\n${err.stack}`,
+      )
+      app.quit()
+    })
 })
 app.on('window-all-closed', () => {
   // On OS X it is common for applications and their menu bar
@@ -792,6 +930,14 @@ app.on('activate', () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (!mainWindow) {
-    createWindow()
+    createWindow().catch(err => {
+      logger.error('Error creating window: ' + (err.stack ?? err))
+      console.error(err)
+      dialog.showErrorBox(
+        'ShieldBattery Error',
+        `There was an error initializing ShieldBattery: ${err.message}\n${err.stack}`,
+      )
+      app.quit()
+    })
   }
 })

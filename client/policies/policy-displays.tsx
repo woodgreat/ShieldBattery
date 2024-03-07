@@ -78,14 +78,17 @@ export function AcceptableUseDialog(props: CommonDialogProps) {
       onCancel={props.onCancel}
       showCloseButton={true}
       dialogRef={props.dialogRef}>
-      <AcceptableUseContent />
+      <React.Suspense fallback={<LoadingDotsArea />}>
+        <AcceptableUseContent />
+      </React.Suspense>
     </Dialog>
   )
 }
 
 export function AcceptableUsePage() {
+  const { t } = useTranslation()
   return (
-    <PolicyPage title={policyTypeToLabel(SbPolicyType.AcceptableUse)}>
+    <PolicyPage title={policyTypeToLabel(SbPolicyType.AcceptableUse, t)}>
       <AcceptableUseContent />
     </PolicyPage>
   )
@@ -104,14 +107,17 @@ export function PrivacyPolicyDialog(props: CommonDialogProps) {
       onCancel={props.onCancel}
       showCloseButton={true}
       dialogRef={props.dialogRef}>
-      <PrivacyPolicyContent />
+      <React.Suspense fallback={<LoadingDotsArea />}>
+        <PrivacyPolicyContent />
+      </React.Suspense>
     </Dialog>
   )
 }
 
 export function PrivacyPolicyPage() {
+  const { t } = useTranslation()
   return (
-    <PolicyPage title={policyTypeToLabel(SbPolicyType.Privacy)}>
+    <PolicyPage title={policyTypeToLabel(SbPolicyType.Privacy, t)}>
       <PrivacyPolicyContent />
     </PolicyPage>
   )
@@ -130,14 +136,17 @@ export function TermsOfServiceDialog(props: CommonDialogProps) {
       onCancel={props.onCancel}
       showCloseButton={true}
       dialogRef={props.dialogRef}>
-      <TermsOfServiceContent />
+      <React.Suspense fallback={<LoadingDotsArea />}>
+        <TermsOfServiceContent />
+      </React.Suspense>
     </Dialog>
   )
 }
 
 export function TermsOfServicePage() {
+  const { t } = useTranslation()
   return (
-    <PolicyPage title={policyTypeToLabel(SbPolicyType.TermsOfService)}>
+    <PolicyPage title={policyTypeToLabel(SbPolicyType.TermsOfService, t)}>
       <TermsOfServiceContent />
     </PolicyPage>
   )

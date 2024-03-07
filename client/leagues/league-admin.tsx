@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useId, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { Route, RouteComponentProps, Switch } from 'wouter'
 import {
@@ -15,13 +16,14 @@ import {
   MatchmakingType,
   matchmakingTypeToLabel,
 } from '../../common/matchmaking'
-import FileInput from '../forms/file-input'
+import { urlPath } from '../../common/urls'
 import { FormHook, useForm } from '../forms/form-hook'
 import SubmitOnEnter from '../forms/submit-on-enter'
 import { required } from '../forms/validators'
 import { MaterialIcon } from '../icons/material/material-icon'
 import { RaisedButton } from '../material/button'
-import CheckBox from '../material/check-box'
+import { CheckBox } from '../material/check-box'
+import { FileInput } from '../material/file-input'
 import { SelectOption } from '../material/select/option'
 import { Select } from '../material/select/select'
 import { TextField } from '../material/text-field'
@@ -128,8 +130,8 @@ export function LeagueAdmin() {
                     type={LeagueSectionType.Current}
                     joined={false}
                     curDate={curDate}
-                    onClick={league => push(`/leagues/admin/${toRouteLeagueId(league.id)}`)}
                     actionText={'Edit'}
+                    href={urlPath`/leagues/admin/${toRouteLeagueId(l.id)}`}
                   />
                 ))}
               </CardList>
@@ -226,11 +228,15 @@ interface LeagueModel {
   endAt: string
   rulesAndInfo?: string
   link?: string
-  image?: File
-  badge?: File
+  image?: File | File[]
+  badge?: File | File[]
 }
 
 function CreateLeague() {
+  // NOTE(2Pac): Only using the translation function here to pass it to a common function (so we can
+  // remove the optionality of the `t` param there). Not adding the translation strings to the rest
+  // of this component for now. Maybe some day?
+  const { t } = useTranslation()
   const baseId = useId()
   const adminContext = useContext(LeagueAdminContext)
 
@@ -248,8 +254,8 @@ function CreateLeague() {
           endAt: Date.parse(model.endAt),
           rulesAndInfo: model.rulesAndInfo,
           link: model.link,
-          image: model.image,
-          badge: model.badge,
+          image: model.image as File,
+          badge: model.badge as File,
         },
         {
           onSuccess: () => {
@@ -334,9 +340,7 @@ function CreateLeague() {
             </FieldLabel>
             <FileInput
               {...bindCustom('image')}
-              id={`${baseId}-image`}
-              accept='image/*'
-              multiple={false}
+              inputProps={{ id: `${baseId}-image`, accept: 'image/*', multiple: false }}
             />
           </div>
           <div>
@@ -345,9 +349,7 @@ function CreateLeague() {
             </FieldLabel>
             <FileInput
               {...bindCustom('badge')}
-              id={`${baseId}-badge`}
-              accept='image/*'
-              multiple={false}
+              inputProps={{ id: `${baseId}-badge`, accept: 'image/*', multiple: false }}
             />
           </div>
 
@@ -365,7 +367,7 @@ function CreateLeague() {
             tabIndex={0}
             dense={true}>
             {ALL_MATCHMAKING_TYPES.map(m => (
-              <SelectOption key={m} text={matchmakingTypeToLabel(m)} value={m} />
+              <SelectOption key={m} text={matchmakingTypeToLabel(m, t)} value={m} />
             ))}
           </Select>
 
@@ -473,9 +475,9 @@ function EditLeague({ params: { id: routeId } }: RouteComponentProps<{ id: strin
       rulesAndInfo:
         model.rulesAndInfo !== originalLeague?.rulesAndInfo ? model.rulesAndInfo : undefined,
       link: model.link !== originalLeague?.link ? model.link : undefined,
-      image: model.deleteImage ? undefined : model.image,
+      image: model.deleteImage ? undefined : (model.image as File),
       deleteImage: model.deleteImage ? true : undefined,
-      badge: model.deleteBadge ? undefined : model.badge,
+      badge: model.deleteBadge ? undefined : (model.badge as File),
       deleteBadge: model.deleteBadge ? true : undefined,
     }
 
@@ -556,6 +558,10 @@ function EditLeagueForm({
   onSubmit?: (model: Readonly<EditLeagueModel>) => void
   onValidatedChange?: (model: Readonly<EditLeagueModel>) => void
 }) {
+  // NOTE(2Pac): Only using the translation function here to pass it to a common function (so we can
+  // remove the optionality of the `t` param there). Not adding the translation strings to the rest
+  // of this component for now. Maybe some day?
+  const { t } = useTranslation()
   const baseId = useId()
 
   const { onSubmit, bindInput, bindCustom, bindCheckable } = useForm<EditLeagueModel>(
@@ -620,9 +626,7 @@ function EditLeagueForm({
         </FieldLabel>
         <FileInput
           {...bindCustom('image')}
-          id={`${baseId}-image`}
-          accept='image/*'
-          multiple={false}
+          inputProps={{ id: `${baseId}-image`, accept: 'image/*', multiple: false }}
         />
       </div>
       <div>
@@ -631,13 +635,15 @@ function EditLeagueForm({
         </FieldLabel>
         <FileInput
           {...bindCustom('badge')}
-          id={`${baseId}-badge`}
-          accept='image/*'
-          multiple={false}
+          inputProps={{ id: `${baseId}-badge`, accept: 'image/*', multiple: false }}
         />
       </div>
 
-      <CheckBox {...bindCheckable('deleteImage')} label='Delete current image' tabIndex={0} />
+      <CheckBox
+        {...bindCheckable('deleteImage')}
+        label='Delete current image'
+        inputProps={{ tabIndex: 0 }}
+      />
 
       <TextField
         {...bindInput('name')}
@@ -649,7 +655,7 @@ function EditLeagueForm({
 
       <Select {...bindCustom('matchmakingType')} label='Matchmaking type' tabIndex={0} dense={true}>
         {ALL_MATCHMAKING_TYPES.map(m => (
-          <SelectOption key={m} text={matchmakingTypeToLabel(m)} value={m} />
+          <SelectOption key={m} text={matchmakingTypeToLabel(m, t)} value={m} />
         ))}
       </Select>
 

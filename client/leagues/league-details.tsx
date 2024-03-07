@@ -10,8 +10,9 @@ import { assertUnreachable } from '../../common/assert-unreachable'
 import { ClientLeagueUserJson, LeagueErrorCode, LeagueId, LeagueJson } from '../../common/leagues'
 import { matchmakingTypeToLabel } from '../../common/matchmaking'
 import { RaceChar, raceCharToLabel } from '../../common/races'
-import { redirectToLogin } from '../auth/auth-utils'
-import { useSelfUser } from '../auth/state-hooks'
+import { urlPath } from '../../common/urls'
+import { useTrackPageView } from '../analytics/analytics'
+import { redirectToLogin, useIsLoggedIn } from '../auth/auth-utils'
 import { ConnectedAvatar } from '../avatars/avatar'
 import { longTimestamp, monthDay, narrowDuration } from '../i18n/date-formats'
 import logger from '../logging/logger'
@@ -94,6 +95,8 @@ export function LeagueDetailsPage() {
     params?.subPage && ALL_DETAILS_SUB_PAGES.includes(params.subPage as DetailsSubPage)
       ? (params.subPage as DetailsSubPage)
       : undefined
+
+  useTrackPageView(urlPath`/leagues/${routeId}/${subPage ?? ''}`)
 
   useEffect(() => {
     if (match && leagueName && slug(leagueName) !== slugStr) {
@@ -225,7 +228,7 @@ export function LeagueDetails({ id, subPage, container }: LeagueDetailsProps) {
   const [isFetching, setIsFetching] = useState(false)
   const [error, setError] = useState<Error>()
 
-  const isLoggedIn = !!useSelfUser()
+  const isLoggedIn = useIsLoggedIn()
   const league = useAppSelector(s => s.leagues.byId.get(id))
   const selfLeagueUser = useAppSelector(s => s.leagues.selfLeagues.get(id))
 
@@ -242,7 +245,9 @@ export function LeagueDetails({ id, subPage, container }: LeagueDetailsProps) {
       joinLeague(id, {
         onSuccess() {
           setIsJoining(false)
-          dispatch(openSnackbar({ message: t('league.details.leagueJoined', 'League joined') }))
+          dispatch(
+            openSnackbar({ message: t('leagues.leagueDetails.leagueJoined', 'League joined') }),
+          )
         },
         onError(err) {
           setIsJoining(false)
@@ -250,7 +255,7 @@ export function LeagueDetails({ id, subPage, container }: LeagueDetailsProps) {
             dispatch(
               openSnackbar({
                 message: t(
-                  'league.details.leagueEndedError',
+                  'leagues.leagueDetails.leagueEndedError',
                   "Couldn't join because the league has already ended",
                 ),
               }),
@@ -258,14 +263,14 @@ export function LeagueDetails({ id, subPage, container }: LeagueDetailsProps) {
           } else {
             dispatch(
               openSnackbar({
-                message: t('league.details.joinError', {
+                message: t('leagues.leagueDetails.joinError', {
                   defaultValue: "Couldn't join league: {{errorMessage}}",
                   errorMessage: isFetchError(err) ? err.statusText : err.message,
                 }),
               }),
             )
           }
-          logger.error(`Error joining league: ${err.stack ?? err}`)
+          logger.error(`Error joining league: ${String(err.stack ?? err)}`)
         },
       }),
     )
@@ -292,7 +297,7 @@ export function LeagueDetails({ id, subPage, container }: LeagueDetailsProps) {
         onError(err) {
           setIsFetching(false)
           setError(err)
-          logger.error(`Error loading league details: ${err.stack ?? err}`)
+          logger.error(`Error loading league details: ${String(err.stack ?? err)}`)
         },
       }),
     )
@@ -304,21 +309,21 @@ export function LeagueDetails({ id, subPage, container }: LeagueDetailsProps) {
     if (isFetchError(error) && error.code === LeagueErrorCode.NotFound) {
       return (
         <ErrorLayout>
-          <ErrorText>{t('league.details.notFound', 'League not found')}</ErrorText>
-          <Link href='/leagues'>{t('league.details.goBack', 'Go back to list')}</Link>
+          <ErrorText>{t('leagues.leagueDetails.notFound', 'League not found')}</ErrorText>
+          <Link href='/leagues'>{t('leagues.leagueDetails.goBack', 'Go back to list')}</Link>
         </ErrorLayout>
       )
     } else {
       return (
         <ErrorLayout>
           <ErrorText>
-            <Trans t={t} i18nKey='league.details.retrieveError'>
+            <Trans t={t} i18nKey='leagues.leagueDetails.retrieveError'>
               There was an error retrieving this league:{' '}
               {{ errorMessage: (error as any).statusText ?? error.toString() }}
             </Trans>
           </ErrorText>
 
-          <Link href='/leagues'>{t('league.details.goBack', 'Go back to list')}</Link>
+          <Link href='/leagues'>{t('leagues.leagueDetails.goBack', 'Go back to list')}</Link>
         </ErrorLayout>
       )
     }
@@ -358,11 +363,11 @@ export function LeagueDetails({ id, subPage, container }: LeagueDetailsProps) {
       <LeagueDetailsHeader league={league} />
       <TabsAndJoin>
         <Tabs activeTab={activeTab} onChange={onTabChange}>
-          <TabItem value={DetailsSubPage.Info} text={t('league.details.info', 'Info')} />
+          <TabItem value={DetailsSubPage.Info} text={t('leagues.leagueDetails.info', 'Info')} />
           {isRunningOrEnded ? (
             <TabItem
               value={DetailsSubPage.Leaderboard}
-              text={t('league.details.leaderboard', 'Leaderboard')}
+              text={t('leagues.leagueDetails.leaderboard', 'Leaderboard')}
             />
           ) : (
             <></>
@@ -372,7 +377,7 @@ export function LeagueDetails({ id, subPage, container }: LeagueDetailsProps) {
           <RaisedButton
             label={
               selfLeagueUser
-                ? t('league.details.joined', 'Joined')
+                ? t('leagues.leagueDetails.joined', 'Joined')
                 : t('common.actions.join', 'Join')
             }
             disabled={!!selfLeagueUser || isJoining}
@@ -392,12 +397,12 @@ export interface LeagueDetailsHeaderProps {
 export function LeagueDetailsHeader({ league }: LeagueDetailsHeaderProps) {
   const { t } = useTranslation()
   // TODO(tec27): Handle cases where year differs to smartly show that info
-  const dateText = t('league.details.dateText', {
+  const dateText = t('leagues.leagueDetails.dateText', {
     defaultValue: `{{startDate}} to {{endDate}}`,
     startDate: monthDay.format(league.startAt),
     endDate: monthDay.format(league.endAt),
   })
-  const dateTooltip = t('league.details.dateText', {
+  const dateTooltip = t('leagues.leagueDetails.dateText', {
     defaultValue: `{{startDate}} to {{endDate}}`,
     startDate: longTimestamp.format(league.startAt),
     endDate: longTimestamp.format(league.endAt),
@@ -411,7 +416,7 @@ export function LeagueDetailsHeader({ league }: LeagueDetailsHeaderProps) {
           <Title>{league.name}</Title>
           <CopyLinkButton
             tooltipPosition='right'
-            startingText={t('league.details.copyLink', 'Copy link to league')}
+            startingText={t('leagues.leagueDetails.copyLink', 'Copy link to league')}
           />
         </TitleRow>
         <SummaryRow>
@@ -441,13 +446,13 @@ export function LeagueDetailsInfo({ league }: LeagueDetailsInfoProps) {
         {league.imagePath ? <LeagueImage src={league.imagePath} /> : <LeaguePlaceholderImage />}
       </LeagueImageContainer>
       <InfoSection>
-        <InfoSectionHeader>{t('league.details.about', 'About')}</InfoSectionHeader>
+        <InfoSectionHeader>{t('leagues.leagueDetails.about', 'About')}</InfoSectionHeader>
         <div>{league.description}</div>
       </InfoSection>
       {league.rulesAndInfo ? (
         <InfoSection>
           <InfoSectionHeader>
-            {t('league.details.rulesAndInfo', 'Rules and info')}
+            {t('leagues.leagueDetails.rulesAndInfo', 'Rules and info')}
           </InfoSectionHeader>
           <div>
             <StyledMarkdown source={league.rulesAndInfo} />
@@ -594,12 +599,12 @@ function LeaderboardHeader() {
   const { t } = useTranslation()
   return (
     <>
-      <RankCell>{t('league.details.leaderBoardHeader.rank', 'Rank')}</RankCell>
-      <PlayerCell>{t('league.details.leaderBoardHeader.player', 'Player')}</PlayerCell>
-      <PointsCell>{t('league.details.leaderBoardHeader.points', 'Points')}</PointsCell>
-      <WinLossCell>{t('league.details.leaderBoardHeader.winLoss', 'Win/loss')}</WinLossCell>
+      <RankCell>{t('leagues.leagueDetails.leaderBoardHeader.rank', 'Rank')}</RankCell>
+      <PlayerCell>{t('leagues.leagueDetails.leaderBoardHeader.player', 'Player')}</PlayerCell>
+      <PointsCell>{t('leagues.leagueDetails.leaderBoardHeader.points', 'Points')}</PointsCell>
+      <WinLossCell>{t('leagues.leagueDetails.leaderBoardHeader.winLoss', 'Win/loss')}</WinLossCell>
       <LastPlayedCell>
-        {t('league.details.leaderBoardHeader.lastPlayed', 'Last played')}
+        {t('leagues.leagueDetails.leaderBoardHeader.lastPlayed', 'Last played')}
       </LastPlayedCell>
     </>
   )
@@ -639,7 +644,7 @@ function Leaderboard({
         },
         onError(err) {
           setError(err)
-          logger.error(`Error loading leaderboard: ${err.stack ?? err}`)
+          logger.error(`Error loading leaderboard: ${String(err.stack ?? err)}`)
         },
       }),
     )
@@ -677,7 +682,7 @@ function Leaderboard({
     <>
       {error ? (
         <LeaderboardError>
-          <Trans t={t} i18nKey='league.details.leaderboardError'>
+          <Trans t={t} i18nKey='leagues.leagueDetails.leaderboardError'>
             There was a problem retrieving the leaderboard:{' '}
             {{ errorMessage: isFetchError(error) ? error.statusText : error.message }}
           </Trans>
@@ -705,7 +710,7 @@ function Leaderboard({
               itemContent={renderRow}
             />
           ) : (
-            <EmptyText>{t('league.details.noPlayers', 'No matching players.')}</EmptyText>
+            <EmptyText>{t('leagues.leagueDetails.noPlayers', 'No matching players.')}</EmptyText>
           )}
         </>
       ) : (

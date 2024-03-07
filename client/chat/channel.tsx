@@ -24,9 +24,11 @@ import {
   deactivateChannel,
   getChannelInfo,
   getMessageHistory,
+  leaveChannel,
   retrieveUserList,
   sendMessage,
 } from './action-creators'
+import { CHANNEL_HEADER_HEIGHT, ChannelHeader } from './channel-header'
 import { ConnectedChannelInfoCard } from './channel-info-card'
 import { addChannelMessageMenuItems, addChannelUserMenuItems } from './channel-menu-items'
 import { ChannelUserList } from './channel-user-list'
@@ -41,6 +43,16 @@ import {
 
 const MESSAGES_LIMIT = 50
 
+const BACKGROUND_MASK_GRADIENT = `
+  linear-gradient(
+    180deg,
+    #000 52.83%,
+    rgba(0, 0, 0, 0.6) 70.31%,
+    rgba(0, 0, 0, 0.2) 84.37%,
+    rgba(0, 0, 0, 0) 100%
+  )
+`
+
 const Container = styled.div`
   width: 100%;
   height: 100%;
@@ -54,6 +66,20 @@ const StyledChat = styled(Chat)`
   max-width: 960px;
   flex-grow: 1;
   background-color: ${background800};
+`
+
+const BackgroundImage = styled.img`
+  position: absolute;
+  top: ${CHANNEL_HEADER_HEIGHT}px;
+  left: 0;
+  width: 100%;
+  height: 400px;
+
+  opacity: 0.2;
+  object-fit: cover;
+  object-position: top;
+  mask-image: ${BACKGROUND_MASK_GRADIENT};
+  -webkit-mask-image: ${BACKGROUND_MASK_GRADIENT};
 `
 
 export function renderChannelMessage(msg: SbMessage) {
@@ -86,8 +112,11 @@ export function ConnectedChatChannel({
 }: ChatChannelProps) {
   const dispatch = useAppDispatch()
   const basicChannelInfo = useAppSelector(s => s.chat.idToBasicInfo.get(channelId))
+  const detailedChannelInfo = useAppSelector(s => s.chat.idToDetailedInfo.get(channelId))
+  const joinedChannelInfo = useAppSelector(s => s.chat.idToJoinedInfo.get(channelId))
   const channelUsers = useAppSelector(s => s.chat.idToUsers.get(channelId))
   const channelMessages = useAppSelector(s => s.chat.idToMessages.get(channelId))
+  const selfPreferences = useAppSelector(s => s.chat.idToSelfPreferences.get(channelId))
   const isInChannel = useAppSelector(s => s.chat.joinedChannels.has(channelId))
 
   const prevIsInChannel = usePrevious(isInChannel)
@@ -126,6 +155,10 @@ export function ConnectedChatChannel({
     dispatch(sendMessage(channelId, msg)),
   )
 
+  const onLeaveChannel = useStableCallback((channelId: SbChannelId) => {
+    dispatch(leaveChannel(channelId))
+  })
+
   const modifyUserMenuItems = useCallback(
     (
       userId: SbUserId,
@@ -157,6 +190,25 @@ export function ConnectedChatChannel({
             onSendChatMessage,
             storageKey: `chat.${channelId}`,
           }}
+          header={
+            // These are basically guaranteed to be defined here, but still doing the check instead
+            // of asserting them with ! because better to be safe than sorry, or something.
+            basicChannelInfo && detailedChannelInfo && joinedChannelInfo && selfPreferences ? (
+              <ChannelHeader
+                key={basicChannelInfo.id}
+                basicChannelInfo={basicChannelInfo}
+                detailedChannelInfo={detailedChannelInfo}
+                joinedChannelInfo={joinedChannelInfo}
+                selfPreferences={selfPreferences}
+                onLeaveChannel={onLeaveChannel}
+              />
+            ) : null
+          }
+          backgroundContent={
+            !selfPreferences?.hideBanner && detailedChannelInfo?.bannerPath ? (
+              <BackgroundImage src={detailedChannelInfo.bannerPath} draggable={false} />
+            ) : undefined
+          }
           extraContent={
             <ChannelUserList
               active={channelUsers?.active}

@@ -2,7 +2,7 @@ use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::mem;
 use std::path::{Path, PathBuf};
-use std::ptr::{null, null_mut};
+use std::ptr::{self, null, null_mut, NonNull};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use libc::c_void;
 use parking_lot::{Mutex, RwLock};
 use smallvec::SmallVec;
-use winapi::shared::windef::{HWND};
+use winapi::shared::windef::HWND;
 use winapi::um::errhandlingapi::SetLastError;
 use winapi::um::libloaderapi::GetModuleHandleW;
 
@@ -21,18 +21,22 @@ use shader_replaces::ShaderReplaces;
 pub use thiscall::Thiscall;
 
 use crate::app_messages::{MapInfo, Settings};
-use crate::bw::unit::{Unit, UnitIterator};
-use crate::bw::{self, Bw, FowSpriteIterator, SnpFunctions, StormPlayerId};
-use crate::bw::{commands, UserLatency};
 use crate::bw::apm_stats::ApmStats;
-use crate::game_thread::send_game_msg_to_async;
-use crate::recurse_checked_mutex::{Mutex as RecurseCheckedMutex};
+use crate::bw::players::StormPlayerId;
+use crate::bw::unit::{Unit, UnitIterator};
+use crate::bw::{self, Bw, FowSpriteIterator, LobbyOptions, SnpFunctions};
+use crate::bw::{commands, UserLatency};
+use crate::game_thread::{self, send_game_msg_to_async};
+use crate::recurse_checked_mutex::Mutex as RecurseCheckedMutex;
 use crate::snp;
 use crate::windows;
-use crate::{game_thread, GameThreadMessage};
+use crate::GameThreadMessage;
+
+pub mod scr;
 
 mod bw_hash_table;
 mod bw_vector;
+mod console;
 mod dialog_hook;
 mod draw_inject;
 mod draw_overlay;
@@ -75,6 +79,7 @@ pub struct BwScr {
     local_player_name: Value<*mut u8>,
     fonts: Value<*mut *mut scr::Font>,
     first_active_unit: Value<*mut bw::Unit>,
+    first_player_unit: Value<*mut *mut bw::Unit>,
     client_selection: Value<*mut *mut bw::Unit>,
     sprites_by_y_tile: Value<*mut *mut scr::Sprite>,
     sprites_by_y_tile_end: Value<*mut *mut scr::Sprite>,
@@ -97,6 +102,10 @@ pub struct BwScr {
     /// Value is larger on 16:9, as well as when zooming out.
     game_screen_width_bwpx: Value<u32>,
     game_screen_height_bwpx: Value<u32>,
+    /// How much of the window is vertically used by game screen (0.0 ..= 1.0)
+    /// Usually ~0.8 so that the ui console doesn't cover bottom of the map.
+    game_screen_height_ratio: Option<Value<f32>>,
+    zoom: Value<f32>,
     units: Value<*mut scr::BwVector>,
     vertex_buffer: Value<*mut scr::VertexBuffer>,
     renderer: Value<*mut scr::Renderer>,
@@ -110,6 +119,8 @@ pub struct BwScr {
     replay_bfix: Option<Value<*mut scr::ReplayBfix>>,
     replay_gcfg: Option<Value<*mut scr::ReplayGcfg>>,
     anti_troll: Option<Value<*mut scr::AntiTroll>>,
+    first_dialog: Option<Value<*mut bw::Dialog>>,
+    graphic_layers: Option<Value<*mut bw::GraphicLayer>>,
     free_sprites: LinkedList<scr::Sprite>,
     active_fow_sprites: LinkedList<bw::FowSprite>,
     free_fow_sprites: LinkedList<bw::FowSprite>,
@@ -154,11 +165,13 @@ pub struct BwScr {
     process_game_commands: unsafe extern "C" fn(*const u8, usize, u32),
     move_screen: unsafe extern "C" fn(u32, u32),
     get_render_target: unsafe extern "C" fn(u32) -> *mut scr::RenderTarget,
-    load_consoles: Thiscall<unsafe extern "C" fn(*mut scr::BwHashTable)>,
-    init_consoles: Thiscall<unsafe extern "C" fn(*mut scr::BwHashTable, u32)>,
-    get_ui_consoles: unsafe extern "C" fn() -> *mut scr::BwHashTable,
+    load_consoles: Thiscall<unsafe extern "C" fn(*mut scr::BwHashTable<u32, *mut scr::UiConsole>)>,
+    init_consoles:
+        Thiscall<unsafe extern "C" fn(*mut scr::BwHashTable<u32, *mut scr::UiConsole>, u32)>,
+    get_ui_consoles: unsafe extern "C" fn() -> *mut scr::BwHashTable<u32, *mut scr::UiConsole>,
     // select_units(amount, pointers, bool, bool)
     select_units: unsafe extern "C" fn(usize, *const *mut bw::Unit, u32, u32),
+    update_game_screen_size: unsafe extern "C" fn(f32),
     mainmenu_entry_hook: VirtualAddress,
     load_snp_list: VirtualAddress,
     start_udp_server: VirtualAddress,
@@ -173,6 +186,7 @@ pub struct BwScr {
     game_command_lengths: Vec<u32>,
     prism_pixel_shaders: Vec<VirtualAddress>,
     prism_renderer_vtable: VirtualAddress,
+    console_vtables: Vec<VirtualAddress>,
     replay_minimap_patch: Option<scr_analysis::Patch>,
     open_file: VirtualAddress,
     prepare_issue_order: VirtualAddress,
@@ -180,7 +194,6 @@ pub struct BwScr {
     spawn_dialog: VirtualAddress,
     step_game_logic: VirtualAddress,
     net_format_turn_rate: VirtualAddress,
-    update_game_screen_size: VirtualAddress,
     init_obs_ui: VirtualAddress,
     draw_graphic_layers: VirtualAddress,
     decide_cursor_type: VirtualAddress,
@@ -214,6 +227,13 @@ pub struct BwScr {
     detection_status_copy: Mutex<Vec<u32>>,
     render_state: RecurseCheckedMutex<RenderState>,
     apm_state: RecurseCheckedMutex<ApmStats>,
+    /// Keeps track of what game_screen_height_ratio was originally.
+    /// (It depends a bit on what console the player uses)
+    original_game_screen_height_ratio: AtomicU32,
+    /// If console was hidden in replay / obs ui
+    console_hidden_state: AtomicBool,
+    /// Whether game results have been sent to the GameState thread yet
+    game_results_sent: AtomicBool,
 }
 
 /// State mutated during renderer draw call
@@ -265,627 +285,6 @@ impl RendererState {
 
 unsafe impl Send for RendererState {}
 unsafe impl Sync for RendererState {}
-
-pub mod scr {
-    use libc::c_void;
-
-    use crate::bw;
-    use crate::bw::SnpFunctions;
-    use crate::bw_scr::{bw_free, bw_malloc};
-
-    use super::thiscall::Thiscall;
-
-    pub use bw_dat::structs::scr::{DrawCommand, DrawCommands, DrawSubCommand, DrawSubCommands};
-
-    #[repr(C)]
-    pub struct SnpLoadFuncs {
-        pub identify: unsafe extern "system" fn(
-            u32,            // snp index
-            *mut u32,       // id
-            *mut *const u8, // name
-            *mut *const u8, // description
-            *mut *const crate::bw::SnpCapabilities,
-        ) -> u32,
-        pub bind: unsafe extern "system" fn(u32, *mut *const SnpFunctions) -> u32,
-    }
-
-    #[repr(C)]
-    pub struct LobbyDialogVtable {
-        pub functions: [usize; 0x50],
-    }
-
-    #[repr(C)]
-    pub struct GameInput {
-        pub name: BwString,
-        pub password: BwString,
-        pub speed: u8,
-        pub game_type_subtype: u32,
-        pub turn_rate: u32,
-        pub game_flag1: u8,
-        pub old_limits: u8,
-        pub eud: u8,
-        pub safety_padding: [u8; 0x21],
-    }
-
-    #[repr(C)]
-    pub struct MapDirEntry {
-        pub key: u32,
-        pub unk4: [u8; 0x1c],
-        pub filename: BwString,
-        pub title: BwString,
-        pub description: BwString,
-        pub error_message: BwString,
-        pub unk90: BwString,
-        pub unkac: BwString,
-        pub unkc8: BwString,
-        pub unk_linked_list: [usize; 0x3],
-        pub loaded: u8,
-        pub error: u32,
-        pub unk104: [u8; 0x8],
-        pub flags: u8,
-        pub unk10d: u8,
-        pub map_width_tiles: u16,
-        pub map_height_tiles: u16,
-        pub unk112: [u8; 0xd2],
-        pub path_directory: BwString,
-        pub path_filename: BwString,
-    }
-
-    #[repr(C)]
-    pub struct BwString {
-        /// A pointer to the current memory containing the characters in the string.
-        pub pointer: *mut u8,
-        /// Current length of the string, not including the null terminator.
-        pub length: usize,
-        /// Total size of the memory pointed to by [`pointer`], not including the null terminator.
-        /// The sign bit of the capacity signifies whether or not the inline buffer is being used
-        /// (sign bit set = internal buffer).
-        pub capacity: usize,
-        /// A buffer that will be used if the string fits within it.
-        pub inline_buffer: [u8; 0x10],
-    }
-
-    impl BwString {
-        /// Returns the capacity (with the bit signifying internal/external buffer removed).
-        pub fn get_capacity(&self) -> usize {
-            self.capacity & (usize::MAX >> 1)
-        }
-
-        pub fn is_using_inline_buffer(&self) -> bool {
-            self.capacity & !(usize::MAX >> 1) != 0
-        }
-
-        /// Replaces the entire contents of the string, allocating new memory if necessary.
-        pub fn replace_all(&mut self, replace_with: &str) {
-            if replace_with.len() > self.get_capacity() {
-                // New value doesn't fit, reallocate
-                if !self.is_using_inline_buffer() {
-                    unsafe {
-                        bw_free(self.pointer);
-                        self.pointer = std::ptr::null_mut();
-                    }
-                }
-
-                // TODO(tec27): Increase this size a bit to avoid reallocations?
-                let new_capacity = replace_with.len();
-                unsafe {
-                    self.pointer = bw_malloc(new_capacity + 1);
-                    self.capacity = new_capacity;
-                }
-            }
-
-            unsafe {
-                let text_slice =
-                    std::slice::from_raw_parts_mut(self.pointer, self.get_capacity() + 1);
-                (&mut text_slice[..replace_with.len()]).copy_from_slice(replace_with.as_bytes());
-                text_slice[replace_with.len()] = 0;
-                self.length = replace_with.len();
-            }
-        }
-    }
-
-    #[repr(C)]
-    pub struct BwVector {
-        pub data: *mut c_void,
-        pub length: usize,
-        pub capacity: usize,
-    }
-
-    #[repr(C)]
-    pub struct FileHandle {
-        pub vtable: *const V_FileHandle1,
-        pub vtable2: *const V_FileHandle2,
-        pub vtable3: *const V_FileHandle3,
-        pub metadata: *mut FileMetadata,
-        pub peek: *mut FilePeek,
-        pub read: *mut FileRead,
-        pub file_ok: u32,
-        //pub dc18: [u8; 0x10],
-        pub close_callback: Function, // 0x1 = pointer, else inline
-    }
-
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub struct OpenParams {
-        pub extension: *const u8,
-        pub _unk4: u32,
-        pub file_type: u32,
-        pub locale: u32,
-        pub flags: u32,
-        pub casc_buffer_size: u32,
-        pub safety_padding: [u32; 4],
-    }
-
-    #[repr(C)]
-    pub struct FileRead {
-        pub vtable: *const V_FileRead,
-        pub inner: *mut c_void,
-    }
-
-    #[repr(C)]
-    pub struct FilePeek {
-        pub vtable: *const V_FilePeek,
-        pub inner: *mut c_void,
-    }
-
-    #[repr(C)]
-    pub struct FileMetadata {
-        pub vtable: *const V_FileMetadata,
-        pub inner: *mut c_void,
-    }
-
-    /// This seems to be a std::function implementation
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub struct Function {
-        pub vtable: *const V_Function,
-        pub inner: *mut c_void,
-    }
-
-    #[repr(C)]
-    pub struct V_FileHandle1 {
-        pub destroy: Thiscall<unsafe extern "C" fn(*mut FileHandle, u32)>,
-        pub read: Thiscall<unsafe extern "C" fn(*mut FileHandle, *mut u8, u32) -> u32>,
-        pub skip: Thiscall<unsafe extern "C" fn(*mut FileHandle, u32)>,
-        pub safety_padding: [usize; 0x20],
-    }
-
-    #[repr(C)]
-    pub struct V_FileHandle2 {
-        pub unk0: [usize; 1],
-        pub peek: Thiscall<unsafe extern "C" fn(*mut c_void, *mut u8, u32) -> u32>,
-        pub safety_padding: [usize; 0x20],
-    }
-
-    #[repr(C)]
-    pub struct V_FileHandle3 {
-        pub unk0: [usize; 1],
-        pub tell: Thiscall<unsafe extern "C" fn(*mut c_void) -> u32>,
-        pub seek: Thiscall<unsafe extern "C" fn(*mut c_void, u32)>,
-        pub file_size: Thiscall<unsafe extern "C" fn(*mut c_void) -> u32>,
-        pub safety_padding: [usize; 0x20],
-    }
-
-    #[repr(C)]
-    pub struct V_FileMetadata {
-        pub unk0: [usize; 1],
-        pub tell: Thiscall<unsafe extern "C" fn(*mut FileMetadata) -> u32>,
-        pub seek: Thiscall<unsafe extern "C" fn(*mut FileMetadata, u32)>,
-        pub file_size: Thiscall<unsafe extern "C" fn(*mut FileMetadata) -> u32>,
-        pub safety_padding: [usize; 0x20],
-    }
-
-    #[repr(C)]
-    pub struct V_FileRead {
-        pub destroy: usize,
-        pub read: Thiscall<unsafe extern "C" fn(*mut FileRead, *mut u8, u32) -> u32>,
-        pub skip: Thiscall<unsafe extern "C" fn(*mut FileRead, u32)>,
-        pub safety_padding: [usize; 0x20],
-    }
-
-    #[repr(C)]
-    pub struct V_FilePeek {
-        pub destroy: usize,
-        pub peek: Thiscall<unsafe extern "C" fn(*mut FilePeek, *mut u8, u32) -> u32>,
-        pub safety_padding: [usize; 0x20],
-    }
-
-    #[repr(C)]
-    pub struct V_Function {
-        pub destroy_inner: Thiscall<unsafe extern "C" fn(*mut Function, u32)>,
-        pub invoke: Thiscall<unsafe extern "C" fn(*mut Function)>,
-        pub get_sizes: Thiscall<unsafe extern "C" fn(*mut Function, *mut usize)>,
-        pub copy: Thiscall<unsafe extern "C" fn(*mut Function, *mut Function)>,
-        pub copy2: Thiscall<unsafe extern "C" fn(*mut Function, *mut Function)>,
-        pub safety_padding: [usize; 0x20],
-    }
-
-    #[repr(C)]
-    pub struct Font {
-        pub unk0: *mut c_void,
-        pub unk4: usize,
-        pub unk8: *mut c_void,
-        pub unkc: u32,
-        pub unk10: u32,
-        pub ttf: *mut TtfSet,
-    }
-
-    #[repr(C)]
-    pub struct TtfSet {
-        pub fonts: [TtfFont; 5],
-    }
-
-    #[repr(C)]
-    pub struct TtfFont {
-        pub unk0: usize,
-        pub raw_ttf: *mut u8,
-        #[cfg(target_arch = "x86")]
-        pub unk8: [u8; 0x70],
-        #[cfg(target_arch = "x86_64")]
-        pub unk8: [u8; 0x88],
-        pub raw_ttf2: *mut u8, // 78 // 98
-        pub unk7c: u32,
-        pub scale: f32, // 80 // a4
-        pub unk_floats: [f32; 3],
-        pub unk90: [u32; 3],
-        pub unk90_ptr_sized: [usize; 1],
-    }
-
-    #[repr(C)]
-    pub struct JoinableGameInfo {
-        // String -> GameInfoValue
-        // Key offset in BwHashTableEntry is 0x8, Value offset 0x28
-        pub params: BwHashTable,
-        #[cfg(target_arch = "x86")]
-        pub unk10: [u8; 0x24],
-        #[cfg(target_arch = "x86_64")]
-        pub unk10: [u8; 0x40],
-        pub game_name: BwString,
-        pub sockaddr_family: u16,
-        // Network endian
-        pub port: u16,
-        pub ip: [u8; 4],
-        pub game_id: u64,
-        pub new_game_type: u32,
-        pub game_subtype: u32,
-        pub unk68: f32,
-        pub unk6c: u32,
-        pub timestamp: u64,
-        pub unk78: u8,
-        pub unk79: u8,
-        pub unk7a: [u8; 2],
-        // SEXP
-        pub product_id: u32,
-        // 0xe9
-        pub game_version: u32,
-        // Padding in the case struct grows or there are more fields
-        pub safety_padding: [u8; 0x24],
-    }
-
-    // 9411 and older
-    #[repr(C)]
-    pub struct GameInfoValueOld {
-        pub variant: u32,
-        pub padding: u32,
-        pub data: GameInfoValueUnion,
-    }
-
-    #[repr(C)]
-    pub struct GameInfoValue {
-        pub data: GameInfoValueUnion,
-        pub variant: u32,
-    }
-
-    #[repr(C)]
-    pub union GameInfoValueUnion {
-        pub var1: [u8; 0x1c], // Actually a string
-        pub var2_3: u64,
-        pub var4: f64,
-        pub var5: u8,
-    }
-
-    #[repr(C)]
-    pub struct BwHashTable {
-        pub bucket_count: usize,
-        pub buckets: *mut *mut BwHashTableEntry,
-        pub size: usize,
-        pub resize_factor: f32,
-    }
-
-    #[repr(C)]
-    pub struct BwHashTableEntry {
-        pub next: *mut BwHashTableEntry,
-        // Key and value are placed in this struct at this point.
-        // I would want to assume that BwHashTableEntry<Key, Val>
-        // and just declaring key/val as fields would get key and value
-        // laid out same as SCR does, but for now just going to hardcode
-        // the offsets.
-        // It seems somewhat inconsistent whether key/value are
-        // 4-aligned or 8-aligned.
-        // As BwHashTable is used only once (as of this writing..), I don't
-        // want to spend time testing if the layout is correct or not.
-    }
-
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub struct StormPlayer {
-        pub state: u8,
-        pub unk1: u8,
-        pub flags: u16,
-        pub unk4: u16,
-        // Always 5, not useful for us
-        pub protocol_version: u16,
-        pub name: [u8; 0x60],
-    }
-
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub struct PrismShaderSet {
-        pub count: u32,
-        pub shaders: *mut PrismShader,
-    }
-
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub struct PrismShader {
-        pub api_type: u8,
-        pub shader_type: u8,
-        pub unk: [u8; 6],
-        pub data: *const u8,
-        pub data_len: u32,
-    }
-
-    #[repr(C)]
-    pub struct Shader {
-        pub id: u32,
-        pub rest: [u8; 0x74],
-    }
-
-    #[repr(C)]
-    pub struct Sprite {
-        pub prev: *mut Sprite,
-        pub next: *mut Sprite,
-        pub sprite_id: u16,
-        pub player: u8,
-        pub selection_index: u8,
-        pub visibility_mask: u8,
-        pub elevation_level: u8,
-        pub flags: u8,
-        pub selection_flash_timer: u8,
-        pub index: u16,
-        pub width: u8,
-        pub height: u8,
-        pub pos_x: usize,
-        pub pos_y: usize,
-        pub main_image: *mut bw::Image,
-        pub first_image: *mut bw::Image,
-        pub last_image: *mut bw::Image,
-    }
-
-    #[repr(C)]
-    pub struct Allocator {
-        pub vtable: *mut AllocatorVtable,
-    }
-
-    #[repr(C)]
-    pub struct AllocatorVtable {
-        pub delete: usize,
-        pub alloc: Thiscall<unsafe extern "C" fn(*mut Allocator, usize, usize) -> *mut u8>,
-        pub fn2: usize,
-        pub fn3: usize,
-        pub free: Thiscall<unsafe extern "C" fn(*mut Allocator, *mut u8)>,
-    }
-
-    #[repr(C)]
-    pub struct ReplayBfix {
-        pub flags: u32,
-    }
-
-    #[repr(C)]
-    pub struct ReplayGcfg {
-        pub unk0: [u8; 4],
-        pub build: u32,
-        pub unk8: [u8; 8],
-        pub unk10: u8,
-    }
-
-    #[repr(C)]
-    pub struct AntiTroll {
-        pub active: u8,
-    }
-
-    #[repr(C)]
-    pub struct NetFormatTurnRateResult {
-        // TODO(tec27): Not entirely certain what this is, behaves kind of weird during a DTR scan.
-        // This first value is a pointer that gets zeroed out if not used.
-        pub unk0: [u8; 4],
-        pub text: BwString,
-    }
-
-    #[repr(C)]
-    pub struct Renderer {
-        pub vtable: *const V_Renderer
-    }
-
-    #[repr(C)]
-    pub struct V_Renderer {
-        pub clone: usize,
-        pub init_sub: usize,
-        pub init: usize,
-        pub unk3: usize,
-        pub unk4: usize,
-        pub swap_buffers: usize,
-        pub unk6: usize,
-        pub draw: Thiscall<
-            unsafe extern "C" fn(
-                *mut Renderer,
-                *mut DrawCommands,
-                u32,
-                u32,
-            ) -> u32,
-        >,
-        pub clear_color: usize,
-        pub unk9: usize,
-        pub upload_vertices: usize,
-        pub unkb: usize,
-        /// format, data, data_len, width, height, filtering, wrap_mode
-        pub create_texture: Thiscall<
-            unsafe extern "C" fn(
-                *mut Renderer,
-                u32,
-                *const u8,
-                usize,
-                u32,
-                u32,
-                u32,
-                u32,
-            ) -> *mut RendererTexture,
-        >,
-        pub unkd: usize,
-        /// texture, x, y, width, height, data, row_length (pixels), format, filtering, wrap_mode
-        pub update_texture: Thiscall<
-            unsafe extern "C" fn(
-                *mut Renderer,
-                *mut RendererTexture,
-                u32,
-                u32,
-                u32,
-                u32,
-                *const u8,
-                u32,
-                u32,
-                u32,
-                u32,
-            )
-        >,
-        pub delete_texture: Thiscall<
-            unsafe extern "C" fn(*mut Renderer, *mut *mut RendererTexture)
-        >,
-        pub create_shader: Thiscall<
-            unsafe extern "C" fn(
-                *mut Renderer,
-                *mut Shader,
-                *const u8,
-                *const u8,
-                *const u8,
-                *mut c_void,
-            ) -> usize,
-        >,
-    }
-
-    /// Opaque struct
-    #[repr(C)]
-    pub struct RendererTexture {
-    }
-
-    // Checked to have correct layout on both 32/64 bit
-    #[repr(C)]
-    pub struct VertexBuffer {
-        pub buffer_size_u32s: usize,
-        pub allocated_size_bytes: usize,
-        pub buffer: BwVector,
-        pub subbuffers: BwVector,
-        pub heap_allocated: u8,
-        pub unk_size: usize,
-        pub subbuffer_sizes: usize,
-        pub unk2c: usize,
-        pub index_buf_size_u16s: usize,
-        pub index_buffer_allocated_bytes: usize,
-        pub index_buffer: BwVector,
-        pub index_buf_heap_allocated: u8,
-        pub unk_vertex_buffer_data: *mut c_void,
-    }
-
-    #[repr(C)]
-    pub struct RenderTarget {
-        pub x: i32,
-        pub y: i32,
-        pub width: u32,
-        pub height: u32,
-        pub attachments: u32,
-        pub unk14: [u32; 2],
-        pub backend_target: *mut c_void,
-    }
-
-    /// Used to sort DrawCommands to be drawn in correct order when rendering.
-    /// One DrawSort must exist for each DrawCommand used.
-    #[repr(C)]
-    pub struct DrawSort {
-        pub layer: u16,
-        // Self index when pushed to vector
-        // Probably used to break ties when layer is same
-        pub index: u16,
-        pub command: *mut DrawCommand,
-    }
-
-    #[repr(C)]
-    pub struct Texture {
-        pub unk: u32,
-        pub width: u16,
-        pub height: u16,
-        pub renderer_texture: *mut RendererTexture,
-        pub scale: u16,
-    }
-
-    #[repr(C)]
-    pub struct DdsGrp {
-        pub frame_count: u16,
-        pub textures: *mut Texture,
-    }
-
-    #[repr(C)]
-    pub struct DdsGrpSet {
-        // Legacy palette renderer GRP (Same struct as pre-SC:R)
-        pub grp: *mut c_void,
-        // SD, HD, Carbot (Carbot is not required to be loaded)
-        pub dds_grps: [DdsGrp; 0x3],
-        pub ui_asset_id: u32,
-        pub unk_20: u8,
-        pub unk_21: u8,
-        pub unk_22: u8,
-        pub unk_23: u8,
-        pub unk_24: u8,
-    }
-
-    unsafe impl Sync for PrismShader {}
-    unsafe impl Send for PrismShader {}
-
-    pub const PRISM_SHADER_API_SM4: u8 = 0x0;
-    pub const PRISM_SHADER_API_SM5: u8 = 0x4;
-    pub const PRISM_SHADER_TYPE_PIXEL: u8 = 0x6;
-
-    #[test]
-    fn struct_sizes() {
-        #[cfg(target_arch = "x86")]
-        fn size(value: usize, _: usize) -> usize {
-            value
-        }
-        #[cfg(target_arch = "x86_64")]
-        fn size(_: usize, value: usize) -> usize {
-            value
-        }
-
-        use std::mem::size_of;
-        assert_eq!(size_of::<JoinableGameInfo>(), size(0x84 + 0x24, 0xbc + 0x24));
-        assert_eq!(size_of::<StormPlayer>(), 0x68);
-        assert_eq!(size_of::<SnpFunctions>(), (0x3c / 4 + 0x10) * size_of::<usize>());
-        assert_eq!(size_of::<PrismShaderSet>(), size(0x8, 0x10));
-        assert_eq!(size_of::<PrismShader>(), size(0x10, 0x18));
-        assert_eq!(size_of::<DrawCommand>(), size(0xa0, 0xd8));
-        // Not correct on 64bit but don't think we rely on the size at all.
-        assert_eq!(size_of::<Shader>(), 0x78);
-        assert_eq!(size_of::<Sprite>(), size(0x28, 0x48));
-        assert_eq!(size_of::<V_Renderer>(), 0x44 / 4 * size_of::<usize>());
-        assert_eq!(size_of::<VertexBuffer>(), size(0x4c, 0x98));
-        assert_eq!(size_of::<RenderTarget>(), size(0x20, 0x28));
-        assert_eq!(size_of::<DrawSort>(), size(0x8, 0x10));
-        assert_eq!(size_of::<Texture>(), size(0x10, 0x18));
-        assert_eq!(size_of::<DdsGrp>(), size(0x8, 0x10));
-        assert_eq!(size_of::<DdsGrpSet>(), size(0x28, 0x48));
-        assert_eq!(size_of::<Font>(), size(0x18, 0x28));
-        assert_eq!(size_of::<TtfFont>(), size(0xa0, 0xc8));
-    }
-}
 
 // Actually thiscall, but that isn't available in stable Rust (._.)
 // Luckily we don't care about ecx
@@ -955,6 +354,15 @@ impl BwValue for u32 {
     }
     fn to_usize(val: Self) -> usize {
         val as usize
+    }
+}
+
+impl BwValue for f32 {
+    fn from_usize(val: usize) -> Self {
+        f32::from_bits(val as u32)
+    }
+    fn to_usize(val: Self) -> usize {
+        val.to_bits() as usize
     }
 }
 
@@ -1036,10 +444,11 @@ unsafe fn resolve_operand(op: scarf::Operand<'_>, custom: &[usize]) -> usize {
             let (base, offset) = mem.address();
             let addr = resolve_operand(base, custom).wrapping_add(offset as usize);
             if addr < 0x80 {
-                let val = read_fs_gs(addr as usize);
+                let val = read_fs_gs(addr);
                 match mem.size {
                     MemAccessSize::Mem8 => val & 0xff,
                     MemAccessSize::Mem16 => val & 0xffff,
+                    #[allow(clippy::identity_op)] // only identity_op on x86
                     MemAccessSize::Mem32 => val & 0xffff_ffff,
                     MemAccessSize::Mem64 => val,
                 }
@@ -1116,10 +525,7 @@ impl GameInfoValueTrait for scr::GameInfoValueOld {
                 var1: mem::zeroed(),
             },
         };
-        init_bw_string(
-            &mut *(value.data.var1.as_mut_ptr() as *mut scr::BwString),
-            val,
-        );
+        init_bw_string(value.data.var1.as_mut_ptr() as *mut scr::BwString, val);
         value
     }
 }
@@ -1139,10 +545,7 @@ impl GameInfoValueTrait for scr::GameInfoValue {
                 var1: mem::zeroed(),
             },
         };
-        init_bw_string(
-            &mut *(value.data.var1.as_mut_ptr() as *mut scr::BwString),
-            val,
-        );
+        init_bw_string(value.data.var1.as_mut_ptr() as *mut scr::BwString, val);
         value
     }
 }
@@ -1271,8 +674,10 @@ impl BwScr {
             .prism_pixel_shaders()
             .ok_or("Prism pixel shaders")?;
         let prism_renderer_vtable = analysis.prism_renderer_vtable().ok_or("Prism renderer")?;
+        let console_vtables = analysis.console_vtables();
 
         let first_active_unit = analysis.first_active_unit().ok_or("first_active_unit")?;
+        let first_player_unit = analysis.first_player_unit().ok_or("first_player_unit")?;
         let client_selection = analysis.client_selection().ok_or("client_selection")?;
         let sprite_x = analysis.sprite_x().ok_or("sprite_x")?;
         let sprite_y = analysis.sprite_y().ok_or("sprite_y")?;
@@ -1350,6 +755,8 @@ impl BwScr {
         let spawn_dialog = analysis.spawn_dialog().ok_or("spawn_dialog")?;
         let step_game_logic = analysis.step_game_logic().ok_or("step_game_logic")?;
         let anti_troll = analysis.anti_troll();
+        let first_dialog = analysis.first_dialog();
+        let graphic_layers = analysis.graphic_layers();
         let units = analysis.units().ok_or("units")?;
         let vertex_buffer = analysis.vertex_buffer().ok_or("vertex_buffer")?;
         let renderer = analysis.renderer().ok_or("renderer")?;
@@ -1369,6 +776,8 @@ impl BwScr {
         let game_screen_height_bwpx = analysis
             .game_screen_height_bwpx()
             .ok_or("game_screen_height_bwpx")?;
+        let game_screen_height_ratio = analysis.game_screen_height_ratio();
+        let zoom = analysis.zoom().ok_or("zoom")?;
         let move_screen = analysis.move_screen().ok_or("move_screen")?;
         let update_game_screen_size = analysis
             .update_game_screen_size()
@@ -1378,7 +787,9 @@ impl BwScr {
         let init_consoles = analysis.init_consoles().ok_or("init_consoles")?;
         let get_ui_consoles = analysis.get_ui_consoles().ok_or("get_ui_consoles")?;
         let init_obs_ui = analysis.init_obs_ui().ok_or("init_obs_ui")?;
-        let draw_graphic_layers = analysis.draw_graphic_layers().ok_or("draw_graphic_layers")?;
+        let draw_graphic_layers = analysis
+            .draw_graphic_layers()
+            .ok_or("draw_graphic_layers")?;
         let decide_cursor_type = analysis.decide_cursor_type().ok_or("decide_cursor_type")?;
         let select_units = analysis.select_units().ok_or("select_units")?;
 
@@ -1444,6 +855,7 @@ impl BwScr {
             local_player_name: Value::new(ctx, local_player_name),
             fonts: Value::new(ctx, fonts),
             first_active_unit: Value::new(ctx, first_active_unit),
+            first_player_unit: Value::new(ctx, first_player_unit),
             client_selection: Value::new(ctx, client_selection),
             sprites_by_y_tile: Value::new(ctx, sprites_by_y_tile),
             sprites_by_y_tile_end: Value::new(ctx, sprites_by_y_tile_end),
@@ -1472,9 +884,13 @@ impl BwScr {
             screen_y: Value::new(ctx, screen_y),
             game_screen_width_bwpx: Value::new(ctx, game_screen_width_bwpx),
             game_screen_height_bwpx: Value::new(ctx, game_screen_height_bwpx),
+            zoom: Value::new(ctx, zoom),
+            game_screen_height_ratio: game_screen_height_ratio.map(move |x| Value::new(ctx, x)),
             replay_bfix: replay_bfix.map(move |x| Value::new(ctx, x)),
             replay_gcfg: replay_gcfg.map(move |x| Value::new(ctx, x)),
             anti_troll: anti_troll.map(move |x| Value::new(ctx, x)),
+            first_dialog: first_dialog.map(move |x| Value::new(ctx, x)),
+            graphic_layers: graphic_layers.map(move |x| Value::new(ctx, x)),
             free_sprites,
             active_fow_sprites,
             free_fow_sprites,
@@ -1484,10 +900,10 @@ impl BwScr {
             status_screen_funcs,
             original_status_screen_update,
             net_format_turn_rate,
-            update_game_screen_size,
             init_obs_ui,
             draw_graphic_layers,
             decide_cursor_type,
+            update_game_screen_size: unsafe { mem::transmute(update_game_screen_size.0) },
             init_network_player_info: unsafe { mem::transmute(init_network_player_info.0) },
             step_network: unsafe { mem::transmute(step_network.0) },
             step_network_addr: step_network,
@@ -1529,6 +945,7 @@ impl BwScr {
             game_command_lengths,
             prism_pixel_shaders,
             prism_renderer_vtable,
+            console_vtables,
             replay_minimap_patch,
             prepare_issue_order,
             create_game_multiplayer,
@@ -1560,6 +977,9 @@ impl BwScr {
                 overlay: draw_overlay::OverlayState::new(),
             }),
             apm_state: RecurseCheckedMutex::new(ApmStats::new()),
+            original_game_screen_height_ratio: AtomicU32::new(0),
+            console_hidden_state: AtomicBool::new(false),
+            game_results_sent: AtomicBool::new(false),
         })
     }
 
@@ -1720,7 +1140,7 @@ impl BwScr {
             ProcessLobbyCommands,
             move |data, len, player, orig| {
                 let slice = std::slice::from_raw_parts(data, len);
-                if let Some(&byte) = slice.get(0) {
+                if let Some(&byte) = slice.first() {
                     if byte == 0x48 && player == 0 {
                         self.lobby_game_init_command_seen
                             .store(true, Ordering::Relaxed);
@@ -1792,7 +1212,7 @@ impl BwScr {
             address,
         );
 
-        let address = self.update_game_screen_size.0 as usize - base;
+        let address = self.update_game_screen_size as usize - base;
         exe.hook_closure_address(
             UpdateGameScreenSize,
             move |zoom, orig| {
@@ -1825,8 +1245,8 @@ impl BwScr {
                         (old_x as i32).checked_sub(diff / 2)
                     })();
                     if let Some(new_x) = new_x {
-                        let max_x = self.map_width_pixels.resolve().checked_sub(new_width)
-                            .unwrap_or(0) as i32;
+                        let max_x =
+                            self.map_width_pixels.resolve().saturating_sub(new_width) as i32;
                         let new_x = new_x.clamp(0, max_x) as u32;
                         let y = self.screen_y.resolve();
                         (self.move_screen)(new_x, y);
@@ -1871,7 +1291,7 @@ impl BwScr {
                     let race_char = match (*game).player_race {
                         0 => b'z',
                         1 => b't',
-                        2 | _ => b'p',
+                        _ => b'p',
                     };
                     self.load_consoles.call1(ui_consoles);
                     self.init_consoles.call2(ui_consoles, race_char as u32);
@@ -1880,6 +1300,10 @@ impl BwScr {
                     self.local_unique_player_id.write(local_id);
                 } else {
                     orig();
+                }
+                if let Some(ratio) = self.game_screen_height_ratio {
+                    self.original_game_screen_height_ratio
+                        .store(ratio.resolve().to_bits(), Ordering::Relaxed);
                 }
             },
             address,
@@ -1915,9 +1339,7 @@ impl BwScr {
         );
 
         #[cfg(target_arch = "x86")]
-        let prepare_issue_order_hook =
-            move |unit, order, xy, target, fow, clear_queue, _orig|
-        {
+        let prepare_issue_order_hook = move |unit, order, xy, target, fow, clear_queue, _orig| {
             let unit = match Unit::from_ptr(unit) {
                 Some(s) => s,
                 None => return,
@@ -1934,28 +1356,23 @@ impl BwScr {
 
         #[cfg(target_arch = "x86_64")]
         let prepare_issue_order_hook =
-            move |unit, order, target: *mut bw::PointAndUnit, fow, clear_queue, _orig|
-        {
-            let unit = match Unit::from_ptr(unit) {
-                Some(s) => s,
-                None => return,
-            };
-            let order = bw_dat::OrderId(order as u8);
-            let x = (*target).pos.x;
-            let y = (*target).pos.y;
-            let target = Unit::from_ptr((*target).unit);
-            let fow = fow as u16;
-            let clear_queue = clear_queue != 0;
+            move |unit, order, target: *mut bw::PointAndUnit, fow, clear_queue, _orig| {
+                let unit = match Unit::from_ptr(unit) {
+                    Some(s) => s,
+                    None => return,
+                };
+                let order = bw_dat::OrderId(order as u8);
+                let x = (*target).pos.x;
+                let y = (*target).pos.y;
+                let target = Unit::from_ptr((*target).unit);
+                let fow = fow as u16;
+                let clear_queue = clear_queue != 0;
 
-            game::prepare_issue_order(self, unit, order, x, y, target, fow, clear_queue);
-        };
+                game::prepare_issue_order(self, unit, order, x, y, target, fow, clear_queue);
+            };
 
         let address = self.prepare_issue_order.0 as usize - base;
-        exe.hook_closure_address(
-            PrepareIssueOrder,
-            prepare_issue_order_hook,
-            address,
-        );
+        exe.hook_closure_address(PrepareIssueOrder, prepare_issue_order_hook, address);
 
         let address = self.create_game_multiplayer.0 as usize - base;
         exe.hook_closure_address(
@@ -2052,6 +1469,23 @@ impl BwScr {
 
         self.rendering_patches(&mut exe, base);
 
+        for &vtable in &self.console_vtables {
+            let vtable = vtable.0 as *const scr::V_UiConsole;
+            let relative = (*vtable).hit_test.cast_usize() - base;
+            // Make console hittest return false when console is hidden.
+            //
+            // Unfortunately BW doesn't update hittest result until mouse moves,
+            // so there's small bug with clicks right after console is shown/hidden.
+            exe.hook_closure_address(
+                Console_HitTest,
+                move |console, x, y, orig| match self.console_hidden() {
+                    true => 0,
+                    false => orig(console, x, y),
+                },
+                relative,
+            );
+        }
+
         sdf_cache::apply_sdf_cache_hooks(self, &mut exe, base);
 
         let create_file_hook_closure =
@@ -2105,7 +1539,7 @@ impl BwScr {
         let base = GetModuleHandleW(null()) as usize;
         let sdf_cache = self.sdf_cache.clone();
         let async_handle = crate::async_handle();
-        let mut sdf_cache = sdf_cache.clone().lock_owned();
+        let mut sdf_cache = sdf_cache.lock_owned();
         async_handle.spawn(async move {
             let exe_hash = pe_image::hash_pe_header(base as *const u8);
             *sdf_cache = Some(SdfCache::init(exe_hash).await);
@@ -2127,8 +1561,26 @@ impl BwScr {
         // so that the game will be able to fade between the two graphic modes.
         exe.hook_closure_address(
             DrawGraphicLayers,
-            move |a, b, second_draw, orig| {
-                orig(a, b, second_draw);
+            move |extra_funcs, extra_func_len, second_draw, orig| {
+                // It is expected that extra_funcs array has one (just one) function that
+                // draws the UI console. If console is hidden just call orig with 0 extra funcs
+                // and it should make the static parts of console hidden.
+                // (Interactable parts of the console are dialogs which need to be hidden
+                // separately.)
+                let graphic_layers = self.graphic_layers.and_then(|x| NonNull::new(x.resolve()));
+                if self.console_hidden() {
+                    if let Some(layers) = graphic_layers {
+                        // Don't draw tooltip layer if it was active.
+                        // It can stay active when hiding console depending on where
+                        // the mouse was on when console was hidden, even if the control
+                        // becomes uninteractable.
+                        // (Pretty sure that none of the menus use tooltips)
+                        (*layers.as_ptr().add(1)).draw = 0;
+                    }
+                    orig(extra_funcs, 0, second_draw);
+                } else {
+                    orig(extra_funcs, extra_func_len, second_draw);
+                }
                 let renderer = self.renderer.resolve();
                 let commands = self.draw_commands.resolve();
                 let vertex_buffer = self.vertex_buffer.resolve();
@@ -2139,8 +1591,8 @@ impl BwScr {
                     return;
                 }
                 let game = bw_dat::Game::from_ptr(game);
-                let is_replay_or_obs = self.is_replay.resolve() != 0 ||
-                    self.local_unique_player_id.resolve() >= 0x80;
+                let is_replay_or_obs = self.is_replay_or_obs();
+                let is_team_game = game_thread::is_team_game();
                 let main_palette = self.main_palette.resolve();
                 let rgb_colors = self.rgb_colors.resolve();
                 let use_rgb_colors = self.use_rgb_colors.resolve();
@@ -2148,28 +1600,31 @@ impl BwScr {
                 let cmdicons = self.cmdicons.resolve();
                 let replay_visions = self.replay_visions.resolve();
                 let active_units = self.active_units();
+                let first_player_unit = self.first_player_unit.resolve();
+                let first_dialog = self.resolve_first_dialog();
                 // Assuming that the last added draw command (Added during orig() call)
                 // will have the is_hd value that is currently being used.
                 // Could also probably examine the render target from get_render_target,
                 // as that changes depending on if BW is currently rendering HD or not.
-                let is_hd = (*commands).draw_command_count
+                let is_hd = (*commands)
+                    .draw_command_count
                     .checked_sub(1)
                     .and_then(|idx| (*commands).commands.get(idx as usize))
                     .map(|x| x.is_hd != 0)
                     .unwrap_or(false);
-                let is_carbot = self.is_carbot.load(Ordering::Relaxed);
+                // SC:R only enables carbot if both of these flags are set
+                let is_carbot = self.is_carbot.load(Ordering::Relaxed)
+                    && self.show_skins.load(Ordering::Relaxed);
                 // Render target 1 is for UI layers (0xb to 0x1d inclusive)
-                let render_target = draw_inject::RenderTarget::new(
-                    (self.get_render_target)(1),
-                    1,
-                );
+                let render_target = draw_inject::RenderTarget::new((self.get_render_target)(1), 1);
                 if let Some(mut render_state) = self.render_state.lock() {
                     let apm_guard = self.apm_state.lock();
                     let apm = apm_guard.as_deref();
                     let size = ((*render_target.bw).width, (*render_target.bw).height);
                     let overlay_out = render_state.overlay.step(
-                        &mut draw_overlay::BwVars {
+                        &draw_overlay::BwVars {
                             is_replay_or_obs,
+                            is_team_game,
                             game,
                             players,
                             main_palette,
@@ -2177,6 +1632,9 @@ impl BwScr {
                             use_rgb_colors,
                             replay_visions,
                             active_units,
+                            first_player_unit,
+                            first_dialog,
+                            graphic_layers,
                         },
                         apm,
                         size,
@@ -2192,6 +1650,42 @@ impl BwScr {
                         let units = [*unit];
                         (self.select_units)(units.len(), units.as_ptr(), 1, 1);
                         self.center_screen(&unit.position());
+                    }
+                    if let Some((ctrl, show)) = overlay_out.show_hide_control {
+                        if show {
+                            if ctrl.control_type() == 0 {
+                                // ctrl.show() crashes for dialogs, but this seems to work..
+                                // (It tries to check if mouse x/y is on control, but
+                                // to do that it'll access parent rect, which won't exist
+                                // for dialogs)
+                                (*(*ctrl as *mut bw::scr::Control)).flags |= 0x2;
+                            } else {
+                                ctrl.show();
+                            }
+                        } else {
+                            ctrl.hide();
+                        }
+                    }
+                    if let Some((index, show)) = overlay_out.show_hide_graphic_layer {
+                        assert!(index < 8);
+                        if let Some(layers) = graphic_layers {
+                            let layer = layers.as_ptr().add(index as usize);
+                            if show {
+                                if (*layer).draw_func.is_some() {
+                                    (*layer).draw = 1;
+                                }
+                            } else {
+                                (*layer).draw = 0;
+                            }
+                        }
+                    }
+                    let console_shown = !self.console_hidden();
+                    if overlay_out.show_console != console_shown {
+                        if overlay_out.show_console {
+                            self.show_console(first_dialog);
+                        } else {
+                            self.hide_console(first_dialog);
+                        }
                     }
                     draw_inject::add_overlays(
                         &mut render_state.render,
@@ -2318,7 +1812,9 @@ impl BwScr {
             None => return,
         };
         let x = (pos.x as u32).saturating_sub(width / 2).clamp(0, max_width);
-        let y = (pos.y as u32).saturating_sub(height / 2).clamp(0, max_height);
+        let y = (pos.y as u32)
+            .saturating_sub(height / 2)
+            .clamp(0, max_height);
         (self.move_screen)(x, y);
     }
 
@@ -2555,16 +2051,16 @@ impl BwScr {
         &self,
         input_game_info: &mut bw::BwGameData,
         is_eud: bool,
-        turn_rate: u32,
-    ) -> bw_hash_table::HashTable<scr::BwString, T> {
-        let mut params = bw_hash_table::HashTable::<scr::BwString, T>::new(0x20, 0x8, 0x28);
+        options: LobbyOptions,
+    ) -> bw_hash_table::HashTable<scr::BwStringAlign8, T> {
+        let mut params = bw_hash_table::HashTable::<scr::BwStringAlign8, T>::new(0x20);
         let mut add_param = |key: &[u8], value: u32| {
-            let mut string: scr::BwString = mem::zeroed();
-            init_bw_string(&mut string, key);
+            let mut string: scr::BwStringAlign8 = mem::zeroed();
+            init_bw_string(ptr::addr_of_mut!(string.inner), key);
             let mut value = T::from_u32(value);
             params.insert(&mut string, &mut value);
         };
-        add_param(b"save_game_id", input_game_info.save_checksum as u32);
+        add_param(b"save_game_id", input_game_info.save_checksum);
         add_param(b"is_replay", input_game_info.is_replay as u32);
         // Can lie for most of these player counts
         add_param(b"players_current", 1);
@@ -2578,14 +2074,20 @@ impl BwScr {
         add_param(b"map_tile_set", input_game_info.tileset as u32);
         add_param(b"map_width", input_game_info.map_width as u32);
         add_param(b"map_height", input_game_info.map_height as u32);
-        add_param(b"net_turn_rate", turn_rate);
+        add_param(b"net_turn_rate", options.turn_rate);
         // Flag 0x4 = Old limits, 0x10 = EUD
-        let flags = if is_eud { 0x14 } else { 0x0 };
+        let flags = if options.game_type.is_ums() && is_eud {
+            0x14
+        } else if options.use_legacy_limits {
+            0x4
+        } else {
+            0x0
+        };
         add_param(b"flags", flags);
 
         let mut add_param_string = |key: &[u8], value_str: &[u8]| {
-            let mut string: scr::BwString = mem::zeroed();
-            init_bw_string(&mut string, key);
+            let mut string: scr::BwStringAlign8 = mem::zeroed();
+            init_bw_string(ptr::addr_of_mut!(string.inner), key);
             let mut value = T::from_string(value_str);
             params.insert(&mut string, &mut value);
         };
@@ -2643,6 +2145,25 @@ impl BwScr {
             *apm = ApmStats::new();
         }
     }
+
+    fn resolve_first_dialog(&self) -> Option<bw_dat::dialog::Dialog> {
+        unsafe {
+            self.first_dialog
+                .map(|x| x.resolve())
+                .filter(|x| !x.is_null())
+                .map(|x| bw_dat::dialog::Dialog::new(x))
+        }
+    }
+
+    fn is_replay_or_obs(&self) -> bool {
+        unsafe { self.is_replay.resolve() != 0 || self.local_unique_player_id.resolve() >= 0x80 }
+    }
+
+    /// Sets [game_results_sent] atomically, returning whether the results need to be sent by the
+    /// caller.
+    pub fn trigger_game_results_sent(&self) -> bool {
+        !self.game_results_sent.swap(true, Ordering::Relaxed)
+    }
 }
 
 impl bw::Bw for BwScr {
@@ -2687,7 +2208,7 @@ impl bw::Bw for BwScr {
             // Replay seeking exits game loop and sets a bool for it to restart,
             // we don't have access to that bool but we hook the replay seek
             // command and set our own
-            if self.is_replay_seeking.load(Ordering::Relaxed) == false {
+            if !self.is_replay_seeking.load(Ordering::Relaxed) {
                 break;
             }
             self.is_replay_seeking.store(false, Ordering::Relaxed);
@@ -2768,24 +2289,27 @@ impl bw::Bw for BwScr {
         map_path: &Path,
         map_info: &MapInfo,
         lobby_name: &str,
-        game_type: bw::GameType,
-        turn_rate: u32,
+        options: LobbyOptions,
     ) -> Result<(), bw::LobbyCreateError> {
         let mut game_input: scr::GameInput = mem::zeroed();
         init_bw_string(&mut game_input.name, lobby_name.as_bytes());
         init_bw_string(&mut game_input.password, b"");
         game_input.speed = 6;
-        game_input.game_type_subtype = game_type.as_u32();
-
-        game_input.turn_rate = turn_rate;
-
-        let is_eud = match map_info.map_data {
-            Some(ref s) => s.is_eud,
-            None => false,
-        };
-        if is_eud {
+        game_input.game_type_subtype = options.game_type.as_u32();
+        game_input.turn_rate = options.turn_rate;
+        if options.use_legacy_limits {
             game_input.old_limits = 1;
-            game_input.eud = 1;
+        }
+
+        if options.game_type.is_ums() {
+            let is_eud = match map_info.map_data {
+                Some(ref s) => s.is_eud,
+                None => false,
+            };
+            if is_eud {
+                game_input.old_limits = 1;
+                game_input.eud = 1;
+            }
         }
 
         let map_dir = match map_path.parent() {
@@ -2868,14 +2392,14 @@ impl bw::Bw for BwScr {
         &self,
         input_game_info: &mut bw::BwGameData,
         is_eud: bool,
-        turn_rate: u32,
+        options: LobbyOptions,
         map_path: &CStr,
         address: std::net::Ipv4Addr,
     ) -> Result<(), u32> {
         // The GameInfoValue struct is being changed on the newer versions that keeps
         // getting rolled back.. Keep support for both versions.
         let params = if self.uses_new_join_param_variant {
-            self.build_join_game_params::<scr::GameInfoValue>(input_game_info, is_eud, turn_rate)
+            self.build_join_game_params::<scr::GameInfoValue>(input_game_info, is_eud, options)
         } else {
             // HashTable itself has same layout regardless of which values it contains,
             // so this kind of cast is fine. Only BW is going to read params after this,
@@ -2888,7 +2412,7 @@ impl bw::Bw for BwScr {
             mem::transmute(self.build_join_game_params::<scr::GameInfoValueOld>(
                 input_game_info,
                 is_eud,
-                turn_rate,
+                options,
             ))
         };
 
@@ -3032,7 +2556,9 @@ impl bw::Bw for BwScr {
         // SCR has longer player names after the bw::Player array,
         // which are ones that it (mostly?) uses.
         let players = self.players();
-        (&mut (*players.add(id as usize)).name).copy_from_slice(&buffer[..25]);
+        (*players.add(id as usize))
+            .name
+            .copy_from_slice(&buffer[..25]);
         let player_names = players.add(0x10) as *mut u8;
         let long_name = player_names.add(id as usize * 0x60);
         let long_name = std::slice::from_raw_parts_mut(long_name, 0x60);
@@ -3062,8 +2588,8 @@ impl bw::Bw for BwScr {
     unsafe fn client_selection(&self) -> [Option<Unit>; 12] {
         let selection = self.client_selection.resolve();
         let mut out = [None; 12];
-        for i in 0..12 {
-            out[i] = Unit::from_ptr(*selection.add(i));
+        for (i, item) in out.iter_mut().enumerate() {
+            *item = Unit::from_ptr(*selection.add(i));
         }
         out
     }
@@ -3081,7 +2607,7 @@ impl bw::Bw for BwScr {
                 protocol_version: player.protocol_version,
                 name: {
                     let mut name = [0; 0x19];
-                    (&mut name[..0x18]).copy_from_slice(&player.name[..0x18]);
+                    name[..0x18].copy_from_slice(&player.name[..0x18]);
                     name
                 },
                 padding: 0,
@@ -3140,7 +2666,9 @@ impl bw::Bw for BwScr {
                 return None;
             }
         };
-        render_state.overlay.window_proc(window, msg, wparam, lparam)
+        render_state
+            .overlay
+            .window_proc(window, msg, wparam, lparam)
     }
 }
 
@@ -3254,7 +2782,6 @@ fn create_file_hook(
     ) -> *mut c_void,
 ) -> *mut c_void {
     use winapi::um::fileapi::{CREATE_ALWAYS, CREATE_NEW};
-    use winapi::um::handleapi::INVALID_HANDLE_VALUE;
     use winapi::um::winnt::GENERIC_READ;
     unsafe {
         let mut is_replay = false;
@@ -3312,7 +2839,7 @@ fn create_file_hook(
                         panic!("Unable to read CASC archive, may have to repair installation");
                     } else {
                         SetLastError(winapi::shared::winerror::ERROR_FILE_NOT_FOUND);
-                        return INVALID_HANDLE_VALUE;
+                        return -1isize as *mut c_void;
                     }
                 }
             }
@@ -3326,7 +2853,7 @@ fn create_file_hook(
             flags,
             template,
         );
-        if handle != INVALID_HANDLE_VALUE && is_replay {
+        if handle != -1isize as *mut c_void && is_replay {
             bw.register_possible_replay_handle(handle);
         }
         handle
@@ -3337,10 +2864,10 @@ fn check_filename(filename: &[u16], compare: &[u8]) -> bool {
     let ending =
         Some(()).and_then(|()| filename.get(filename.len().checked_sub(compare.len() + 1)?..));
     if let Some(ending) = ending {
-        if ending[0] == b'\\' as u16 || ending[0] == b'/' as u16 {
-            if ascii_compare_u16_u8_casei(&ending[1..], compare) {
-                return true;
-            }
+        if (ending[0] == b'\\' as u16 || ending[0] == b'/' as u16)
+            && ascii_compare_u16_u8_casei(&ending[1..], compare)
+        {
+            return true;
         }
     }
     false
@@ -3434,7 +2961,7 @@ fn ascii_compare_u16_u8_casei(a: &[u16], b: &[u8]) -> bool {
         return false;
     }
     for i in 0..a.len() {
-        if a[i] >= 0x80 || (a[i] as u8).eq_ignore_ascii_case(&b[i]) == false {
+        if a[i] >= 0x80 || !(a[i] as u8).eq_ignore_ascii_case(&b[i]) {
             return false;
         }
     }
@@ -3545,7 +3072,7 @@ unsafe extern "system" fn snp_load_bind(snp_index: u32, funcs: *mut *const SnpFu
     1
 }
 
-#[allow(bad_style)]
+#[allow(bad_style, clippy::ptr_offset_with_cast, clippy::unused_unit)]
 mod hooks {
     use libc::c_void;
 
@@ -3591,7 +3118,7 @@ mod hooks {
         !0 => NetFormatTurnRate(*mut scr::NetFormatTurnRateResult, bool) ->
             *mut scr::NetFormatTurnRateResult;
         !0 => UpdateGameScreenSize(f32);
-        !0 => DrawGraphicLayers(*mut c_void, *mut c_void, u32);
+        !0 => DrawGraphicLayers(*mut c_void, usize, u32);
         !0 => DecideCursorType() -> u32;
     );
 
@@ -3626,6 +3153,7 @@ mod hooks {
             *const u8,
             *mut c_void,
         ) -> usize;
+        !0 => Console_HitTest(*mut scr::UiConsole, i32, i32) -> u8;
     );
 
     #[cfg(target_arch = "x86")]
@@ -3643,11 +3171,13 @@ mod hooks {
 // mov eax, [esp + 4]; mov eax, fs:[eax]; ret
 #[cfg(target_arch = "x86")]
 #[link_section = ".text"]
+#[no_mangle] // Workaround for linker errors on opt-level 1 ??
 static READ_FS_GS: [u8; 8] = [0x8b, 0x44, 0xe4, 0x04, 0x64, 0x8b, 0x00, 0xc3];
 
 // mov rax, gs:[rcx]; ret
 #[cfg(target_arch = "x86_64")]
 #[link_section = ".text"]
+#[no_mangle] // Workaround for linker errors on opt-level 1 ??
 static READ_FS_GS: [u8; 5] = [0x65, 0x48, 0x8b, 0x00, 0xc3];
 
 unsafe fn read_fs_gs(offset: usize) -> usize {
@@ -3658,21 +3188,20 @@ unsafe fn read_fs_gs(offset: usize) -> usize {
 /// Value is assumed to not have null terminator.
 /// Leaks memory and BW should not be let to deallocate the buffer
 /// if value doens't fit inline.
-unsafe fn init_bw_string(out: &mut scr::BwString, value: &[u8]) {
+unsafe fn init_bw_string(out: *mut scr::BwString, value: &[u8]) {
     if value.len() < 16 {
-        (&mut out.inline_buffer[..value.len()]).copy_from_slice(value);
-        out.inline_buffer[value.len()] = 0;
-        out.pointer = out.inline_buffer.as_mut_ptr();
-        out.length = value.len();
-        out.capacity = 15 | (isize::min_value() as usize);
+        (*out).inline_buffer[..value.len()].copy_from_slice(value);
+        (*out).inline_buffer[value.len()] = 0;
+        (*out).pointer = (*out).inline_buffer.as_mut_ptr();
+        (*out).length = value.len();
+        (*out).capacity = 15 | (isize::min_value() as usize);
     } else {
-        let mut vec = Vec::with_capacity(value.len() + 1);
+        let mut vec = mem::ManuallyDrop::new(Vec::with_capacity(value.len() + 1));
         vec.extend(value.iter().cloned());
         vec.push(0);
-        out.pointer = vec.as_mut_ptr();
-        mem::forget(vec);
-        out.length = value.len();
-        out.capacity = value.len();
+        (*out).pointer = vec.as_mut_ptr();
+        (*out).length = value.len();
+        (*out).capacity = value.len();
     }
 }
 

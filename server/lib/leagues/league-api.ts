@@ -1,9 +1,7 @@
 import { RouterContext } from '@koa/router'
-import cuid from 'cuid'
-import formidable from 'formidable'
 import httpErrors from 'http-errors'
 import Joi from 'joi'
-import sharp from 'sharp'
+import mime from 'mime'
 import { assertUnreachable } from '../../../common/assert-unreachable'
 import {
   AdminAddLeagueResponse,
@@ -27,23 +25,24 @@ import {
   toLeagueJson,
 } from '../../../common/leagues'
 import { ALL_MATCHMAKING_TYPES } from '../../../common/matchmaking'
+import { Patch } from '../../../common/patch'
 import { UNIQUE_VIOLATION } from '../db/pg-error-codes'
 import transact from '../db/transaction'
 import { CodedError, makeErrorConverterMiddleware } from '../errors/coded-error'
 import { asHttpError } from '../errors/error-with-payload'
 import { writeFile } from '../file-upload'
 import { handleMultipartFiles } from '../file-upload/handle-multipart-files'
+import { MAX_IMAGE_SIZE, createImagePath, resizeImage } from '../file-upload/images'
 import { httpApi, httpBeforeAll } from '../http/http-api'
 import { httpBefore, httpGet, httpPatch, httpPost } from '../http/route-decorators'
 import { checkAllPermissions } from '../permissions/check-permissions'
-import { Redis } from '../redis'
+import { Redis } from '../redis/redis'
 import ensureLoggedIn from '../session/ensure-logged-in'
 import { findUsersById } from '../users/user-model'
 import { validateRequest } from '../validation/joi-validator'
 import { getLeaderboard } from './leaderboard'
 import {
   LeagueUser,
-  Patch,
   adminGetAllLeagues,
   adminGetLeague,
   createLeague,
@@ -57,8 +56,6 @@ import {
   joinLeagueForUser,
   updateLeague,
 } from './league-models'
-
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 class LeagueApiError extends CodedError<LeagueErrorCode> {}
 
@@ -100,12 +97,12 @@ export class LeagueApi {
   @httpGet('/')
   async getLeagues(ctx: RouterContext): Promise<GetLeaguesListResponse> {
     const now = new Date()
-    const isLoggedIn = !!ctx.session?.userId
+    const isLoggedIn = !!ctx.session?.user
     const [past, current, future, selfLeagues] = await Promise.all([
       getPastLeagues(now),
       getCurrentLeagues(now),
       getFutureLeagues(now),
-      isLoggedIn ? getAllLeaguesForUser(ctx.session!.userId) : [],
+      isLoggedIn ? getAllLeaguesForUser(ctx.session!.user!.id) : [],
     ])
     return {
       past: past.map(l => toLeagueJson(l)),
@@ -126,8 +123,8 @@ export class LeagueApi {
     }
 
     let selfLeagueUser: LeagueUser | undefined
-    if (ctx.session?.userId) {
-      selfLeagueUser = await getLeagueUser(leagueId, ctx.session.userId)
+    if (ctx.session?.user) {
+      selfLeagueUser = await getLeagueUser(leagueId, ctx.session.user.id)
     }
 
     return {
@@ -177,10 +174,10 @@ export class LeagueApi {
 
     let selfLeagueUser: LeagueUser | undefined
     try {
-      selfLeagueUser = await joinLeagueForUser(leagueId, ctx.session!.userId)
+      selfLeagueUser = await joinLeagueForUser(leagueId, ctx.session!.user!.id)
     } catch (err: any) {
       if (err.code === UNIQUE_VIOLATION) {
-        selfLeagueUser = await getLeagueUser(leagueId, ctx.session!.userId)
+        selfLeagueUser = await getLeagueUser(leagueId, ctx.session!.user!.id)
       }
     }
 
@@ -217,30 +214,6 @@ export class LeagueAdminApi {
     return { league: toLeagueJson(league) }
   }
 
-  private async handleImage(
-    file: formidable.File,
-    width: number,
-    height: number,
-  ): Promise<[image: sharp.Sharp, imageExtension: string]> {
-    const image = sharp(file.filepath)
-    const metadata = await image.metadata()
-
-    let imageExtension: string
-    if (metadata.format !== 'jpg' && metadata.format !== 'jpeg' && metadata.format !== 'png') {
-      image.toFormat('png')
-      imageExtension = 'png'
-    } else {
-      imageExtension = metadata.format
-    }
-
-    image.resize(width, height, {
-      fit: sharp.fit.cover,
-      withoutEnlargement: true,
-    })
-
-    return [image, imageExtension]
-  }
-
   @httpPost('/')
   @httpBefore(handleMultipartFiles(MAX_IMAGE_SIZE))
   async addLeague(ctx: RouterContext): Promise<AdminAddLeagueResponse> {
@@ -271,28 +244,20 @@ export class LeagueAdminApi {
       throw new httpErrors.BadRequest('only one image/badge file can be uploaded')
     }
     const [image, imageExtension] = imageFile
-      ? await this.handleImage(imageFile, LEAGUE_IMAGE_WIDTH, LEAGUE_IMAGE_HEIGHT)
+      ? await resizeImage(imageFile.filepath, LEAGUE_IMAGE_WIDTH, LEAGUE_IMAGE_HEIGHT)
       : [undefined, undefined]
     const [badge, badgeExtension] = badgeFile
-      ? await this.handleImage(badgeFile, LEAGUE_BADGE_WIDTH, LEAGUE_BADGE_HEIGHT)
+      ? await resizeImage(badgeFile.filepath, LEAGUE_BADGE_WIDTH, LEAGUE_BADGE_HEIGHT)
       : [undefined, undefined]
 
     return await transact(async client => {
       let imagePath: string | undefined
       if (image) {
-        const imageId = cuid()
-        // Note that cuid ID's are less random at the start so we use the end instead
-        const firstChars = imageId.slice(-4, -2)
-        const secondChars = imageId.slice(-2)
-        imagePath = `league-images/${firstChars}/${secondChars}/${imageId}.${imageExtension}`
+        imagePath = createImagePath('league-images', imageExtension)
       }
       let badgePath: string | undefined
       if (badge) {
-        const imageId = cuid()
-        // Note that cuid ID's are less random at the start so we use the end instead
-        const firstChars = imageId.slice(-4, -2)
-        const secondChars = imageId.slice(-2)
-        badgePath = `league-images/${firstChars}/${secondChars}/${imageId}.${badgeExtension}`
+        badgePath = createImagePath('league-images', badgeExtension)
       }
 
       const league = await createLeague(
@@ -304,20 +269,28 @@ export class LeagueAdminApi {
         client,
       )
 
+      const filePromises: Array<Promise<unknown>> = []
+
       if (image && imagePath) {
         const buffer = await image.toBuffer()
-        writeFile(imagePath, buffer, {
-          acl: 'public-read',
-          type: imageExtension === 'png' ? 'image/png' : 'image/jpeg',
-        })
+        filePromises.push(
+          writeFile(imagePath, buffer, {
+            acl: 'public-read',
+            type: mime.getType(imageExtension),
+          }),
+        )
       }
       if (badge && badgePath) {
         const buffer = await badge.toBuffer()
-        writeFile(badgePath, buffer, {
-          acl: 'public-read',
-          type: badgeExtension === 'png' ? 'image/png' : 'image/jpeg',
-        })
+        filePromises.push(
+          writeFile(badgePath, buffer, {
+            acl: 'public-read',
+            type: mime.getType(badgeExtension),
+          }),
+        )
       }
+
+      await Promise.all(filePromises)
 
       return {
         league: toLeagueJson(league),
@@ -385,28 +358,20 @@ export class LeagueAdminApi {
       throw new httpErrors.BadRequest('only one image/badge file can be uploaded')
     }
     const [image, imageExtension] = imageFile
-      ? await this.handleImage(imageFile, LEAGUE_IMAGE_WIDTH, LEAGUE_IMAGE_HEIGHT)
+      ? await resizeImage(imageFile.filepath, LEAGUE_IMAGE_WIDTH, LEAGUE_IMAGE_HEIGHT)
       : [undefined, undefined]
     const [badge, badgeExtension] = badgeFile
-      ? await this.handleImage(badgeFile, LEAGUE_BADGE_WIDTH, LEAGUE_BADGE_HEIGHT)
+      ? await resizeImage(badgeFile.filepath, LEAGUE_BADGE_WIDTH, LEAGUE_BADGE_HEIGHT)
       : [undefined, undefined]
 
     return await transact(async client => {
       let imagePath: string | undefined
       if (image) {
-        const imageId = cuid()
-        // Note that cuid ID's are less random at the start so we use the end instead
-        const firstChars = imageId.slice(-4, -2)
-        const secondChars = imageId.slice(-2)
-        imagePath = `league-images/${firstChars}/${secondChars}/${imageId}.${imageExtension}`
+        imagePath = createImagePath('league-images', imageExtension)
       }
       let badgePath: string | undefined
       if (badge) {
-        const imageId = cuid()
-        // Note that cuid ID's are less random at the start so we use the end instead
-        const firstChars = imageId.slice(-4, -2)
-        const secondChars = imageId.slice(-2)
-        badgePath = `league-images/${firstChars}/${secondChars}/${imageId}.${badgeExtension}`
+        badgePath = createImagePath('league-images', badgeExtension)
       }
 
       const updatedLeague: Patch<Omit<League, 'id'>> = {
@@ -430,20 +395,28 @@ export class LeagueAdminApi {
 
       const league = await updateLeague(leagueId, updatedLeague, client)
 
+      const filePromises: Array<Promise<unknown>> = []
+
       if (image && imagePath) {
         const buffer = await image.toBuffer()
-        writeFile(imagePath, buffer, {
-          acl: 'public-read',
-          type: imageExtension === 'png' ? 'image/png' : 'image/jpeg',
-        })
+        filePromises.push(
+          writeFile(imagePath, buffer, {
+            acl: 'public-read',
+            type: mime.getType(imageExtension),
+          }),
+        )
       }
       if (badge && badgePath) {
         const buffer = await badge.toBuffer()
-        writeFile(badgePath, buffer, {
-          acl: 'public-read',
-          type: badgeExtension === 'png' ? 'image/png' : 'image/jpeg',
-        })
+        filePromises.push(
+          writeFile(badgePath, buffer, {
+            acl: 'public-read',
+            type: mime.getType(badgeExtension),
+          }),
+        )
       }
+
+      await Promise.all(filePromises)
 
       return {
         league: toLeagueJson(league),

@@ -1,9 +1,11 @@
 {
     "common": {
         "validators": {
-            "maxLength": "$🗡Enter at most {{maxLength}} characters🗡!",
-            "minLength": "$🗡Enter at least {{minLength}} characters🗡!",
-            "required": "$🗡Required🗡!"
+            "required": "$🗡Required🗡!",
+            "maxLength_one": "$🗡Enter at most {{count}} character🗡!",
+            "maxLength_other": "$🗡Enter at most {{count}} characters🗡!",
+            "minLength_one": "$🗡Enter at least {{count}} character🗡!",
+            "minLength_other": "$🗡Enter at least {{count}} characters🗡!"
         },
         "actions": {
             "back": "$🗡Back🗡!",
@@ -21,56 +23,198 @@
             "apply": "$🗡Apply🗡!",
             "remove": "$🗡Remove🗡!",
             "next": "$🗡Next🗡!",
-            "previous": "$🗡Previous🗡!"
+            "previous": "$🗡Previous🗡!",
+            "clear": "$🗡Clear🗡!",
+            "start": "$🗡Start🗡!",
+            "decline": "$🗡Decline🗡!",
+            "accept": "$🗡Accept🗡!",
+            "block": "$🗡Block🗡!",
+            "unblock": "$🗡Unblock🗡!",
+            "stop": "$🗡Stop🗡!",
+            "test": "$🗡Test🗡!",
+            "edit": "$🗡Edit🗡!",
+            "reveal": "$🗡Reveal🗡!",
+            "submit": "$🗡Submit🗡!"
+        },
+        "lists": {
+            "empty": "$🗡Nothing to see here🗡!"
         }
     },
     "settings": {
-        "app": {
-            "system": {
-                "label": "$🗡System🗡!"
-            },
-            "sound": {
-                "label": "$🗡Sound🗡!"
-            },
-            "label": "$🗡App🗡!"
-        },
         "game": {
             "gameplay": {
-                "label": "$🗡Gameplay🗡!"
-            },
-            "sound": {
-                "label": "$🗡Sound🗡!"
-            },
-            "starcraft": {
-                "label": "$🗡StarCraft🗡!"
-            },
-            "video": {
-                "label": "$🗡Video🗡!"
+                "apmAlert": "$🗡Alert when APM falls below🗡!",
+                "apmColorText": "$🗡Color text🗡!",
+                "apmDisplay": "$🗡APM display🗡!",
+                "apmSound": "$🗡Play sound🗡!",
+                "apmValue": "$🗡APM value🗡!",
+                "apmValueValidation": "$🗡Enter a value between 1 and 999🗡!",
+                "colorCycling": "$🗡Enable color cycling🗡!",
+                "consoleSkins": {
+                    "20thAnniversary": "$🗡StarCraft 20th Anniversary🗡!",
+                    "blizzcon2017": "$🗡BlizzCon 2017🗡!",
+                    "blizzcon2018": "$🗡BlizzCon 2018🗡!",
+                    "default": "$🗡Default🗡!",
+                    "krcGold": "$🗡KRC Gold🗡!",
+                    "krcSilver": "$🗡KRC Silver🗡!",
+                    "title": "$🗡Console skin🗡!",
+                    "warcraft3": "$🗡WarCraft 3 Spoils🗡!"
+                },
+                "devOnlySettings": "$🗡Dev-only settings🗡!",
+                "gameTimer": "$🗡Game timer🗡!",
+                "ingameSkins": {
+                    "carbot": "$🗡Carbot🗡!",
+                    "none": "$🗡None🗡!",
+                    "preorder": "$🗡Preorder🗡!",
+                    "title": "$🗡Ingame skin🗡!"
+                },
+                "latency": "$🗡Show latency🗡!",
+                "minimapPosition": {
+                    "bottomLeft": "$🗡Bottom-left corner🗡!",
+                    "standard": "$🗡Standard🗡!",
+                    "title": "$🗡Minimap position🗡!"
+                },
+                "showBonusSkins": "$🗡Show bonus skins🗡!",
+                "skinsInfo": "$🗡Skins (must be purchased from Blizzard)🗡!",
+                "title": "$🗡Gameplay🗡!",
+                "unitPortraits": {
+                    "animated": "$🗡Animated🗡!",
+                    "disabled": "$🗡Disabled🗡!",
+                    "still": "$🗡Still🗡!",
+                    "title": "$🗡Portraits🗡!"
+                },
+                "visualizeNetworkStalls": "$🗡Visualize network stalls🗡!"
             },
             "input": {
-                "label": "$🗡Input🗡!"
+                "customMouseSensitivity": "$🗡Custom mouse sensitivity🗡!",
+                "hardwareCursor": "$🗡Hardware cursor🗡!",
+                "keyboardScrollSpeed": "$🗡Keyboard scroll speed🗡!",
+                "lockCursor": "$🗡Lock cursor to window🗡!",
+                "mouseScaling": "$🗡Use mouse scaling🗡!",
+                "mouseScrollSpeed": "$🗡Mouse scroll speed🗡!",
+                "mouseSensitivity": "$🗡Mouse sensitivity🗡!",
+                "title": "$🗡Input🗡!"
             },
-            "label": "$🗡Game🗡!"
+            "sound": {
+                "announcer": {
+                    "default": "$🗡Default🗡!",
+                    "heyJini": "$🗡Hey Jini🗡!",
+                    "info": "$🗡Packs (must be purchased from Blizzard)🗡!",
+                    "jeonYongJun": "$🗡Jeon Yong Jun🗡!",
+                    "kimJungmin": "$🗡Kim Jungmin🗡!",
+                    "title": "$🗡Announcer🗡!",
+                    "umJaeKyung": "$🗡Um Jae Kyung🗡!",
+                    "umJeonKim": "$🗡Um, Jeon, Kim Trio🗡!"
+                },
+                "backgroundSounds": "$🗡Sound plays while in background🗡!",
+                "buildingSounds": "$🗡Building sounds🗡!",
+                "cinematicSubtitles": "$🗡Cinematic subtitles🗡!",
+                "gameSounds": "$🗡Game sounds🗡!",
+                "gameSubtitles": "$🗡Game subtitles🗡!",
+                "music": "$🗡Music🗡!",
+                "musicVolume": "$🗡Music volume🗡!",
+                "originalVoiceOvers": "$🗡Original unit voice overs🗡!",
+                "soundVolume": "$🗡Sound volume🗡!",
+                "unitAcknowledgements": "$🗡Unit acknowledgements🗡!",
+                "unitSpeech": "$🗡Unit speech🗡!",
+                "title": "$🗡Sound🗡!"
+            },
+            "starcraft": {
+                "title": "$🗡StarCraft🗡!",
+                "browseManually": "$🗡Browse manually🗡!",
+                "currentPathLabel": "$🗡Current game path:🗡!",
+                "detectPath": "$🗡Detect installation🗡!",
+                "instructions": {
+                    "advanced": "$🗡If detection fails, you can set the path manually. Click the button below and select the directory that contains your StarCraft: Remastered installation.🗡!",
+                    "description": "$🗡ShieldBattery requires a valid, up-to-date installation of StarCraft: Remastered. Click the button below to automatically detect the installation folder.🗡!"
+                },
+                "pathInvalid": "$🗡This path does not point to a valid StarCraft: Remastered installation. Please ensure your installation is up to date or try a different path.🗡!",
+                "pathValid": "$🗡This game path appears to be a valid installation.🗡!",
+                "detectionFailed": "$🗡Detecting your installation path failed. Please ensure you have StarCraft: Remastered installed and try again, or set the path manually.🗡!"
+            },
+            "title": "$🗡Game🗡!",
+            "video": {
+                "displayMode": {
+                    "fullscreen": "$🗡Fullscreen🗡!",
+                    "title": "$🗡Display mode🗡!",
+                    "windowed": "$🗡Windowed🗡!",
+                    "windowedFullscreen": "$🗡Windowed (Fullscreen)🗡!"
+                },
+                "enableFpsLimit": "$🗡Enable FPS limit🗡!",
+                "enableVerticalSync": "$🗡Enable vertical sync🗡!",
+                "environmentEffects": "$🗡Environment effects🗡!",
+                "fpsLimit": "$🗡FPS limit🗡!",
+                "hdGraphics": "$🗡HD graphics🗡!",
+                "pillarbox": "$🗡Pillarbox (4:3 aspect ratio)🗡!",
+                "realTimeLighting": "$🗡Real-time lighting🗡!",
+                "sdGraphicsFilter": "$🗡SD graphics filter🗡!",
+                "shadowStacking": "$🗡Shadow stacking🗡!",
+                "showFps": "$🗡Show FPS🗡!",
+                "smoothUnitTurning": "$🗡Smooth unit turning🗡!",
+                "title": "$🗡Video🗡!"
+            }
         },
         "close": "$🗡Close settings🗡!",
+        "app": {
+            "sound": {
+                "masterVolume": "$🗡Master volume🗡!",
+                "title": "$🗡Sound🗡!"
+            },
+            "system": {
+                "runOnStartup": "$🗡Run ShieldBattery on system startup🗡!",
+                "startMinimized": "$🗡Start minimized🗡!",
+                "title": "$🗡System🗡!",
+                "startupOverline": "$🗡Startup🗡!",
+                "filesOverline": "$🗡Files🗡!",
+                "replayQuickOpen": "$🗡Launch replays opened with ShieldBattery immediately without previewing🗡!"
+            },
+            "title": "$🗡App🗡!"
+        },
+        "errors": {
+            "save": "$🗡There was an issue saving the settings.🗡!"
+        },
         "user": {
-            "label": "$🗡User🗡!",
             "language": {
-                "label": "$🗡Language🗡!"
+                "selectLanguage": "$🗡Select a language🗡!",
+                "title": "$🗡Language🗡!"
+            },
+            "title": "$🗡User🗡!",
+            "account": {
+                "changeEmail": {
+                    "patternError": "$🗡Enter a valid email address🗡!",
+                    "dialogTitle": "$🗡Change email🗡!",
+                    "requiredError": "$🗡Enter an email address🗡!",
+                    "success": "$🗡Email changed successfully.🗡!"
+                },
+                "authenticationHeader": "$🗡Authentication🗡!",
+                "changePassword": {
+                    "dialogTitle": "$🗡Change password🗡!",
+                    "success": "$🗡Password changed successfully.🗡!"
+                },
+                "changePasswordButton": "$🗡Change password🗡!",
+                "confirmNewPassword": "$🗡Confirm new password🗡!",
+                "currentPassword": "$🗡Current password🗡!",
+                "displayName": "$🗡Display name🗡!",
+                "email": "$🗡Email🗡!",
+                "error": "$🗡There was a problem retrieving your user information.🗡!",
+                "invalidCurrentPassword": "$🗡Current password is incorrect🗡!",
+                "label": "$🗡Account🗡!",
+                "loginName": "$🗡Login name🗡!",
+                "networkError": "$🗡Network error: {{errorMessage}}🗡!",
+                "newPassword": "$🗡New password🗡!",
+                "passwordValidator": {
+                    "confirm": "$🗡Enter a matching password🗡!",
+                    "current": "$🗡Enter your current password🗡!",
+                    "new": "$🗡Enter a new password🗡!"
+                },
+                "unknownError": "$🗡Something went wrong, please try again later.🗡!"
             }
+        },
+        "activity": {
+            "title": "$🗡Settings (Alt + S)🗡!"
         }
     },
     "auth": {
-        "editAccount": {
-            "changePassword": "$🗡Change password?🗡!",
-            "confirmNewPassword": "$🗡Confirm new password🗡!",
-            "currentPassword": "$🗡Current password🗡!",
-            "dialogTitle": "$🗡Edit account🗡!",
-            "errorUpdatingAccount": "$🗡There was an issue updating your account. Please try again later.🗡!",
-            "incorrectPassword": "$🗡Incorrect current password.🗡!",
-            "newPassword": "$🗡New password🗡!",
-            "email": "$🗡Email🗡!"
-        },
         "emailValidator": {
             "pattern": "$🗡Enter a valid email address🗡!",
             "required": "$🗡Enter an email address🗡!"
@@ -137,20 +281,15 @@
             "confirm": "$🗡Confirm your password🗡!",
             "matching": "$🗡Enter a matching password🗡!",
             "resetCode": "$🗡Enter your password reset code🗡!",
-            "current": "$🗡Enter your current password🗡!",
-            "required": "$🗡Enter a password🗡!",
-            "matchingPassword": "$🗡Enter a matching password🗡!"
+            "required": "$🗡Enter a password🗡!"
         },
         "signup": {
-            "acceptableUseLink": "$🗡Acceptable Use🗡!",
             "ageConfirmation": "$🗡I certify that I am 13 years of age or older🗡!",
             "alreadyHaveAccount": "$🗡Already have an account?🗡!",
             "confirmPassword": "$🗡Confirm password🗡!",
-            "privacyLink": "$🗡Privacy🗡!",
-            "readAndAgree": "$🗡I have read and agree to the🗡!",
+            "readAndAgree": "$🗡I have read and agree to the <2>Terms of Service</2>, <4>Acceptable Use</4>, and <6>Privacy</6> policies🗡!",
             "title": "$🗡Create account🗡!",
             "createAccount": "$🗡Create account🗡!",
-            "termsOfServiceLink": "$🗡Terms of Service🗡!",
             "username": "$🗡Username🗡!",
             "logIn": "$🗡Log in🗡!",
             "emailAddress": "$🗡Email address🗡!",
@@ -171,7 +310,7 @@
         "usernameValidator": {
             "pattern": "$🗡Username contains invalid characters🗡!",
             "required": "$🗡Enter a username🗡!",
-            "taken": "$🗡Username is already taken🗡!"
+            "notAvailable": "$🗡Username is not available🗡!"
         },
         "language": {
             "changeErrorHeader": "$🗡Error changing the language🗡!",
@@ -183,8 +322,6 @@
             "changeLanguage": "$🗡Change language🗡!",
             "faq": "$🗡FAQ🗡!",
             "home": "$🗡Home🗡!",
-            "ladder": "$🗡Ladder🗡!",
-            "leagues": "$🗡Leagues🗡!",
             "login": "$🗡Log in🗡!"
         },
         "splash": {
@@ -264,7 +401,6 @@
             "header": "$🗡FAQ🗡!",
             "hotkeyCustomizationAnswer": "$🗡Yes, we support customized hotkeys, but we do not currently have a hotkey editor. If you want to use customized hotkeys, launch StarCraft: Remastered through the Blizzard launcher and customize them there first. After doing so, future launches through ShieldBattery will use those hotkeys.🗡!",
             "hotkeyCustomizationQuestion": "$🗡Is hotkey customization allowed or provided?🗡!",
-            "isShieldBatteryFreeAnswer": "$🗡<0>ShieldBattery is totally free to use!</0><1>It does, however, cost us time and money to host and develop ShieldBattery. If you would like to help us cover those costs, we'd greatly appreciate it. We have set up a number of ways to contribute:</1>🗡!",
             "isShieldBatteryFreeQuestion": "$🗡Does ShieldBattery cost anything? How can I support the project?🗡!",
             "linuxSupportAnswer": "$🗡<0>This is not currently something that we have official support for.</0><1>However, there's a community-contributed integration of ShieldBattery with Wine. Check out our <2>Discord</2> to learn how to run ShieldBattery on Wine.</1>🗡!",
             "linuxSupportQuestion": "$🗡Does ShieldBattery work on Linux or OS X?🗡!",
@@ -278,7 +414,8 @@
             "supportedStarcraftVersionQuestion": "$🗡What version of StarCraft does ShieldBattery support?🗡!",
             "systemRequirementsQuestion": "$🗡What are the system requirements to play on ShieldBattery?🗡!",
             "title": "$🗡Frequently Asked Questions🗡!",
-            "systemRequirementsAnswer": "$🗡<0>Our system requirements are mainly driven by those of <2>StarCraft: Remastered</2>, but in brief:</0><1><0>A computer running Windows 10 or later</0><1>2GB RAM</1><2>NVIDIA GeForce 6800 (256MB) or ATI Radeon X1600 Pro (256MB) or better</2><3>A StarCraft: Remastered installation, patched to the latest version</3></1>🗡!"
+            "systemRequirementsAnswer": "$🗡<0>Our system requirements are mainly driven by those of <2>StarCraft: Remastered</2>, but in brief:</0><1><0>A computer running Windows 10 or later</0><1>2GB RAM</1><2>NVIDIA GeForce 6800 (256MB) or ATI Radeon X1600 Pro (256MB) or better</2><3>A StarCraft: Remastered installation, patched to the latest version</3></1>🗡!",
+            "isShieldBatteryFreeAnswer": "$🗡<0>ShieldBattery is totally free to use!</0><1>It does, however, cost us time and money to host and develop ShieldBattery. If you would like to help us cover those costs, we'd greatly appreciate it. We have set up a number of ways to contribute:</1>🗡!"
         }
     },
     "clientDownload": {
@@ -297,7 +434,8 @@
             "noErrorTitle": "$🗡Update available🗡!",
             "restartNow": "$🗡Restart now🗡!",
             "errorBody": "$🗡There was an error downloading the update. Please restart and try again, or visit <2>our website</2> to download the latest version.🗡!",
-            "newUpdateReady": "$🗡A new update has been downloaded and is ready to install. Please restart the application to continue.🗡!"
+            "newUpdateReady": "$🗡A new update has been downloaded and is ready to install. Please restart the application to continue.🗡!",
+            "progress": "$🗡{{transferred}} / {{total}} at {{perSecond}}/s🗡!"
         }
     },
     "comingSoon": {
@@ -325,7 +463,10 @@
         "lastPlayedHeader": "$🗡Last played🗡!",
         "mmrHeader": "$🗡MMR🗡!",
         "noMatchingPlayers": "$🗡No matching players.🗡!",
-        "pageHeadline": "$🗡Ladder🗡!"
+        "pageHeadline": "$🗡Ladder🗡!",
+        "activity": {
+            "title": "$🗡Ladder🗡!"
+        }
     },
     "matchmaking": {
         "division": {
@@ -361,7 +502,8 @@
             "seconds": "$🗡Seconds🗡!",
             "soon": "$🗡Soon™🗡!",
             "title": "$🗡Matchmaking disabled🗡!",
-            "description": "$🗡Matchmaking is sometimes shut down for maintenance and development, and is currently disabled. The next matchmaking period is:🗡!"
+            "description": "$🗡Matchmaking is sometimes shut down for maintenance and development, and is currently disabled. The next matchmaking period is:🗡!",
+            "nextDateRange": "$🗡<0>{{nextStartDate}}</0><1>to</1><2>{{nextEndDate}}</2>🗡!"
         },
         "findMatch": {
             "action": "$🗡Find match🗡!",
@@ -383,11 +525,13 @@
             "remainingPlacements": "$🗡{{lifetimeGames}} / {{numPlacementMatches}} placements🗡!",
             "title": "$🗡Find match🗡!",
             "updated": "$🗡Updated🗡!",
-            "veto1v1": "$🗡Veto up to 3 maps. Vetoed maps will never be selected for play.🗡!",
             "vetoesLeft": "$🗡<0>Vetoes left: </0><1>{{vetoesLeft}}</1>🗡!",
             "description": "$🗡Select a race to be used whenever your opponent has selected the same primary race.🗡!",
             "useAlternateRace": "$🗡Use alternate race to avoid mirror matchups🗡!",
-            "veto2v2": "$🗡Veto up to 3 maps. Vetoed maps will be chosen significantly less often than other maps.🗡!"
+            "vetoDescriptionWithOverlap_one": "$🗡Veto up to {{count}} map. Vetoed maps will be chosen significantly less often than other maps.🗡!",
+            "vetoDescriptionWithOverlap_other": "$🗡Veto up to {{count}} maps. Vetoed maps will be chosen significantly less often than other maps.🗡!",
+            "vetoDescriptionNoOverlap_one": "$🗡Veto up to {{count}} map. Vetoed maps will never be selected for play.🗡!",
+            "vetoDescriptionNoOverlap_other": "$🗡Veto up to {{count}} maps. Vetoed maps will never be selected for play.🗡!"
         },
         "match": {
             "gameFailedToLoad": "$🗡The game has failed to load.🗡!",
@@ -413,11 +557,10 @@
         },
         "searchingOverlay": {
             "cancelSearch": "$🗡Cancel search🗡!"
-        }
-    },
-    "forms": {
-        "fileInput": {
-            "clearFiles": "$🗡Clear files🗡!"
+        },
+        "activity": {
+            "finding": "$🗡Finding…🗡!",
+            "findMatch": "$🗡Find match🗡!"
         }
     },
     "chat": {
@@ -504,10 +647,28 @@
             "active": "$🗡Active🗡!",
             "idle": "$🗡Idle🗡!",
             "offline": "$🗡Offline🗡!"
+        },
+        "channelHeader": {
+            "actionItems": {
+                "leaveChannel": "$🗡Leave channel🗡!",
+                "channelSettings": "$🗡Channel settings🗡!",
+                "hideBanner": "$🗡Hide banner🗡!"
+            },
+            "moreActions": "$🗡More actions🗡!",
+            "errors": {
+                "toggleBannerVisibility": "$🗡Something went wrong toggling the banner visibility🗡!"
+            }
+        },
+        "channelSettings": {
+            "general": {
+                "descriptionLabel": "$🗡Description🗡!",
+                "topicLabel": "$🗡Topic🗡!",
+                "saveErrorMessage": "$🗡Something went wrong while saving the settings🗡!",
+                "inappropriateImageErrorMessage": "$🗡The selected image is inappropriate. Please select a different image.🗡!"
+            }
         }
     },
     "fileBrowser": {
-        "noFiles": "$🗡Nothing to see here🗡!",
         "rootFolder": "$🗡Root folder🗡!",
         "upOneDirectory": "$🗡Up one directory🗡!"
     },
@@ -548,7 +709,9 @@
             "draw": "$🗡Draw🗡!",
             "loss": "$🗡Loss🗡!",
             "unknown": "$🗡Unknown🗡!",
-            "win": "$🗡Win🗡!"
+            "win": "$🗡Win🗡!",
+            "lossShort": "$🗡L🗡!",
+            "winShort": "$🗡W🗡!"
         },
         "teamName": {
             "number": "$🗡Team {{teamNumber}}🗡!",
@@ -593,7 +756,10 @@
         "acceptableUse": "$🗡Acceptable use🗡!",
         "policyUpdateNotification": "$🗡ShieldBattery's <2>{{label}}</2> has been updated.🗡!",
         "privacyPolicy": "$🗡Privacy policy🗡!",
-        "termsOfService": "$🗡Terms of service🗡!"
+        "termsOfService": "$🗡Terms of service🗡!",
+        "privacyPolicyAllCaps": "$🗡Privacy Policy🗡!",
+        "termsOfServiceAllCaps": "$🗡Terms of Service🗡!",
+        "acceptableUseAllCaps": "$🗡Acceptable Use Policy🗡!"
     },
     "replays": {
         "local": {
@@ -603,69 +769,36 @@
             "rootFolderName": "$🗡Replays🗡!",
             "title": "$🗡Local Replays🗡!",
             "watchReplay": "$🗡Watch replay🗡!"
+        },
+        "activity": {
+            "title": "$🗡Replays🗡!"
+        },
+        "fileDropText": "$🗡Drop replays here to watch them with ShieldBattery.🗡!",
+        "loading": {
+            "dialogTitle": "$🗡Loading replay…🗡!",
+            "errorGeneric": "$🗡Something went wrong while loading the replay.🗡!",
+            "initFailureTitle": "$🗡Error loading replay🗡!",
+            "initFailureBody": "$🗡The selected replay could not be loaded. It may either be corrupt, or was created by a version of StarCraft newer than is currently supported.🗡!"
+        },
+        "replayInfoDialog": {
+            "watch": "$🗡Watch🗡!",
+            "title": "$🗡Replay info🗡!"
         }
     },
     "user": {
         "miniMatchHistory": {
-            "noGames": "$🗡Nothing to see here🗡!",
             "noGameSelected": "$🗡No game selected🗡!",
             "viewDetails": "$🗡View details🗡!"
+        },
+        "matchHistory": {
+            "retrievingError": "$🗡There was an error retrieving the match history.🗡!",
+            "noMatchingGames": "$🗡No matching games.🗡!"
         }
     },
     "windowControls": {
         "close": "$🗡Close🗡!",
         "maximizeRestore": "$🗡Maximize/Restore🗡!",
         "minimize": "$🗡Minimize🗡!"
-    },
-    "league": {
-        "details": {
-            "leaderBoardHeader": {
-                "winLoss": "$🗡Win/loss🗡!",
-                "lastPlayed": "$🗡Last played🗡!",
-                "player": "$🗡Player🗡!",
-                "points": "$🗡Points🗡!",
-                "rank": "$🗡Rank🗡!"
-            },
-            "about": "$🗡About🗡!",
-            "copyLink": "$🗡Copy link to league🗡!",
-            "joinError": "$🗡Couldn't join league: {{errorMessage}}🗡!",
-            "dateText": "$🗡{{startDate}} to {{endDate}}🗡!",
-            "goBack": "$🗡Go back to list🗡!",
-            "info": "$🗡Info🗡!",
-            "joined": "$🗡Joined🗡!",
-            "leaderboard": "$🗡Leaderboard🗡!",
-            "leaderboardError": "$🗡There was a problem retrieving the leaderboard: {{errorMessage}}🗡!",
-            "leagueEndedError": "$🗡Couldn't join because the league has already ended🗡!",
-            "leagueJoined": "$🗡League joined🗡!",
-            "noPlayers": "$🗡No matching players.🗡!",
-            "notFound": "$🗡League not found🗡!",
-            "retrieveError": "$🗡There was an error retrieving this league: {{errorMessage}}🗡!",
-            "rulesAndInfo": "$🗡Rules and info🗡!"
-        },
-        "explainer": {
-            "playDescription": "$🗡Once a league has started, all ladder games you play will reward points towards the league standings alongside your normal ladder standings. Check the leaderboard on the league page to see how you're doing!🗡!",
-            "winDescription": "$🗡After a league finishes, the leaderboard will be available for organizers to distribute prizes and rewards. Check out the league information page for more details.🗡!",
-            "description": "$🗡Leagues are a new way to compete for prizes, qualify for tournament entries, and more!🗡!",
-            "howLeaguesWork": "$🗡How leagues work🗡!",
-            "joinDescription": "$🗡Find a league that is currently running or accepting signups in the format you'd like to play. Some leagues may have different requirements, rules, or qualifications, so make sure to read the information before joining!🗡!",
-            "joinTitle": "$🗡Join.🗡!",
-            "playTitle": "$🗡Play.🗡!",
-            "winTitle": "$🗡Win!🗡!"
-        },
-        "list": {
-            "ends": "$🗡Ends {{endDate}}🗡!",
-            "noLeagues": "$🗡No matching leagues🗡!",
-            "acceptingSignups": "$🗡Accepting signups🗡!",
-            "currentlyRunning": "$🗡Currently running🗡!",
-            "finished": "$🗡Finished🗡!",
-            "howDoLeaguesWork": "$🗡How do leagues work?🗡!",
-            "joined": "$🗡Joined🗡!",
-            "loadingError": "$🗡Error loading leagues🗡!",
-            "manageLeagues": "$🗡Manage leagues🗡!",
-            "pageHeadline": "$🗡Leagues🗡!",
-            "starts": "$🗡Starts {{startDate}}🗡!",
-            "viewInfo": "$🗡View info🗡!"
-        }
     },
     "maps": {
         "details": {
@@ -696,19 +829,41 @@
                 "removed": "$🗡Removed from favorites🗡!",
                 "removedError": "$🗡An error occurred while removing from favorites🗡!"
             },
-            "filterOptions": "$🗡Filter options🗡!",
             "noCommunityMaps": "$🗡No maps by the community have been made public yet.🗡!",
             "noOfficialMaps": "$🗡No official maps have been uploaded yet.🗡!",
             "noResults": "$🗡No results.🗡!",
             "noUploadedMaps": "$🗡You haven't uploaded any maps. You can upload a map by clicking on the browse button below.🗡!",
             "regenerateError": "$🗡An error occurred while regenerating images🗡!",
-            "sortMaps": "$🗡Sort maps🗡!",
             "tab": {
                 "community": "$🗡Community🗡!",
                 "myMaps": "$🗡My maps🗡!",
                 "official": "$🗡Official🗡!"
             },
-            "thumbnailSize": "$🗡Thumbnail size🗡!"
+            "allMaps": "$🗡All maps🗡!",
+            "error": "$🗡Something went wrong: {{errorMessage}}🗡!",
+            "filterOptions": {
+                "section": {
+                    "numberOfPlayers": "$🗡Number of players🗡!",
+                    "tileset": "$🗡Tileset🗡!"
+                },
+                "title": "$🗡Filter options🗡!"
+            },
+            "sortMaps": {
+                "option": {
+                    "dateUploaded": "$🗡Date uploaded🗡!",
+                    "name": "$🗡Name🗡!",
+                    "numberOfPlayers": "$🗡Number of players🗡!"
+                },
+                "title": "$🗡Sort maps🗡!"
+            },
+            "thumbnailSize": {
+                "option": {
+                    "large": "$🗡Large🗡!",
+                    "medium": "$🗡Medium🗡!",
+                    "small": "$🗡Small🗡!"
+                },
+                "title": "$🗡Thumbnail size🗡!"
+            }
         },
         "thumbnail": {
             "addToFavorites": "$🗡Add to favorites🗡!",
@@ -716,7 +871,24 @@
             "regenerateImage": "$🗡Regenerate image🗡!",
             "removeFromFavorites": "$🗡Remove from favorites🗡!",
             "showMapPreview": "$🗡Show map preview🗡!",
-            "viewMapDetails": "$🗡View map details🗡!"
+            "viewMapDetails": "$🗡View map details🗡!",
+            "noMapPreview": "$🗡Map preview not available🗡!"
+        },
+        "activity": {
+            "title": "$🗡Maps🗡!"
+        },
+        "mapSelect": {
+            "browseMaps": "$🗡Browse maps🗡!"
+        },
+        "tileset": {
+            "ashworld": "$🗡Ashworld🗡!",
+            "badlands": "$🗡Badlands🗡!",
+            "desert": "$🗡Desert🗡!",
+            "installation": "$🗡Installation🗡!",
+            "jungleWorld": "$🗡Jungle world🗡!",
+            "spacePlatform": "$🗡Space platform🗡!",
+            "twilight": "$🗡Twilight🗡!",
+            "ice": "$🗡Ice🗡!"
         }
     },
     "material": {
@@ -753,9 +925,390 @@
             "viewProfile": "$🗡View profile🗡!",
             "whisperCloseError": "$🗡Error closing whisper session: {{errorMessage}}🗡!",
             "whispers": "$🗡Whispers🗡!",
-            "editAccount": "$🗡Edit account🗡!",
             "loadingGame": "$🗡Loading…🗡!",
-            "viewChangelog": "$🗡View changelog🗡!"
+            "viewChangelog": "$🗡View changelog🗡!",
+            "home": "$🗡Home🗡!",
+            "reportBug": "$🗡Report a bug🗡!"
         }
+    },
+    "notifications": {
+        "activityButton": {
+            "read": "$🗡Notifications (Alt + N)🗡!",
+            "unread": "$🗡Notifications - unread (Alt + N)🗡!"
+        },
+        "errors": {
+            "markRead": "$🗡An error occurred while marking a notification read🗡!"
+        },
+        "list": {
+            "title": "$🗡Notifications🗡!"
+        },
+        "popup": {
+            "markAsRead": "$🗡Mark as read🗡!"
+        }
+    },
+    "starcraft": {
+        "shieldbatteryHealth": {
+            "noProblems": "$🗡Your local installation is now free of problems.🗡!",
+            "rescanFiles": "$🗡Rescan files🗡!",
+            "title": "$🗡Installation problems detected🗡!",
+            "topContents": "$🗡We've detected that the following ShieldBattery files are missing or have been modified:🗡!",
+            "bottomContents": "$🗡If you are able to, reporting these as false positives to your anti-virus vendor will help this stop happening for other users as well!🗡!",
+            "middleContents": "$🗡This is often the result of installed anti-virus software taking action on false positives. You may need to add exceptions for these files, or tell the software to remove them from quarantine. You can also try re-installing ShieldBattery.🗡!"
+        },
+        "starcraftHealth": {
+            "header": "$🗡The following problems need to be corrected before you can play games on ShieldBattery:🗡!",
+            "noProblems": "$🗡Your local installation is now free of problems.🗡!",
+            "starcraftVersionContents": "$🗡Your StarCraft installation is out of date. ShieldBattery supports installations of version 1.16.1 or the latest Remastered version. Please install the <2><0>latest version</0></2> and restart ShieldBattery.🗡!",
+            "title": "$🗡Installation problems detected🗡!",
+            "installPathContents": "$🗡Your StarCraft path setting does not point to a valid installation. Please correct the value in <2>Settings</2>. If you do not have the game installed, it can be easily downloaded from <5><0>Blizzard's website</0></5>. You may need to restart ShieldBattery after installation.🗡!"
+        }
+    },
+    "whispers": {
+        "createWhisper": {
+            "error": "$🗡Error: {{errorMessage}}🗡!",
+            "title": "$🗡Send a message🗡!",
+            "username": "$🗡Username🗡!",
+            "usernameRequired": "$🗡Enter a username🗡!",
+            "usernamePattern": "$🗡Username contains invalid characters🗡!"
+        },
+        "errors": {
+            "cantWhisperYourself": "$🗡You can't whisper with yourself.🗡!",
+            "loadingHistory": "$🗡Error loading message history: {{errorMessage}}🗡!",
+            "noSelfMessaging": "$🗡Cannot send messages to yourself🗡!",
+            "sendingMessage": "$🗡Error sending message: {{errorMessage}}🗡!",
+            "unknownError": "$🗡Unknown error🗡!",
+            "userNotFound": "$🗡User not found🗡!",
+            "invalidAction": "$🗡Must have an active whisper session with a user to retrieve message history🗡!",
+            "openSession": "$🗡Error opening whisper to user: {{errorMessage}}🗡!"
+        },
+        "navEntry": {
+            "closeWhisper": "$🗡Close whisper🗡!"
+        }
+    },
+    "parties": {
+        "errors": {
+            "acceptPartyInvite": {
+                "notFoundOrNotInvited": "$🗡Party doesn't exist anymore🗡!",
+                "partyFull": "$🗡Party is full🗡!",
+                "general": "$🗡An error occurred while accepting an invite🗡!"
+            },
+            "cancelQueue": "$🗡Error canceling matchmaking: {{errorMessage}}🗡!",
+            "changeLeader": {
+                "general": "$🗡An error occurred while changing the leader🗡!"
+            },
+            "declinePartyInvite": {
+                "general": "$🗡An error occurred while declining an invite🗡!"
+            },
+            "findMatchAsParty": {
+                "general": "$🗡Something went wrong :(🗡!",
+                "invalidAction": "$🗡The party is too large for that matchmaking type🗡!",
+                "notFoundOrNotInParty": "$🗡Party not found or you're not in it🗡!",
+                "title": "$🗡Error searching for a match🗡!",
+                "alreadyInGameplayActivity": "$🗡The party is already searching for a different matchmaking type🗡!",
+                "insufficientPermissions": "$🗡Only party leaders can queue for matchmaking🗡!"
+            },
+            "inviteToParty": {
+                "alreadyMember": "$🗡{{user}} is already in your party🗡!",
+                "blocked": "$🗡Failed to send invite, you have been blocked by this user🗡!",
+                "general": "$🗡An error occurred while sending an invite🗡!",
+                "invalidSelfAction": "$🗡Can't invite yourself to the party🗡!",
+                "notificationFailure": "$🗡Failed to send an invite. Please try again🗡!"
+            },
+            "kickPlayer": {
+                "general": "$🗡An error occurred while kicking the player🗡!"
+            },
+            "leaveParty": {
+                "general": "$🗡An error occurred while leaving the party🗡!"
+            },
+            "removePartyInvite": {
+                "general": "$🗡An error occurred while removing an invite🗡!"
+            },
+            "unknownError": "$🗡unknown error occurred🗡!",
+            "alreadySearching": "$🗡Some party members are already playing a game, searching for a match, or in a custom lobby:🗡!"
+        },
+        "events": {
+            "kickFromParty": "$🗡You have been kicked from the party.🗡!"
+        },
+        "inviteDialog": {
+            "findPlayers": "$🗡Find players🗡!",
+            "title": "$🗡Invite players to the party🗡!",
+            "sendInvites": "$🗡Send invites🗡!"
+        },
+        "messageLayout": {
+            "inviteToParty": "$🗡<0><0></0></0> has been invited to the party🗡!",
+            "kickFromParty": "$🗡<0><0></0></0> has been kicked from the party🗡!",
+            "leaderChange": "$🗡<0><0></0></0> is now the leader🗡!",
+            "leaveParty": "$🗡<0><0></0></0> has left the party🗡!",
+            "queueCancel": {
+                "matchmakingDisabled": "$🗡Matchmaking was canceled because it is currently disabled🗡!",
+                "rejected": "$🗡<0><0></0></0> canceled matchmaking🗡!",
+                "userLeft": "$🗡Matchmaking was canceled because <2><0></0></2> left the party🗡!",
+                "error": "$🗡Matchmaking has been canceled due to an error🗡!"
+            },
+            "queueReady": "$🗡The party is now searching for a match🗡!",
+            "selfJoin": "$🗡You have joined the party. The leader is <2><0></0></2>.🗡!",
+            "joinParty": "$🗡<0><0></0></0> has joined the party🗡!",
+            "queueStart": "$🗡<0><0></0></0> is starting a search for a <4>{{matchmakingLabel}}</4> match🗡!"
+        },
+        "navEntry": {
+            "invitePlayers": "$🗡Invite players🗡!",
+            "leaveParty": "$🗡Leave party🗡!",
+            "title": "$🗡Party🗡!"
+        },
+        "queueAcceptDialog": {
+            "contents": "$🗡Your party is searching for a <2>{{matchmakingLabel}}</2> match.🗡!",
+            "error": "$🗡Error: {{error}}🗡!",
+            "title": "$🗡Choose your race🗡!"
+        },
+        "view": {
+            "cancelSearch": "$🗡Cancel search🗡!",
+            "invitePlayers": "$🗡Invite players🗡!",
+            "kickFromParty": "$🗡Kick from party🗡!",
+            "makeLeader": "$🗡Make leader🗡!",
+            "openSlot": "$🗡Empty🗡!",
+            "leaveParty": "$🗡Leave party🗡!"
+        },
+        "notificationUi": "$🗡<0>{{user}}</0> sent you a party invitation.🗡!"
+    },
+    "users": {
+        "contextMenu": {
+            "addFriend": "$🗡Add friend🗡!",
+            "friendRequestAccepted": "$🗡Friend request accepted🗡!",
+            "friendRequestRemoved": "$🗡Friend request removed🗡!",
+            "friendRequestSent": "$🗡Friend request sent🗡!",
+            "inviteToParty": "$🗡Invite to party🗡!",
+            "kickFromParty": "$🗡Kick from party🗡!",
+            "removeFriend": "$🗡Remove friend🗡!",
+            "removeFriendRequest": "$🗡Remove friend request🗡!",
+            "uninviteFromParty": "$🗡Uninvite from party🗡!",
+            "userBlocked": "$🗡User blocked🗡!",
+            "userUnblocked": "$🗡User unblocked🗡!",
+            "whisper": "$🗡Whisper🗡!",
+            "friendRemoved": "$🗡Friend removed🗡!",
+            "loadingUsers": "$🗡Loading user…🗡!",
+            "viewProfile": "$🗡View profile🗡!"
+        },
+        "errors": {
+            "friendsList": {
+                "blockedByUser": "$🗡you have been blocked by this user🗡!",
+                "errorAcceptingFriendRequest": "$🗡Error accepting friend request🗡!",
+                "errorBlockingUser": "$🗡Error blocking user🗡!",
+                "errorRemovingFriend": "$🗡Error removing friend🗡!",
+                "errorRemovingFriendRequest": "$🗡Error removing friend request🗡!",
+                "errorSendingFriendRequest": "$🗡Error sending friend request🗡!",
+                "errorUnblockingUser": "$🗡Error unblocking user🗡!",
+                "limitReached": "$🗡you have reached the maximum amount of friends or blocks, please remove some to add more🗡!",
+                "load": "$🗡Failed to load friends list🗡!",
+                "noMatchingEntry": "$🗡no matching entry found🗡!",
+                "errorDecliningFriendRequest": "$🗡Error declining friend request🗡!",
+                "invalidSelfAction": "$🗡you cannot perform this action on yourself`🗡!"
+            },
+            "profile": {
+                "loadUser": "$🗡There was a problem loading this user.🗡!"
+            }
+        },
+        "friendsList": {
+            "friendStart": "$🗡You are now friends with <2>{{user}}</2>.🗡!",
+            "header": {
+                "incoming": "$🗡Incoming🗡!",
+                "offline": "$🗡Offline🗡!",
+                "online": "$🗡Online🗡!",
+                "outgoing": "$🗡Outgoing🗡!"
+            },
+            "receivedFriendRequest": "$🗡<0>{{user}}</0> sent you a friend request.🗡!",
+            "tabs": {
+                "addFriends": "$🗡Add friends🗡!",
+                "friendsList": "$🗡Friends list🗡!",
+                "socialSettings": "$🗡Social settings🗡!"
+            },
+            "title": {
+                "addFriends": "$🗡Add friends🗡!",
+                "friends": "$🗡Friends🗡!"
+            },
+            "tooltip": "$🗡Friends (Alt + E)🗡!"
+        },
+        "profile": {
+            "achievements": "$🗡Achievements🗡!",
+            "latestGames": "$🗡Latest games🗡!",
+            "points": "$🗡Points🗡!",
+            "rank": "$🗡Rank🗡!",
+            "rating": "$🗡Rating🗡!",
+            "record": "$🗡Record🗡!",
+            "tabs": {
+                "admin": "$🗡Admin🗡!",
+                "matchHistory": "$🗡Match history🗡!",
+                "season": "$🗡Seasons🗡!",
+                "stats": "$🗡Stats🗡!",
+                "summary": "$🗡Summary🗡!"
+            },
+            "totalGames": "$🗡Total games🗡!"
+        },
+        "profileOverlay": {
+            "info": "$🗡Info🗡!",
+            "joined": "$🗡Joined {{date}}🗡!",
+            "ranked": "$🗡Ranked🗡!",
+            "rightClick": "$🗡Right-click user for more actions🗡!",
+            "viewProfile": "$🗡View profile🗡!"
+        },
+        "titles": {
+            "novice": "$🗡Novice🗡!"
+        }
+    },
+    "lobbies": {
+        "createLobby": {
+            "backToList": "$🗡Back to list🗡!",
+            "disabledInPartyText": "$🗡Creating a lobby as a party is currently under development. Leave your party to continue.🗡!",
+            "disabledInPartyTitle": "$🗡Disabled while in party🗡!",
+            "gameSubTypeHeader": "$🗡Teams🗡!",
+            "gameSubTypeOption": "$🗡{{numTeams}} teams🗡!",
+            "gameSubTypeOptionTvB": "$🗡{{topSlots}} vs {{bottomSlots}}🗡!",
+            "gameTypeHeader": "$🗡Game type🗡!",
+            "lobbyName": "$🗡Lobby name🗡!",
+            "lobbyNameRequired": "$🗡Enter a lobby name🗡!",
+            "mapRequired": "$🗡Select a map to play🗡!",
+            "selectMap": "$🗡Select map🗡!",
+            "title": "$🗡Create lobby🗡!",
+            "advancedSettings": "$🗡Advanced settings🗡!",
+            "turnRate": "$🗡Turn rate🗡!",
+            "turnRateAuto": "$🗡Auto🗡!",
+            "turnRateDynamic": "$🗡DTR (Not recommended)🗡!",
+            "useLegacyLimits": "$🗡Use legacy unit limit🗡!"
+        },
+        "errors": {
+            "alreadyInLobby": "$🗡You're already in another lobby.🗡!",
+            "load": "$🗡There was a problem loading this lobby🗡!"
+        },
+        "events": {
+            "banned": "$🗡You have been banned from the lobby.🗡!",
+            "kicked": "$🗡You have been kicked from the lobby.🗡!"
+        },
+        "joinLobby": {
+            "disabledInPartyText": "$🗡Joining a lobby as a party is currently under development. Leave your party to continue.🗡!",
+            "disabledInPartyTitle": "$🗡Disabled while in party🗡!",
+            "noActiveLobbies": "$🗡There are no active lobbies🗡!",
+            "noOpenLobbies": "$🗡There are no open lobbies🗡!",
+            "title": "$🗡Join Lobby🗡!",
+            "openSlotCount_one": "$🗡{{count}} slot open🗡!",
+            "openSlotCount_other": "$🗡{{count}} slots open🗡!",
+            "action": "$🗡Join lobby🗡!"
+        },
+        "loading": {
+            "content": "$🗡<0>{{gameType}}</0><1> on </1><2>{{mapName}}</2>🗡!"
+        },
+        "lobby": {
+            "gameType": "$🗡Game type🗡!",
+            "leaveLobby": "$🗡Leave lobby🗡!",
+            "startGame": "$🗡Start game🗡!",
+            "turnRate": "$🗡Turn rate🗡!",
+            "turnRateAuto": "$🗡Auto🗡!",
+            "turnRateDynamic": "$🗡DTR🗡!",
+            "unitLimit": "$🗡Unit limit🗡!",
+            "unitLimitExtended": "$🗡Extended🗡!",
+            "unitLimitLegacy": "$🗡Legacy🗡!"
+        },
+        "messageLayout": {
+            "banPlayer": "$🗡<0><0></0></0> has been banned from the lobby🗡!",
+            "countdownCanceled": "$🗡The game countdown has been canceled🗡!",
+            "countdownStarted": "$🗡The game countdown has begun🗡!",
+            "gameInitializationCanceled": "$🗡Game initialization has been canceled🗡!",
+            "hostChange": "$🗡<0><0></0></0> is now the host🗡!",
+            "joinLobby": "$🗡<0><0></0></0> has joined the lobby🗡!",
+            "kickPlayer": "$🗡<0><0></0></0> has been kicked from the lobby🗡!",
+            "leaveLobby": "$🗡<0><0></0></0> has left the lobby🗡!",
+            "selfJoin": "$🗡You have joined <1>{{lobby}}</1>. The host is <4><0></0></4>.🗡!"
+        },
+        "slots": {
+            "addComputer": "$🗡Add computer🗡!",
+            "banPlayer": "$🗡Ban player🗡!",
+            "closeSlot": "$🗡Close slot🗡!",
+            "kickPlayer": "$🗡Kick player🗡!",
+            "makeObserver": "$🗡Make observer🗡!",
+            "makePlayer": "$🗡Make player🗡!",
+            "name": "$🗡Closed🗡!",
+            "open": "$🗡Open🗡!",
+            "openSlot": "$🗡Open slot🗡!",
+            "removeComputer": "$🗡Remove computer🗡!",
+            "slotActions": "$🗡Slot actions🗡!"
+        },
+        "state": {
+            "exists": "$🗡You're not currently in this lobby. Would you like to join it?🗡!",
+            "nonexistent": "$🗡Lobby not found. Would you like to create it?🗡!",
+            "started": "$🗡This lobby has already started and cannot be joined.🗡!"
+        },
+        "activity": {
+            "title": "$🗡Lobbies🗡!"
+        }
+    },
+    "leagues": {
+        "explainer": {
+            "playTitle": "$🗡Play.🗡!",
+            "winDescription": "$🗡After a league finishes, the leaderboard will be available for organizers to distribute prizes and rewards. Check out the league information page for more details.🗡!",
+            "winTitle": "$🗡Win!🗡!",
+            "description": "$🗡Leagues are a new way to compete for prizes, qualify for tournament entries, and more!🗡!",
+            "howLeaguesWork": "$🗡How leagues work🗡!",
+            "joinDescription": "$🗡Find a league that is currently running or accepting signups in the format you'd like to play. Some leagues may have different requirements, rules, or qualifications, so make sure to read the information before joining!🗡!",
+            "joinTitle": "$🗡Join.🗡!",
+            "playDescription": "$🗡Once a league has started, all ladder games you play will reward points towards the league standings alongside your normal ladder standings. Check the leaderboard on the league page to see how you're doing!🗡!"
+        },
+        "leagueDetails": {
+            "about": "$🗡About🗡!",
+            "notFound": "$🗡League not found🗡!",
+            "copyLink": "$🗡Copy link to league🗡!",
+            "retrieveError": "$🗡There was an error retrieving this league: {{errorMessage}}🗡!",
+            "rulesAndInfo": "$🗡Rules and info🗡!",
+            "dateText": "$🗡{{startDate}} to {{endDate}}🗡!",
+            "goBack": "$🗡Go back to list🗡!",
+            "info": "$🗡Info🗡!",
+            "joined": "$🗡Joined🗡!",
+            "joinError": "$🗡Couldn't join league: {{errorMessage}}🗡!",
+            "leaderboard": "$🗡Leaderboard🗡!",
+            "leaderboardError": "$🗡There was a problem retrieving the leaderboard: {{errorMessage}}🗡!",
+            "leaderBoardHeader": {
+                "lastPlayed": "$🗡Last played🗡!",
+                "player": "$🗡Player🗡!",
+                "points": "$🗡Points🗡!",
+                "rank": "$🗡Rank🗡!",
+                "winLoss": "$🗡Win/loss🗡!"
+            },
+            "noPlayers": "$🗡No matching players.🗡!",
+            "leagueEndedError": "$🗡Couldn't join because the league has already ended🗡!",
+            "leagueJoined": "$🗡League joined🗡!"
+        },
+        "list": {
+            "ends": "$🗡Ends {{endDate}}🗡!",
+            "viewInfo": "$🗡View info🗡!",
+            "finished": "$🗡Finished🗡!",
+            "pageHeadline": "$🗡Leagues🗡!",
+            "starts": "$🗡Starts {{startDate}}🗡!",
+            "joined": "$🗡Joined🗡!",
+            "acceptingSignups": "$🗡Accepting signups🗡!",
+            "currentlyRunning": "$🗡Currently running🗡!",
+            "howDoLeaguesWork": "$🗡How do leagues work?🗡!",
+            "loadingError": "$🗡Error loading leagues🗡!",
+            "noLeagues": "$🗡No matching leagues🗡!",
+            "manageLeagues": "$🗡Manage leagues🗡!"
+        },
+        "activity": {
+            "title": "$🗡Leagues🗡!"
+        }
+    },
+    "rootErrorBoundary": {
+        "reloadApp": "$🗡Reload app🗡!",
+        "title": "$🗡Something went wrong :(🗡!",
+        "contents": "$🗡Please report this issue to us in our <2>Discord</2>.🗡!"
+    },
+    "forms": {
+        "fileInput": {
+            "chooseFile": "$🗡Choose file🗡!"
+        }
+    },
+    "bugReport": {
+        "details": "$🗡Details🗡!",
+        "detailsDescription": "$🗡Please describe the bug and provide as much detail as possible about what you were doing when the bug occurred.🗡!",
+        "detailsRequired": "$🗡Bug reports must include details.🗡!",
+        "error": "$🗡Error: {{errorMessage}}🗡!",
+        "logUploadDescription": "$🗡Your bug report will include ShieldBattery logs from your machine to help diagnose the issue. Logs may be kept for up to 30 days and are viewable only by ShieldBattery staff.🗡!",
+        "reportSubmitted": "$🗡Bug report submitted.🗡!",
+        "title": "$🗡Report a bug🗡!"
     }
 }

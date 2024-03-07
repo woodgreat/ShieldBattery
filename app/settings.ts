@@ -4,18 +4,19 @@ import { Map } from 'immutable'
 import debounce from 'lodash/debounce'
 import { ConditionalKeys } from 'type-fest'
 import { DEFAULT_LOCAL_SETTINGS } from '../client/settings/default-settings'
+import swallowNonBuiltins from '../common/async/swallow-non-builtins'
 import { LocalSettings, ScrSettings } from '../common/settings/local-settings'
 import { EventMap, TypedEventEmitter } from '../common/typed-emitter'
 import { findInstallPath } from './find-install-path'
 import log from './logger'
 
-const VERSION = 10
+const VERSION = 11
 const SCR_VERSION = 5
 
 async function findStarcraftPath() {
   let starcraftPath = await findInstallPath()
   if (!starcraftPath) {
-    log.warning('No Starcraft path found in registry, defaulting to standard install location')
+    log.warning('No Starcraft path found in search, defaulting to standard install location')
     starcraftPath = process.env['ProgramFiles(x86)']
       ? `${process.env['ProgramFiles(x86)']}\\Starcraft`
       : `${process.env.ProgramFiles}\\Starcraft`
@@ -49,9 +50,11 @@ abstract class SettingsManager<T> extends TypedEventEmitter<SettingsEvents<T>> {
     this.initialized = initializeFunc.apply(this).catch(err => {
       log.error(`Error initializing the ${this.settingsName} settings file: ${err.stack ?? err}`)
     })
-    this.initialized.then(() => {
-      this.emitChange()
-    })
+    this.initialized
+      .then(() => {
+        this.emitChange()
+      })
+      .catch(swallowNonBuiltins)
   }
 
   untilInitialized(): Promise<void> {
@@ -249,6 +252,10 @@ export class LocalSettingsManager extends SettingsManager<LocalSettings> {
       delete (newSettings as any).trustedDomains
     }
 
+    if (!settings.version || settings.version < 11) {
+      newSettings.quickOpenReplays = false
+    }
+
     newSettings.version = VERSION
     return newSettings
   }
@@ -324,15 +331,18 @@ export function fromBlizzardToSb(blizzardSettings: Record<string, any>): Partial
 }
 
 export function fromSbToBlizzard(sbSettings: Partial<ScrSettings>): Record<string, any> {
-  return Object.entries(sbSettings).reduce((acc, [name, value]) => {
-    const scrKeyName = sbToScrMapping.get(name)
+  return Object.entries(sbSettings).reduce(
+    (acc, [name, value]) => {
+      const scrKeyName = sbToScrMapping.get(name)
 
-    if (scrKeyName) {
-      acc[scrKeyName] = value
-    }
+      if (scrKeyName) {
+        acc[scrKeyName] = value
+      }
 
-    return acc
-  }, {} as Record<string, any>)
+      return acc
+    },
+    {} as Record<string, any>,
+  )
 }
 
 export class ScrSettingsManager extends SettingsManager<ScrSettings> {
@@ -349,7 +359,11 @@ export class ScrSettingsManager extends SettingsManager<ScrSettings> {
    * @param gameFilepath the path to the file that the game should load instead of the normal
    *   settings file, which we write out during game launches.
    */
-  constructor(filepath: string, blizzardFilepath: string, readonly gameFilepath: string) {
+  constructor(
+    filepath: string,
+    blizzardFilepath: string,
+    readonly gameFilepath: string,
+  ) {
     const initializeFunc = async function (this: ScrSettingsManager) {
       try {
         this.settings = JSON.parse(await fsPromises.readFile(this.filepath, { encoding: 'utf8' }))

@@ -2,7 +2,8 @@ import { injectable } from 'tsyringe'
 import { SbUserId } from '../../../common/users/sb-user'
 import transact from '../db/transaction'
 import logger from '../logging/logger'
-import { Redis } from '../redis'
+import { Redis } from '../redis/redis'
+import { DeletedSessionRegistry } from '../session/deleted-sessions'
 import { UserSocketsManager } from '../websockets/socket-groups'
 import { banUser, UserBanRow } from './ban-models'
 import { MIN_IDENTIFIER_MATCHES } from './client-ids'
@@ -16,6 +17,7 @@ export class BanEnacter {
     private redis: Redis,
     private suspiciousIps: SuspiciousIpsService,
     private userSocketsManager: UserSocketsManager,
+    private deletedSessions: DeletedSessionRegistry,
   ) {}
 
   /**
@@ -58,16 +60,37 @@ export class BanEnacter {
 
       // Delete all the active sessions and close any sockets they have open, so that they're forced
       // to log in again and we don't need to ban check on every operation
-      const userSessionsKey = `user_sessions:${targetId}`
-      const userSessionIds = await this.redis.smembers(userSessionsKey)
-      // We could also use ioredis#pipeline here, but I think in practice the number of sessions per
-      // user ID will be fairly low
-      await Promise.all(userSessionIds.map(id => this.redis.del(id)))
-      const keyDeletion = this.redis.del(userSessionsKey)
+      const userSessionPattern = `sessions:${targetId}:*`
+      let [cursor, userSessionKeys] = await this.redis.scan(
+        0,
+        'MATCH',
+        userSessionPattern,
+        'COUNT',
+        10,
+      )
+      while (cursor !== '0') {
+        const [nextCursor, keys] = await this.redis.scan(
+          cursor,
+          'MATCH',
+          userSessionPattern,
+          'COUNT',
+          10,
+        )
+        cursor = nextCursor
+        userSessionKeys = userSessionKeys.concat(keys)
+      }
+
+      const pipeline = this.redis.pipeline()
+      for (const key of userSessionKeys) {
+        this.deletedSessions.register(key)
+        pipeline.del(key)
+      }
       this.userSocketsManager.getById(targetId)?.closeAll()
-      await keyDeletion
+      await pipeline.exec()
 
       if (banRelatedUsers) {
+        // TODO(tec27): Should perform the same session deletion + disconnect for these users as
+        // well
         const connectedUsers = await findConnectedUsers(targetId, MIN_IDENTIFIER_MATCHES)
         if (connectedUsers.length) {
           Promise.resolve()

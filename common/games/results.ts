@@ -1,5 +1,4 @@
 import { TFunction } from 'i18next'
-import { Merge } from 'type-fest'
 import { assertUnreachable } from '../assert-unreachable'
 import { AssignedRaceChar } from '../races'
 import { SbUserId } from '../users/sb-user'
@@ -36,7 +35,11 @@ export interface GameClientPlayerResult {
  */
 export type ReconciledResult = 'win' | 'loss' | 'draw' | 'unknown'
 
-export function getResultLabel(result: ReconciledResult, t: TFunction): string {
+export function getResultLabel(
+  result: ReconciledResult,
+  t: TFunction,
+  alternativeUnknown?: boolean,
+): string {
   if (result === 'win') {
     return t('game.results.win', 'Win')
   } else if (result === 'loss') {
@@ -44,7 +47,7 @@ export function getResultLabel(result: ReconciledResult, t: TFunction): string {
   } else if (result === 'draw') {
     return t('game.results.draw', 'Draw')
   } else if (result === 'unknown') {
-    return t('game.results.unknown', 'Unknown')
+    return alternativeUnknown ? '—' : t('game.results.unknown', 'Unknown')
   }
 
   return assertUnreachable(result)
@@ -91,9 +94,3 @@ export interface SubmitGameResultsRequest {
   /** Each player's result. */
   playerResults: [playerId: SbUserId, result: GameClientPlayerResult][]
 }
-
-// TODO(tec27): Delete once the game code calls the new endpoint
-export type LegacySubmitGameResultsRequest = Merge<
-  SubmitGameResultsRequest,
-  { playerResults: [playerName: string, result: GameClientPlayerResult][] }
->

@@ -1,4 +1,5 @@
 import { NydusClient, RouteHandler } from 'nydus-client'
+import swallowNonBuiltins from '../../common/async/swallow-non-builtins'
 import { BasicChannelInfo } from '../../common/chat'
 import { GameLaunchConfig, GameRoute, PlayerInfo } from '../../common/game-launch-config'
 import { TypedIpcRenderer } from '../../common/ipc'
@@ -33,6 +34,7 @@ import {
 } from '../actions'
 import audioManager, { AudioManager, AvailableSound } from '../audio/audio-manager'
 import { Dispatchable, dispatch } from '../dispatch-registry'
+import i18n from '../i18n/i18next'
 import { replace } from '../navigation/routing'
 import { makeServerUrl } from '../network/server-url'
 import { openSnackbar } from '../snackbars/action-creators'
@@ -186,6 +188,7 @@ interface LobbySetupGameEvent {
     seed: number
     turnRate?: BwTurnRate | 0
     userLatency?: BwUserLatency
+    useLegacyLimits?: boolean
   }
   // TODO(tec27): Right now this can be undefined if the local player is an observer, but perhaps
   // that should be handled differently?
@@ -279,12 +282,12 @@ const eventToAction: EventToActionMap = {
     ({
       type: LOBBY_UPDATE_RACE_CHANGE,
       payload: event,
-    } as any),
+    }) as any,
 
   leave: (name, event) => (dispatch, getState) => {
     const { auth } = getState()
 
-    const user = auth.user.name
+    const user = auth.self!.user.name
     if (user === event.player.name) {
       // The leaver was me all along!!!
       clearCountdownTimer()
@@ -302,11 +305,15 @@ const eventToAction: EventToActionMap = {
   kick: (name, event) => (dispatch, getState) => {
     const { auth } = getState()
 
-    const user = auth.user.name
+    const user = auth.self!.user.name
     if (user === event.player.name) {
       // We have been kicked from a lobby
       clearCountdownTimer()
-      dispatch(openSnackbar({ message: 'You have been kicked from the lobby.' }))
+      dispatch(
+        openSnackbar({
+          message: i18n.t('lobbies.events.kicked', 'You have been kicked from the lobby.'),
+        }),
+      )
       dispatch({
         type: LOBBY_UPDATE_KICK_SELF,
       } as any)
@@ -321,11 +328,15 @@ const eventToAction: EventToActionMap = {
   ban: (name, event) => (dispatch, getState) => {
     const { auth } = getState()
 
-    const user = auth.user.name
+    const user = auth.self!.user.name
     if (user === event.player.name) {
       // It was us who have been banned from a lobby (shame on us!)
       clearCountdownTimer()
-      dispatch(openSnackbar({ message: 'You have been banned from the lobby.' }) as any)
+      dispatch(
+        openSnackbar({
+          message: i18n.t('lobbies.events.banned', 'You have been banned from the lobby.'),
+        }) as any,
+      )
       dispatch({
         type: LOBBY_UPDATE_BAN_SELF,
       } as any)
@@ -341,19 +352,19 @@ const eventToAction: EventToActionMap = {
     ({
       type: LOBBY_UPDATE_HOST_CHANGE,
       payload: event.host,
-    } as any),
+    }) as any,
 
   slotChange: (name, event) =>
     ({
       type: LOBBY_UPDATE_SLOT_CHANGE,
       payload: event,
-    } as any),
+    }) as any,
 
   slotDeleted: (name, event) =>
     ({
       type: LOBBY_UPDATE_SLOT_DELETED,
       payload: event,
-    } as any),
+    }) as any,
 
   startCountdown: (name, event) => (dispatch, getState) => {
     clearCountdownTimer()
@@ -395,7 +406,7 @@ const eventToAction: EventToActionMap = {
   setupGame: (name, event) => (dispatch, getState) => {
     const {
       lobby,
-      auth: { user },
+      auth: { self },
     } = getState()
 
     const {
@@ -417,7 +428,7 @@ const eventToAction: EventToActionMap = {
     const hostInfo = playerInfos.find(s => s.id === host.id)!
 
     const config: GameLaunchConfig = {
-      localUser: { id: user.id, name: user.name },
+      localUser: { id: self!.user.id, name: self!.user.name },
       setup: {
         gameId: event.setup.gameId,
         name: lobbyName,
@@ -429,6 +440,7 @@ const eventToAction: EventToActionMap = {
         seed: event.setup.seed,
         turnRate: event.setup.turnRate,
         userLatency: event.setup.userLatency,
+        useLegacyLimits: event.setup.useLegacyLimits,
         resultCode: event.resultCode,
         serverUrl: makeServerUrl(''),
       },
@@ -443,13 +455,13 @@ const eventToAction: EventToActionMap = {
   setRoutes: (name, event) => dispatch => {
     const { routes, gameId } = event
 
-    ipcRenderer.invoke('activeGameSetRoutes', gameId, routes)
+    ipcRenderer.invoke('activeGameSetRoutes', gameId, routes)?.catch(swallowNonBuiltins)
   },
 
   startWhenReady: (name, event) => {
     const { gameId } = event
 
-    ipcRenderer.invoke('activeGameStartWhenReady', gameId)
+    ipcRenderer.invoke('activeGameStartWhenReady', gameId)?.catch(swallowNonBuiltins)
   },
 
   cancelLoading: (name, event) => (dispatch, getState) => {
@@ -506,7 +518,7 @@ const eventToAction: EventToActionMap = {
       if (!isBlocked) {
         // Notify the main process of the new message, so it can display an appropriate notification
         ipcRenderer.send('chatNewMessage', {
-          urgent: event.mentions.some(m => m.id === auth.user.id),
+          urgent: event.mentions.some(m => m.id === auth.self!.user.id),
         })
       }
 
@@ -525,7 +537,7 @@ const eventToAction: EventToActionMap = {
     ({
       type: LOBBY_UPDATE_STATUS,
       payload: event,
-    } as any),
+    }) as any,
 }
 
 export default function registerModule({ siteSocket }: { siteSocket: NydusClient }) {

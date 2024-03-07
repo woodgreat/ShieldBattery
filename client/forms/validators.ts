@@ -62,26 +62,26 @@ export function required(msg: string | ((t: TFunction) => string)): Validator<an
 
 export function minLength(length: number): Validator<any, any> {
   return (value, _model, _dirty, t) => {
-    if (value === undefined || value === null || ('' + value).length >= length) {
+    if (value === undefined || value === null || String(value).length >= length) {
       return undefined
     }
 
     return t('common.validators.minLength', {
-      defaultValue: `Enter at least {{minLength}} characters`,
-      minLength: length,
+      defaultValue: `Enter at least {{count}} characters`,
+      count: length,
     })
   }
 }
 
 export function maxLength(length: number): Validator<any, any> {
   return (value, _model, _dirty, t) => {
-    if (value === undefined || value === null || ('' + value).length <= length) {
+    if (value === undefined || value === null || String(value).length <= length) {
       return undefined
     }
 
     return t('common.validators.maxLength', {
-      defaultValue: `Enter at most {{maxLength}} characters`,
-      maxLength: length,
+      defaultValue: `Enter at most {{count}} characters`,
+      count: length,
     })
   }
 }
@@ -91,7 +91,7 @@ export function regex(
   msg: string | ((t: TFunction) => string),
 ): Validator<any, any> {
   return (val, _model, _dirty, t) => {
-    if (val === undefined || val === null || regex.test('' + val)) {
+    if (val === undefined || val === null || regex.test(String(val))) {
       return undefined
     }
 

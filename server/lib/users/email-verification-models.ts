@@ -1,6 +1,6 @@
-import sql from 'sql-template-strings'
 import { SbUserId } from '../../../common/users/sb-user'
 import db, { DbClient } from '../db'
+import { sql } from '../db/sql'
 
 export async function addEmailVerificationCode(
   {
@@ -73,9 +73,8 @@ export async function consumeEmailVerificationCode(
         ev.email = u.email AND
         ev.verification_code = ${code} AND
         ev.request_time > (NOW() - INTERVAL '2 DAYS')
-      RETURNING *
     `)
-    return result.rows.length > 0
+    return !!result.rowCount
   } finally {
     done()
   }

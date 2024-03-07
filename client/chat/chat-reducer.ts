@@ -4,6 +4,7 @@ import {
   BasicChannelInfo,
   ChannelModerationAction,
   ChannelPermissions,
+  ChannelPreferences,
   ChatMessage,
   ChatUserProfileJson,
   ClientChatMessageType,
@@ -13,7 +14,7 @@ import {
   SbChannelId,
 } from '../../common/chat'
 import { SbUserId } from '../../common/users/sb-user'
-import { LOBBY_UPDATE_CHAT_MESSAGE, NETWORK_SITE_CONNECTED } from '../actions'
+import { LOBBY_UPDATE_CHAT_MESSAGE } from '../actions'
 import { immerKeyedReducer } from '../reducers/keyed-reducer'
 
 // How many messages should be kept for inactive channels
@@ -50,6 +51,8 @@ export interface ChatState {
   idToMessages: Map<SbChannelId, MessagesState>
   /** A nested map of channel ID -> a map of user ID -> chat channel user profile */
   idToUserProfiles: Map<SbChannelId, Map<SbUserId, ChatUserProfileJson>>
+  /** A map of channel ID -> your own preferences for this chat channel */
+  idToSelfPreferences: Map<SbChannelId, ChannelPreferences>
   /** A map of channel ID -> your own permissions for this chat channel */
   idToSelfPermissions: Map<SbChannelId, ChannelPermissions>
   /** A set of joined chat channels that are activated */
@@ -68,6 +71,7 @@ const DEFAULT_CHAT_STATE: Immutable<ChatState> = {
   idToUsers: new Map(),
   idToMessages: new Map(),
   idToUserProfiles: new Map(),
+  idToSelfPreferences: new Map(),
   idToSelfPermissions: new Map(),
   activatedChannels: new Set(),
   unreadChannels: new Set(),
@@ -84,7 +88,8 @@ function removeUserFromChannel(
   const joinedChannelInfo = state.idToJoinedInfo.get(channelId)
   const channelUsers = state.idToUsers.get(channelId)
   const channelUserProfiles = state.idToUserProfiles.get(channelId)
-  if (!joinedChannelInfo || !channelUsers || !channelUserProfiles) {
+  const detailedChannelInfo = state.idToDetailedInfo.get(channelId)
+  if (!joinedChannelInfo || !channelUsers || !channelUserProfiles || !detailedChannelInfo) {
     return
   }
 
@@ -92,6 +97,7 @@ function removeUserFromChannel(
   channelUsers.idle.delete(userId)
   channelUsers.offline.delete(userId)
   channelUserProfiles.delete(userId)
+  detailedChannelInfo.userCount -= 1
 
   let messageType:
     | ClientChatMessageType.LeaveChannel
@@ -134,6 +140,7 @@ function removeSelfFromChannel(state: ChatState, channelId: SbChannelId) {
   state.idToUsers.delete(channelId)
   state.idToMessages.delete(channelId)
   state.idToUserProfiles.delete(channelId)
+  state.idToSelfPreferences.delete(channelId)
   state.idToSelfPermissions.delete(channelId)
   state.activatedChannels.delete(channelId)
   state.unreadChannels.delete(channelId)
@@ -202,8 +209,14 @@ function updateDeletedChannels(state: ChatState, deletedChannels: SbChannelId[])
 }
 
 function initChannel(state: ChatState, channelId: SbChannelId, data: InitialChannelData) {
-  const { channelInfo, detailedChannelInfo, joinedChannelInfo, activeUserIds, selfPermissions } =
-    data
+  const {
+    channelInfo,
+    detailedChannelInfo,
+    joinedChannelInfo,
+    activeUserIds,
+    selfPreferences,
+    selfPermissions,
+  } = data
 
   const channelUsers: UsersState = {
     active: new Set(activeUserIds),
@@ -224,6 +237,7 @@ function initChannel(state: ChatState, channelId: SbChannelId, data: InitialChan
   state.idToUsers.set(channelId, channelUsers)
   state.idToMessages.set(channelId, messagesState)
   state.idToUserProfiles.set(channelId, new Map())
+  state.idToSelfPreferences.set(channelId, selfPreferences)
   state.idToSelfPermissions.set(channelId, selfPermissions)
 
   updateMessages(state, channelId, false, m =>
@@ -252,11 +266,13 @@ export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
     const { channelId } = action.meta
 
     const channelUsers = state.idToUsers.get(channelId)
-    if (!channelUsers) {
+    const detailedChannelInfo = state.idToDetailedInfo.get(channelId)
+    if (!channelUsers || !detailedChannelInfo) {
       return
     }
 
     channelUsers.active.add(user.id)
+    detailedChannelInfo.userCount += 1
 
     updateMessages(state, channelId, true, m => m.concat(message))
   },
@@ -491,6 +507,12 @@ export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
     state.activatedChannels.delete(channelId)
   },
 
+  ['@chat/preferencesChanged'](state, action) {
+    const { channelId } = action.meta
+
+    state.idToSelfPreferences.set(channelId, action.payload.selfPreferences)
+  },
+
   ['@chat/permissionsChanged'](state, action) {
     const { channelId } = action.meta
 
@@ -514,7 +536,7 @@ export default immerKeyedReducer(DEFAULT_CHAT_STATE, {
     updateChannelInfos(state, action.payload.channelMentions)
   },
 
-  [NETWORK_SITE_CONNECTED as any]() {
+  ['@network/connect']() {
     return DEFAULT_CHAT_STATE
   },
 })

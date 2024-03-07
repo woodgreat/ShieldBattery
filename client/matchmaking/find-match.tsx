@@ -13,12 +13,15 @@ import {
   matchmakingDivisionToLabel,
   matchmakingTypeToLabel,
 } from '../../common/matchmaking'
+import { urlPath } from '../../common/urls'
 import { closeOverlay } from '../activities/action-creators'
 import { DisabledOverlay } from '../activities/disabled-content'
-import { useSelfUser } from '../auth/state-hooks'
+import { useTrackPageView } from '../analytics/analytics'
+import { useSelfUser } from '../auth/auth-utils'
 import { ComingSoon } from '../coming-soon/coming-soon'
 import { useKeyListener } from '../keyboard/key-listener'
 import { getInstantaneousSelfRank } from '../ladder/action-creators'
+import { JsonLocalStorageValue } from '../local-storage'
 import { RaisedButton } from '../material/button'
 import { ScrollDivider, useScrollIndicatorState } from '../material/scroll-indicator'
 import { TabItem, Tabs } from '../material/tabs'
@@ -43,7 +46,7 @@ import {
   singleLine,
   subtitle1,
 } from '../styles/typography'
-import { findMatch, getCurrentMapPool, updateLastQueuedMatchmakingType } from './action-creators'
+import { findMatch, getCurrentMapPool } from './action-creators'
 import { Contents1v1 } from './find-1v1'
 import { Contents2v2 } from './find-2v2'
 import { FindMatchFormRef } from './find-match-forms'
@@ -125,12 +128,27 @@ function DisabledContents(props: DisabledContentsProps) {
 // TODO(tec27): Remove this once 3v3 is added as a "real" matchmaking type
 type ExpandedMatchmakingType = MatchmakingType | '3v3'
 
+// TODO(tec27): Write a hook for user-specific storage of this
+const lastActiveTabStorage = new JsonLocalStorageValue<ExpandedMatchmakingType>(
+  'matchmaking.findMatch.lastActiveTab',
+)
+
+function normalizeExpandedMatchmakingType(type?: string): ExpandedMatchmakingType {
+  switch (type) {
+    case MatchmakingType.Match1v1:
+    case MatchmakingType.Match2v2:
+    case '3v3':
+      return type
+    default:
+      return MatchmakingType.Match1v1
+  }
+}
+
 export function FindMatch() {
   const { t } = useTranslation()
-  const lastQueuedMatchmakingType = useAppSelector(
-    s => s.matchmakingPreferences.lastQueuedMatchmakingType,
-  )
-  const [activeTab, setActiveTab] = useState(lastQueuedMatchmakingType as ExpandedMatchmakingType)
+  const lastActiveTab = normalizeExpandedMatchmakingType(lastActiveTabStorage.getValue())
+  const [activeTab, setActiveTab] = useState(lastActiveTab)
+  useTrackPageView(urlPath`/matchmaking/find/${activeTab}`)
 
   const dispatch = useAppDispatch()
   const isMatchmakingStatusDisabled = !useAppSelector(
@@ -154,16 +172,10 @@ export function FindMatch() {
   })
   const formRef = useRef<FindMatchFormRef>(null)
 
-  const onTabChange = useCallback(
-    (tab: ExpandedMatchmakingType) => {
-      if (tab !== '3v3') {
-        dispatch(updateLastQueuedMatchmakingType(tab))
-      }
-
-      setActiveTab(tab)
-    },
-    [dispatch],
-  )
+  const onTabChange = useCallback((tab: ExpandedMatchmakingType) => {
+    lastActiveTabStorage.setValue(tab)
+    setActiveTab(tab)
+  }, [])
 
   const onSubmit = useCallback(
     (prefs: Immutable<MatchmakingPreferences>) => {
@@ -229,11 +241,11 @@ export function FindMatch() {
         <TabArea>
           <Tabs activeTab={activeTab} onChange={onTabChange}>
             <TabItem
-              text={matchmakingTypeToLabel(MatchmakingType.Match1v1)}
+              text={matchmakingTypeToLabel(MatchmakingType.Match1v1, t)}
               value={MatchmakingType.Match1v1}
             />
             <TabItem
-              text={matchmakingTypeToLabel(MatchmakingType.Match2v2)}
+              text={matchmakingTypeToLabel(MatchmakingType.Match2v2, t)}
               value={MatchmakingType.Match2v2}
             />
             <TabItem text={'3v3'} value={t('matchmaking.type.3v3', '3v3')} />
@@ -395,36 +407,35 @@ function RankInfo({ matchmakingType }: { matchmakingType: MatchmakingType }) {
   const [loadingError, setLoadingError] = useState<Error>()
 
   const season = useAppSelector(s => s.selfRank.currentSeason)
-  const ladderPlayer = useAppSelector<Readonly<LadderPlayer>>(
-    s =>
-      s.selfRank.byType.get(matchmakingType) ?? {
-        rank: Number.MAX_SAFE_INTEGER,
-        userId: selfUserId,
-        rating: 0,
-        points: 0,
-        bonusUsed: 0,
-        lifetimeGames: 0,
-        wins: 0,
-        losses: 0,
-        lastPlayedDate: 0,
+  const ladderPlayer =
+    useAppSelector(s => s.selfRank.byType.get(matchmakingType)) ??
+    ({
+      rank: Number.MAX_SAFE_INTEGER,
+      userId: selfUserId,
+      rating: 0,
+      points: 0,
+      bonusUsed: 0,
+      lifetimeGames: 0,
+      wins: 0,
+      losses: 0,
+      lastPlayedDate: 0,
 
-        pWins: 0,
-        pLosses: 0,
-        tWins: 0,
-        tLosses: 0,
-        zWins: 0,
-        zLosses: 0,
-        rWins: 0,
-        rLosses: 0,
+      pWins: 0,
+      pLosses: 0,
+      tWins: 0,
+      tLosses: 0,
+      zWins: 0,
+      zLosses: 0,
+      rWins: 0,
+      rLosses: 0,
 
-        rPWins: 0,
-        rPLosses: 0,
-        rTWins: 0,
-        rTLosses: 0,
-        rZWins: 0,
-        rZLosses: 0,
-      },
-  )
+      rPWins: 0,
+      rPLosses: 0,
+      rTWins: 0,
+      rTLosses: 0,
+      rZWins: 0,
+      rZLosses: 0,
+    } satisfies LadderPlayer)
 
   const bonusPoolSize = useMemo(() => {
     if (!season) {
@@ -483,7 +494,9 @@ function RankInfo({ matchmakingType }: { matchmakingType: MatchmakingType }) {
     <RankInfoContainer>
       <DivisionInfo>
         <DivisionIcon player={ladderPlayer} size={88} />
-        <RankDisplayDivisionLabel>{matchmakingDivisionToLabel(division)}</RankDisplayDivisionLabel>
+        <RankDisplayDivisionLabel>
+          {matchmakingDivisionToLabel(division, t)}
+        </RankDisplayDivisionLabel>
       </DivisionInfo>
 
       <RankDisplayInfo>

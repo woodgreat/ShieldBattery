@@ -18,7 +18,7 @@ import {
   GameType,
   MatchmakingExtra,
 } from '../../../common/games/configuration'
-import { createHuman, Slot } from '../../../common/lobbies/slot'
+import { createHuman, Slot, SlotType } from '../../../common/lobbies/slot'
 import { MapInfo, MapInfoJson, toMapInfoJson } from '../../../common/maps'
 import {
   ALL_MATCHMAKING_TYPES,
@@ -93,13 +93,13 @@ interface GameLoaderCallbacks {
     setup: {
       gameId: string
       seed: number
-      turnRate?: BwTurnRate
+      turnRate?: BwTurnRate | 0
       userLatency?: BwUserLatency
     }
     resultCodes: ReadonlyMap<SbUserId, string>
     chosenMap: MapInfoJson
     cancelToken: CancelToken
-  }) => void
+  }) => void | Promise<void>
   onRoutesSet: (
     clients: ReadonlyArray<ClientSocketsGroup>,
     playerName: string,
@@ -133,6 +133,7 @@ class Match {
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     ;[this.acceptTimeout, this.clearAcceptTimeout] = timeoutPromise(
       MATCHMAKING_ACCEPT_MATCH_TIME_MS + ACCEPT_MATCH_LATENCY,
     )
@@ -983,7 +984,7 @@ export class MatchmakingService {
         slots.map(s => ({
           id: s.userId,
           race: s.race,
-          isComputer: s.type === 'computer' || s.type === 'umsComputer',
+          isComputer: s.type === SlotType.Computer || s.type === SlotType.UmsComputer,
         })),
       ]
     } else {
@@ -998,7 +999,7 @@ export class MatchmakingService {
         t.map(s => ({
           id: s.userId,
           race: s.race,
-          isComputer: s.type === 'computer' || s.type === 'umsComputer',
+          isComputer: s.type === SlotType.Computer || s.type === SlotType.UmsComputer,
         })),
       )
     }

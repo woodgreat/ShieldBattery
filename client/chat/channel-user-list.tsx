@@ -4,7 +4,6 @@ import { Virtuoso } from 'react-virtuoso'
 import styled, { css } from 'styled-components'
 import { SbUserId } from '../../common/users/sb-user'
 import { ConnectedAvatar } from '../avatars/avatar'
-import { useVirtuosoScrollFix } from '../dom/virtuoso-scroll-fix'
 import { useChatUserMenuItems, useMentionFilterClick } from '../messaging/mention-hooks'
 import { useAppSelector } from '../redux-hooks'
 import {
@@ -28,6 +27,7 @@ const UserListContainer = styled.div`
   width: 256px;
   flex-grow: 0;
   flex-shrink: 0;
+  padding-top: 10px;
 
   background-color: ${background700};
 `
@@ -204,8 +204,6 @@ interface UserListProps {
 
 const UserList = React.memo((props: UserListProps) => {
   const { t } = useTranslation()
-  const [scrollerRef] = useVirtuosoScrollFix()
-
   const { active, idle, offline } = props
 
   const rowData = useMemo((): ReadonlyArray<UserListRowData> => {
@@ -256,12 +254,7 @@ const UserList = React.memo((props: UserListProps) => {
 
   return (
     <UserListContainer>
-      <Virtuoso
-        scrollerRef={scrollerRef}
-        components={{ Footer: VertPadding }}
-        data={rowData}
-        itemContent={renderRow}
-      />
+      <Virtuoso components={{ Footer: VertPadding }} data={rowData} itemContent={renderRow} />
     </UserListContainer>
   )
 })

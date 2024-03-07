@@ -11,26 +11,30 @@ dependencies in order to properly test things.
 ### JavaScript
 
 All of the JavaScript will either run in, or be built by, [node.js](https://nodejs.org). You'll need
-to install a version of it, generally the current version is a good choice (16.14.0 at the time of
-writing). On Windows, you'll be given the option to install dependencies for building native modules
-(Visual Studio build tools + Python), you should take that option if you don't already have them
-installed separately.
+to install a version of it, generally the current LTS version is a good choice (20.10.5 at the time
+of writing). On Windows, you'll be given the option to install dependencies for building native
+modules (Visual Studio build tools + Python), you should take that option if you don't already have
+them installed separately.
 
-### Yarn
+### PNPM
 
-The various JavaScript components use [Yarn](https://yarnpkg.com/) to manage their dependencies.
-Install the latest version of it from their [downloads page](https://yarnpkg.com/en/docs/install).
-Note that we are currently using "Yarn Classic" (that is, 1.x).
+The various JavaScript components use [pnpm](https://pnpm.io/) to manage their dependencies.
+Install the latest version via `corepack` which is provided by Node:
+
+```sh
+corepack enable
+corepack prepare pnpm@latest --activate
+```
 
 ### C++
 
-Visual Studio 2017 or higher is required to build various C++ parts and to link the Rust DLL.
+Visual Studio 2022 or higher is required to build various C++ parts and to link the Rust DLL.
 The easiest/cheapest way to get this is through the
-[Community edition](https://www.visualstudio.com/en-us/downloads/download-visual-studio-vs.aspx).
+[Community edition](https://visualstudio.microsoft.com/downloads/).
 
 ### Rust
 
-The code that runs within BW process, as well as Electron-side process launching helpers are DLLs
+The code that runs within BW process, some Electron addons, and the `server-rs` package are
 written in [Rust](https://rust-lang.org). The simplest way to get things built is to use the [rustup
 toolchain installer](https://rustup.rs).
 
@@ -43,8 +47,30 @@ resulting DLL and other necessary support files to `game/dist`, where the JavaSc
 them to be. The build defaults to the quicker debug build, to build the optimized version run
 `build.bat release`.
 
-If the required minimum Rust version is changed (1.63 as of this writing), you can update the Rust
-toolchain by running `rustup update`.
+You can update the Rust toolchain by running `rustup update`. We generally try to stay up to date
+with the current stable version (and some CI runs may fail if your local version is older than this,
+due to changes in `rust fmt` and various warnings/errors).
+
+### Rust utilities
+
+- We use `sqlx` for our database interaction in Rust, which has a CLI utility.
+- We use `typeshare` for sharing types between Rust and TS.
+
+After installing the Rust toolchain, run:
+
+```sh
+cargo install sqlx-cli
+cargo install typeshare-cli
+```
+
+### Recommended VSCode Plugins
+
+If you're using VSCode, the following plugins will likely be useful for development:
+
+- [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
+- [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+- [GraphQL Language Support](https://marketplace.visualstudio.com/items?itemName=GraphQL.vscode-graphql)
+- [Styled Components](https://marketplace.visualstudio.com/items?itemName=styled-components.vscode-styled-components)
 
 ## Server software
 
@@ -133,14 +159,14 @@ match your local configuration.
 
 ## Installing dependencies
 
-Every directory with a `yarn.lock` needs to have its dependencies installed with Yarn. You can do
-this manually, or simply run `yarnall` from the root directory:
+Every directory with a `pnpm-lock.yaml` needs to have its dependencies installed with pnpm. You can
+do this manually, or simply run `installall` from the root directory:
 
 ```
-yarn run yarnall
+pnpm run installall
 ```
 
-This should be done every time a `yarn.lock` file changes in the repository.
+This should be done every time a `pnpm-lock.yaml` file changes in the repository.
 
 ## Initialize the database structure
 
@@ -149,7 +175,7 @@ This should be done every time a `yarn.lock` file changes in the repository.
 From the root of this repository execute this to migrate the database to the latest structure:
 
 ```
-yarn run migrate-up
+pnpm run migrate-up
 ```
 
 You will need to run this command after pulling in commits that change the database structure as
@@ -181,7 +207,7 @@ structure), and set `SB_SPRITE_DATA` in the `.env` file to that directory.
 The standard way to run the server is (assuming you are in the project root directory):
 
 ```
-yarn run start-server
+pnpm run start-server
 ```
 
 This command will format and colorize the log output, but if you want/need the raw output you can
@@ -191,6 +217,14 @@ also use:
 node ./server/index.js
 ```
 
+Since there are many dev tools that need to be run, we have a convenience command that will
+run all the servers together and also launch a single Electron app. This is the recommended
+command to use during development:
+
+```
+pnpm run local-dev
+```
+
 ### Overriding the server URL (optional)
 
 It is possible to override the server's URL with environment variables. Two levels of environment variables:
@@ -198,7 +232,7 @@ It is possible to override the server's URL with environment variables. Two leve
 - **Build time**: `SB_SERVER` set in the environment that runs the webpack dev server will pick the
   "default" server for that build. If none is set, the default will be, in `NODE_ENV=production`,
   `https://shieldbattery.net`, or otherwise, the canonical URL set in your local server config.
-- **Run time**: `SB_SERVER` set in the environment that runs the app (`yarn run app` or just running the
+- **Run time**: `SB_SERVER` set in the environment that runs the app (`pnpm run app` or just running the
   actual packaged executable).
 
 Note: run time takes precedence over build time.
@@ -226,17 +260,24 @@ Our tests are split into two types:
 
 ### Running unit tests locally
 
-To run unit tests as well as lint and typechecking, do:
+To run unit tests, do:
 
 ```sh
-yarn run test
+pnpm run test
 ```
 
 If you're developing a new test or modifying an existing one, you can run only the tests and re-run
 on each change by doing:
 
 ```sh
-yarn run testonly --watch
+pnpm run test --watch
+```
+
+We also have lint and typechecking passes that will run on CI, you can run these locally by doing:
+
+```sh
+pnpm run lint
+pnpm run typecheck
 ```
 
 ### Running integration tests locally
@@ -258,6 +299,17 @@ If you know that none of the changes you have made will affect the app server co
 .\run-integration-tests.bat nobuild
 ```
 
+Additionally, any arguments other than `nobuild` will be forwarded to playwwright, which allows you
+to do something like this:
+
+```bat
+.\run-integration-tests.bat --ui ban.spec.ts
+```
+
+This will run a specific test matching the `ban.spec.ts` pattern in
+[UI Mode](https://playwright.dev/docs/test-ui-mode). You can find a full list of playwright's CLI
+options in their [documentation](https://playwright.dev/docs/test-cli).
+
 On other operating systems, you can do those steps manually:
 
 ```sh
@@ -266,5 +318,5 @@ docker-compose down -v && \
 docker-compose build && \
 docker-compose up -V -d && \
 cd .. && \
-yarn run test:integration
+pnpm run test:integration
 ```

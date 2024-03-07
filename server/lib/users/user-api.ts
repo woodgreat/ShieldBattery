@@ -3,12 +3,12 @@ import bcrypt from 'bcrypt'
 import cuid from 'cuid'
 import httpErrors from 'http-errors'
 import Joi from 'joi'
+import uid from 'uid-safe'
 import { assertUnreachable } from '../../../common/assert-unreachable'
 import {
   EMAIL_MAXLENGTH,
   EMAIL_MINLENGTH,
   EMAIL_PATTERN,
-  isValidEmail,
   isValidPassword,
   isValidUsername,
   PASSWORD_MINLENGTH,
@@ -39,9 +39,7 @@ import {
   AdminBanUserRequest,
   AdminBanUserResponse,
   AdminGetBansResponse,
-  AdminGetPermissionsResponse,
   AdminGetUserIpsResponse,
-  AdminUpdatePermissionsRequest,
   AuthEvent,
   ChangeLanguageRequest,
   ChangeLanguagesResponse,
@@ -49,6 +47,8 @@ import {
   GetUserProfileResponse,
   SbUser,
   SbUserId,
+  SEARCH_MATCH_HISTORY_LIMIT,
+  SearchMatchHistoryResponse,
   SelfUser,
   toBanHistoryEntryJson,
   toUserIpInfoJson,
@@ -57,54 +57,53 @@ import {
 import { ClientSessionInfo } from '../../../common/users/session'
 import { UNIQUE_VIOLATION } from '../db/pg-error-codes'
 import transact from '../db/transaction'
-import { getRecentGamesForUser } from '../games/game-models'
+import { getRecentGamesForUser, searchGamesForUser } from '../games/game-models'
 import { httpApi, httpBeforeAll } from '../http/http-api'
-import { httpBefore, httpDelete, httpGet, httpPatch, httpPost } from '../http/route-decorators'
+import { httpBefore, httpDelete, httpGet, httpPost } from '../http/route-decorators'
 import { joiLocale } from '../i18n/locale-validator'
-import sendMail from '../mail/mailer'
+import { sendMailTemplate } from '../mail/mailer'
 import { getMapInfo } from '../maps/map-models'
 import { getRankForUser } from '../matchmaking/models'
 import { usePasswordResetCode } from '../models/password-resets'
-import { getPermissions, updatePermissions } from '../models/permissions'
+import { updatePermissions } from '../models/permissions'
 import { isElectronClient } from '../network/only-web-clients'
 import { checkAllPermissions, checkAnyPermission } from '../permissions/check-permissions'
 import ensureLoggedIn from '../session/ensure-logged-in'
-import initSession from '../session/init'
-import { updateAllSessions, updateAllSessionsForCurrentUser } from '../session/update-all-sessions'
+import { getJwt } from '../session/jwt-session-middleware'
 import createThrottle from '../throttle/create-throttle'
 import throttleMiddleware from '../throttle/middleware'
+import { Clock } from '../time/clock'
 import { validateRequest } from '../validation/joi-validator'
 import { TypedPublisher } from '../websockets/typed-publisher'
 import { BanEnacter } from './ban-enacter'
 import { retrieveBanHistory } from './ban-models'
 import { joiClientIdentifiers } from './client-ids'
-import {
-  addEmailVerificationCode,
-  consumeEmailVerificationCode,
-  getEmailVerificationsCount,
-} from './email-verification-models'
+import { addEmailVerificationCode, getEmailVerificationsCount } from './email-verification-models'
 import { SuspiciousIpsService } from './suspicious-ips'
 import {
   convertUserApiErrors,
   convertUserRelationshipServiceErrors,
   UserApiError,
 } from './user-api-errors'
+import { UserIdentifierCleanupJob } from './user-identifier-cleanup'
 import { UserIdentifierManager } from './user-identifier-manager'
 import { retrieveIpsForUser, retrieveRelatedUsersForIps } from './user-ips'
 import {
-  attemptLogin,
   createUser,
   findSelfById,
   findUserById,
   findUserByName,
   findUsersById,
   retrieveUserCreatedDate,
-  updateUser,
   UserUpdatables,
 } from './user-model'
 import { UserRelationshipService } from './user-relationship-service'
+import { UserService } from './user-service'
 import { getUserStats } from './user-stats-model'
 import { joiUserId } from './user-validators'
+
+// Env var that lets us turn throttling off for testing
+const THROTTLING_DISABLED = Boolean(process.env.SB_DISABLE_THROTTLING ?? false)
 
 const accountCreationThrottle = createThrottle('accountcreation', {
   rate: 1,
@@ -121,6 +120,12 @@ const accountUpdateThrottle = createThrottle('accountupdate', {
 const accountRetrievalThrottle = createThrottle('accountretrieval', {
   rate: 40,
   burst: 80,
+  window: 60000,
+})
+
+const matchHistoryRetrievalThrottle = createThrottle('matchhistoryretrieval', {
+  rate: 50,
+  burst: 150,
   window: 60000,
 })
 
@@ -143,7 +148,7 @@ const relationshipsThrottle = createThrottle('accountrelationships', {
 })
 
 function hashPass(password: string): Promise<string> {
-  return bcrypt.hash(password, 10 /* saltRounds */)
+  return bcrypt.hash(password, 11 /* saltRounds */)
 }
 
 function sendVerificationEmail({
@@ -157,7 +162,7 @@ function sendVerificationEmail({
   userId: SbUserId
   username: string
 }) {
-  return sendMail({
+  return sendMailTemplate({
     to: email,
     subject: 'ShieldBattery Email Verification',
     templateName: 'email-verification',
@@ -181,6 +186,9 @@ export class UserApi {
     private suspiciousIps: SuspiciousIpsService,
     private userIdManager: UserIdentifierManager,
     private userRelationshipService: UserRelationshipService,
+    private _userIdentifierCleanup: UserIdentifierCleanupJob,
+    private userService: UserService,
+    private clock: Clock,
   ) {}
 
   @httpPost('/')
@@ -207,25 +215,27 @@ export class UserApi {
 
     const { username, password, email, clientIds, locale } = body
 
-    if (!isElectronClient(ctx)) {
-      const [suspicious, signupAllowed] = await Promise.all([
-        this.suspiciousIps.isIpSuspicious(ctx.ip),
-        this.userIdManager.isSignupAllowed(true, clientIds),
-      ])
+    if (!THROTTLING_DISABLED) {
+      if (!isElectronClient(ctx)) {
+        const [suspicious, signupAllowed] = await Promise.all([
+          this.suspiciousIps.isIpSuspicious(ctx.ip),
+          this.userIdManager.isSignupAllowed(true, clientIds),
+        ])
 
-      if (suspicious || !signupAllowed) {
-        throw new UserApiError(
-          UserErrorCode.SuspiciousActivity,
-          'Suspicious activity detected, creating accounts on the web is disabled',
-        )
-      }
-    } else {
-      const signupAllowed = await this.userIdManager.isSignupAllowed(false, clientIds)
-      if (!signupAllowed) {
-        throw new UserApiError(
-          UserErrorCode.MachineBanned,
-          'This machine is banned from creating new accounts',
-        )
+        if (suspicious || !signupAllowed) {
+          throw new UserApiError(
+            UserErrorCode.SuspiciousActivity,
+            'Suspicious activity detected, creating accounts on the web is disabled',
+          )
+        }
+      } else {
+        const signupAllowed = await this.userIdManager.isSignupAllowed(false, clientIds)
+        if (!signupAllowed) {
+          throw new UserApiError(
+            UserErrorCode.MachineBanned,
+            'This machine is banned from creating new accounts',
+          )
+        }
       }
     }
 
@@ -258,20 +268,9 @@ export class UserApi {
       createdUser.permissions.editPermissions = true
     }
 
-    const sessionInfo: ClientSessionInfo = {
-      sessionId: '',
-      user: createdUser.user,
-      permissions: createdUser.permissions,
-      lastQueuedMatchmakingType: MatchmakingType.Match1v1,
-    }
+    await ctx.beginSession(createdUser.user.id, false)
 
-    // regenerate the session to ensure that logged in sessions and anonymous sessions don't
-    // share a session ID
-    await ctx.regenerateSession()
-    initSession(ctx, sessionInfo)
-    sessionInfo.sessionId = ctx.sessionId!
-
-    const code = cuid()
+    const code = await uid(12)
     await addEmailVerificationCode({ userId: createdUser.user.id, email, code, ip: ctx.ip })
     // No need to await for this
     sendVerificationEmail({
@@ -281,12 +280,12 @@ export class UserApi {
       username: createdUser.user.name,
     }).catch(err => ctx.log.error({ err, req: ctx.req }, 'Error sending email verification email'))
 
-    return sessionInfo
+    return { ...ctx.session!, jwt: await getJwt(ctx, this.clock.now()) }
   }
 
   @httpGet('/:id/profile')
   @httpBefore(
-    throttleMiddleware(accountRetrievalThrottle, ctx => String(ctx.session?.userId) ?? ctx.ip),
+    throttleMiddleware(accountRetrievalThrottle, ctx => String(ctx.session?.user?.id) ?? ctx.ip),
   )
   async getUserProfile(ctx: RouterContext): Promise<GetUserProfileResponse> {
     const { params } = validateRequest(ctx, {
@@ -379,10 +378,67 @@ export class UserApi {
     }
   }
 
+  @httpGet('/:id/match-history')
+  @httpBefore(
+    throttleMiddleware(
+      matchHistoryRetrievalThrottle,
+      ctx => String(ctx.session?.user?.id) ?? ctx.ip,
+    ),
+  )
+  async searchMatchHistory(ctx: RouterContext): Promise<SearchMatchHistoryResponse> {
+    const {
+      params,
+      query: { offset },
+    } = validateRequest(ctx, {
+      params: Joi.object<{ id: SbUserId }>({
+        id: joiUserId().required(),
+      }),
+      query: Joi.object<{ q?: string; offset: number }>({
+        q: Joi.string().allow(''),
+        offset: Joi.number().min(0),
+      }),
+    })
+
+    const user = await findUserById(params.id)
+    if (!user) {
+      throw new UserApiError(UserErrorCode.NotFound, 'user not found')
+    }
+
+    const games = await searchGamesForUser({
+      userId: user.id,
+      limit: SEARCH_MATCH_HISTORY_LIMIT,
+      offset,
+    })
+    const uniqueUsers = new Set<SbUserId>()
+    const uniqueMaps = new Set<string>()
+    for (const g of games) {
+      uniqueMaps.add(g.mapId)
+
+      for (const team of g.config.teams) {
+        for (const player of team) {
+          if (!player.isComputer) {
+            uniqueUsers.add(player.id)
+          }
+        }
+      }
+    }
+    const [users, maps] = await Promise.all([
+      findUsersById(Array.from(uniqueUsers.values())),
+      getMapInfo(Array.from(uniqueMaps.values())),
+    ])
+
+    return {
+      games: games.map(g => toGameRecordJson(g)),
+      maps: maps.map(m => toMapInfoJson(m)),
+      users,
+      hasMoreGames: games.length >= SEARCH_MATCH_HISTORY_LIMIT,
+    }
+  }
+
   @httpGet('/batch-info')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(accountRetrievalThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(accountRetrievalThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async batchGetInfo(ctx: RouterContext): Promise<GetBatchUserInfoResponse> {
     const { query } = validateRequest(ctx, {
@@ -399,106 +455,10 @@ export class UserApi {
     }
   }
 
-  @httpPatch('/:id')
-  @httpBefore(
-    ensureLoggedIn,
-    throttleMiddleware(accountUpdateThrottle, ctx => String(ctx.session!.userId)),
-  )
-  async updateUser(ctx: RouterContext): Promise<SelfUser | undefined> {
-    const { id: idString } = ctx.params
-    const { currentPassword, newPassword, newEmail } = ctx.request.body
-
-    const id = Number(idString)
-    if (!id || isNaN(id)) {
-      throw new httpErrors.BadRequest('Invalid parameters')
-    } else if (ctx.session!.userId !== id) {
-      throw new httpErrors.Unauthorized("Can't change another user's account")
-    } else if (newPassword && !isValidPassword(newPassword)) {
-      throw new httpErrors.BadRequest('Invalid parameters')
-    } else if (newEmail && !isValidEmail(newEmail)) {
-      throw new httpErrors.BadRequest('Invalid parameters')
-    }
-
-    // TODO(tec27): Updating certain things (e.g. title) might not need to require confirming the
-    // current password, but maybe that should just be a different API
-    if (!newPassword && !newEmail) {
-      ctx.status = 204
-      return undefined
-    }
-
-    if (!isValidPassword(currentPassword)) {
-      throw new httpErrors.BadRequest('Invalid parameters')
-    }
-
-    const userInfo = await findUserById(id)
-    if (!userInfo) {
-      throw new httpErrors.Unauthorized('Incorrect user ID or password')
-    }
-
-    const oldUser = await attemptLogin(userInfo.name, currentPassword)
-    if (!oldUser) {
-      throw new httpErrors.Unauthorized('Incorrect user ID or password')
-    }
-
-    const oldEmail = oldUser.email
-
-    const updates: Partial<UserUpdatables> = {}
-
-    if (newPassword) {
-      updates.password = await hashPass(newPassword)
-    }
-    if (newEmail) {
-      updates.email = newEmail
-      updates.emailVerified = false
-    }
-    const user = await updateUser(oldUser.id, updates)
-    if (!user) {
-      // NOTE(tec27): We want this to be a 5xx because this is a very unusual case, since we just
-      // looked this user up above
-      throw new Error("User couldn't be found")
-    }
-
-    // No need to await this before sending response to the user
-    if (newPassword) {
-      sendMail({
-        to: user.email,
-        subject: 'ShieldBattery Password Changed',
-        templateName: 'password-change',
-        templateData: { username: user.name },
-      }).catch(err => ctx.log.error({ err, req: ctx.req }, 'Error sending password changed email'))
-    }
-    if (newEmail) {
-      sendMail({
-        to: oldEmail,
-        subject: 'ShieldBattery Email Changed',
-        templateName: 'email-change',
-        templateData: { username: user.name },
-      }).catch(err => ctx.log.error({ err, req: ctx.req }, 'Error sending email changed email'))
-
-      const emailVerificationCode = cuid()
-      await addEmailVerificationCode({
-        userId: user.id,
-        email: user.email,
-        code: emailVerificationCode,
-        ip: ctx.ip,
-      })
-      await updateAllSessionsForCurrentUser(ctx, { emailVerified: false })
-
-      sendVerificationEmail({
-        email: user.email,
-        code: emailVerificationCode,
-        userId: user.id,
-        username: user.name,
-      }).catch(err => ctx.log.error({ err }, 'Error sending email verification email'))
-    }
-
-    return user
-  }
-
   @httpPost('/:id/policies')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(accountUpdateThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(accountUpdateThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async acceptPolicies(ctx: RouterContext): Promise<AcceptPoliciesResponse> {
     const { params, body } = validateRequest(ctx, {
@@ -517,7 +477,7 @@ export class UserApi {
       }),
     })
 
-    if (params.id !== ctx.session!.userId) {
+    if (params.id !== ctx.session!.user!.id) {
       throw new httpErrors.Unauthorized("Can't change another user's account")
     }
 
@@ -539,14 +499,7 @@ export class UserApi {
       }
     }
 
-    const user = await updateUser(params.id, updates)
-    if (!user) {
-      throw new Error("Current user couldn't be found for updating")
-    }
-
-    ctx.session!.acceptedPrivacyVersion = user.acceptedPrivacyVersion
-    ctx.session!.acceptedTermsVersion = user.acceptedTermsVersion
-    ctx.session!.acceptedUsePolicyVersion = user.acceptedUsePolicyVersion
+    const { user } = await this.userService.updateCurrentUser(params.id, updates, ctx)
 
     return { user }
   }
@@ -563,16 +516,15 @@ export class UserApi {
       }),
     })
 
-    if (params.id !== ctx.session!.userId) {
+    if (params.id !== ctx.session!.user!.id) {
       throw new httpErrors.Unauthorized("Can't change another user's language")
     }
 
-    const user = await updateUser(params.id, { locale: body.language })
-    if (!user) {
-      throw new Error("Current user couldn't be found for updating")
-    }
-
-    ctx.session!.locale = user.locale
+    const { user } = await this.userService.updateCurrentUser(
+      params.id,
+      { locale: body.language },
+      ctx,
+    )
 
     return { user }
   }
@@ -600,7 +552,7 @@ export class UserApi {
         throw new httpErrors.Conflict('User not found')
       }
 
-      await updateUser(user.id, { password: await hashPass(password) })
+      await this.userService.updateCurrentUser(user.id, { password: await hashPass(password) })
     })
 
     ctx.status = 204
@@ -609,12 +561,12 @@ export class UserApi {
   @httpPost('/:id/email-verification/send')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(sendVerificationThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(sendVerificationThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async resendVerificationEmail(ctx: RouterContext): Promise<void> {
     const { params } = validateRequest(ctx, {
       params: Joi.object<{ id: SbUserId }>({
-        id: joiUserId().valid(ctx.session!.userId).required(),
+        id: joiUserId().valid(ctx.session!.user!.id).required(),
       }),
     })
 
@@ -646,7 +598,7 @@ export class UserApi {
   @httpPost('/:id/email-verification')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(emailVerificationThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(emailVerificationThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async verifyEmail(ctx: RouterContext): Promise<void> {
     const {
@@ -654,7 +606,7 @@ export class UserApi {
       body: { code },
     } = validateRequest(ctx, {
       params: Joi.object<{ id: SbUserId }>({
-        id: joiUserId().valid(ctx.session!.userId).required(),
+        id: joiUserId().valid(ctx.session!.user!.id).required(),
       }),
       body: Joi.object<{ code: string }>({
         code: Joi.string().required(),
@@ -666,7 +618,7 @@ export class UserApi {
       throw new UserApiError(UserErrorCode.NotFound, 'user not found')
     }
 
-    const emailVerified = await consumeEmailVerificationCode({
+    const emailVerified = await this.userService.verifyEmail({
       id: user.id,
       email: user.email,
       code,
@@ -674,12 +626,6 @@ export class UserApi {
     if (!emailVerified) {
       throw new UserApiError(UserErrorCode.InvalidCode, 'invalid code')
     }
-
-    // Update all of the user's sessions to indicate that their email is now indeed verified.
-    await updateAllSessionsForCurrentUser(ctx, { emailVerified: true })
-    // We update this session specifically as well, to ensure that any previous changes to the
-    // session during this request don't cause a stale value to be written
-    ctx.session!.emailVerified = true
 
     // Last thing to do is to notify all of the user's opened sockets that their email is now
     // verified
@@ -697,12 +643,12 @@ export class UserApi {
   @httpGet('/:id/relationships')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(accountRetrievalThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(accountRetrievalThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async getRelationships(ctx: RouterContext): Promise<GetRelationshipsResponse> {
     const { params } = validateRequest(ctx, {
       params: Joi.object<{ id: SbUserId }>({
-        id: joiUserId().valid(ctx.session!.userId).required(),
+        id: joiUserId().valid(ctx.session!.user!.id).required(),
       }),
     })
 
@@ -722,7 +668,7 @@ export class UserApi {
   @httpPost('/:id/relationships/friend-requests')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async sendFriendRequest(ctx: RouterContext): Promise<ModifyRelationshipResponse> {
     const { params } = validateRequest(ctx, {
@@ -737,7 +683,7 @@ export class UserApi {
     }
 
     const relationship = await this.userRelationshipService.sendFriendRequest(
-      ctx.session!.userId,
+      ctx.session!.user!.id,
       user.id,
     )
 
@@ -747,7 +693,7 @@ export class UserApi {
   @httpDelete('/:toId/relationships/friend-requests/:fromId')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async removeFriendRequest(ctx: RouterContext): Promise<void> {
     const {
@@ -759,10 +705,10 @@ export class UserApi {
       }),
     })
 
-    if (toId !== ctx.session!.userId && fromId !== ctx.session!.userId) {
+    if (toId !== ctx.session!.user!.id && fromId !== ctx.session!.user!.id) {
       throw new httpErrors.BadRequest('Can only manage your own friend requests')
     }
-    const otherUser = toId === ctx.session!.userId ? fromId : toId
+    const otherUser = toId === ctx.session!.user!.id ? fromId : toId
 
     const user = await findUserById(otherUser)
     if (!user) {
@@ -777,14 +723,14 @@ export class UserApi {
   @httpPost('/:toId/relationships/friends/:fromId')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async acceptFriendRequest(ctx: RouterContext): Promise<ModifyRelationshipResponse> {
     const {
       params: { toId, fromId },
     } = validateRequest(ctx, {
       params: Joi.object<{ toId: SbUserId; fromId: SbUserId }>({
-        toId: joiUserId().valid(ctx.session!.userId).required(),
+        toId: joiUserId().valid(ctx.session!.user!.id).required(),
         fromId: joiUserId().required(),
       }),
     })
@@ -802,14 +748,14 @@ export class UserApi {
   @httpDelete('/:removerId/relationships/friends/:targetId')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async removeFriend(ctx: RouterContext): Promise<void> {
     const {
       params: { removerId, targetId },
     } = validateRequest(ctx, {
       params: Joi.object<{ removerId: SbUserId; targetId: SbUserId }>({
-        removerId: joiUserId().valid(ctx.session!.userId).required(),
+        removerId: joiUserId().valid(ctx.session!.user!.id).required(),
         targetId: joiUserId().required(),
       }),
     })
@@ -827,14 +773,14 @@ export class UserApi {
   @httpPost('/:blockerId/relationships/blocks/:targetId')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async blockUser(ctx: RouterContext): Promise<ModifyRelationshipResponse> {
     const {
       params: { blockerId, targetId },
     } = validateRequest(ctx, {
       params: Joi.object<{ blockerId: SbUserId; targetId: SbUserId }>({
-        blockerId: joiUserId().valid(ctx.session!.userId).required(),
+        blockerId: joiUserId().valid(ctx.session!.user!.id).required(),
         targetId: joiUserId().required(),
       }),
     })
@@ -852,14 +798,14 @@ export class UserApi {
   @httpDelete('/:unblockerId/relationships/blocks/:targetId')
   @httpBefore(
     ensureLoggedIn,
-    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.userId)),
+    throttleMiddleware(relationshipsThrottle, ctx => String(ctx.session!.user!.id)),
   )
   async unblockUser(ctx: RouterContext): Promise<void> {
     const {
       params: { unblockerId, targetId },
     } = validateRequest(ctx, {
       params: Joi.object<{ unblockerId: SbUserId; targetId: SbUserId }>({
-        unblockerId: joiUserId().valid(ctx.session!.userId).required(),
+        unblockerId: joiUserId().valid(ctx.session!.user!.id).required(),
         targetId: joiUserId().required(),
       }),
     })
@@ -878,74 +824,10 @@ export class UserApi {
 @httpApi('/admin/users')
 @httpBeforeAll(convertUserApiErrors, ensureLoggedIn)
 export class AdminUserApi {
-  constructor(private publisher: TypedPublisher<AuthEvent>, private banEnacter: BanEnacter) {}
-
-  @httpGet('/:id/permissions')
-  @httpBefore(checkAllPermissions('editPermissions'))
-  async getPermissions(ctx: RouterContext): Promise<AdminGetPermissionsResponse> {
-    const { params } = validateRequest(ctx, {
-      params: Joi.object<{ id: SbUserId }>({
-        id: joiUserId().required(),
-      }),
-    })
-
-    const [user, permissions] = await Promise.all([
-      findUserById(params.id),
-      getPermissions(params.id),
-    ])
-    if (!user || !permissions) {
-      throw new UserApiError(UserErrorCode.NotFound, 'user not found')
-    }
-
-    return {
-      user,
-      permissions,
-    }
-  }
-
-  @httpPost('/:id/permissions')
-  @httpBefore(checkAllPermissions('editPermissions'))
-  async updatePermissions(ctx: RouterContext): Promise<void> {
-    const { params, body } = validateRequest(ctx, {
-      params: Joi.object<{ id: SbUserId }>({
-        id: joiUserId().required(),
-      }),
-      body: Joi.object<AdminUpdatePermissionsRequest>({
-        permissions: Joi.object<SbPermissions>({
-          editPermissions: Joi.boolean().required(),
-          debug: Joi.boolean().required(),
-          banUsers: Joi.boolean().required(),
-          manageLeagues: Joi.boolean().required(),
-          manageMaps: Joi.boolean().required(),
-          manageMapPools: Joi.boolean().required(),
-          manageMatchmakingSeasons: Joi.boolean().required(),
-          manageMatchmakingTimes: Joi.boolean().required(),
-          manageRallyPointServers: Joi.boolean().required(),
-          massDeleteMaps: Joi.boolean().required(),
-          moderateChatChannels: Joi.boolean().required(),
-        }).required(),
-      }),
-    })
-
-    const permissions = await updatePermissions(params.id, body.permissions)
-
-    if (!permissions) {
-      throw new UserApiError(UserErrorCode.NotFound, 'user not found')
-    }
-
-    if (ctx.session!.userId === params.id) {
-      await updateAllSessionsForCurrentUser(ctx, { permissions })
-    } else {
-      await updateAllSessions(params.id, { permissions })
-    }
-    this.publisher.publish(`/userProfiles/${params.id}`, {
-      action: 'permissionsChanged',
-      userId: params.id,
-      permissions,
-    })
-
-    ctx.status = 204
-  }
+  constructor(
+    private banEnacter: BanEnacter,
+    private userService: UserService,
+  ) {}
 
   @httpGet('/:id/bans')
   @httpBefore(checkAllPermissions('banUsers'))
@@ -991,7 +873,7 @@ export class AdminUserApi {
       }).required(),
     })
 
-    if (params.id === ctx.session!.userId) {
+    if (params.id === ctx.session!.user!.id) {
       throw new UserApiError(UserErrorCode.NotAllowedOnSelf, "can't ban yourself")
     }
 
@@ -1003,11 +885,11 @@ export class AdminUserApi {
     const [ban, bannedBy] = await Promise.all([
       this.banEnacter.enactBan({
         targetId: user.id,
-        bannedBy: ctx.session!.userId,
+        bannedBy: ctx.session!.user!.id,
         banLengthHours: body.banLengthHours,
         reason: body.reason,
       }),
-      await findUserById(ctx.session!.userId),
+      await findUserById(ctx.session!.user!.id),
     ])
 
     // This would be a really weird occurrence! So we just make sure we do the actual banning before
@@ -1072,13 +954,9 @@ export class AdminUserApi {
   async findUser(ctx: RouterContext): Promise<SbUser[]> {
     const searchTerm = ctx.params.searchTerm
 
-    try {
-      // TODO(tec27): Admins probably want more info than just this, maybe we should merge some of
-      // this functionality with the profile page
-      const user = await findUserByName(searchTerm)
-      return user ? [user] : []
-    } catch (err) {
-      throw err
-    }
+    // TODO(tec27): Admins probably want more info than just this, maybe we should merge some of
+    // this functionality with the profile page
+    const user = await findUserByName(searchTerm)
+    return user ? [user] : []
   }
 }

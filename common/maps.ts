@@ -19,24 +19,24 @@ export enum Tileset {
 
 export const ALL_TILESETS: Readonly<number[]> = [0, 1, 2, 3, 4, 5, 6, 7]
 
-export function tilesetToName(tileset: Tileset) {
+export function tilesetToName(tileset: Tileset, t: TFunction) {
   switch (tileset) {
     case Tileset.Badlands:
-      return 'Badlands'
+      return t('maps.tileset.badlands', 'Badlands')
     case Tileset.Platform:
-      return 'Space platform'
+      return t('maps.tileset.spacePlatform', 'Space platform')
     case Tileset.Installation:
-      return 'Installation'
+      return t('maps.tileset.installation', 'Installation')
     case Tileset.Ashworld:
-      return 'Ashworld'
+      return t('maps.tileset.ashworld', 'Ashworld')
     case Tileset.Jungle:
-      return 'Jungle world'
+      return t('maps.tileset.jungleWorld', 'Jungle world')
     case Tileset.Desert:
-      return 'Desert'
+      return t('maps.tileset.desert', 'Desert')
     case Tileset.Ice:
-      return 'Ice'
+      return t('maps.tileset.ice', 'Ice')
     case Tileset.Twilight:
-      return 'Twilight'
+      return t('maps.tileset.twilight', 'Twilight')
     default:
       return assertUnreachable(tileset)
   }
@@ -194,7 +194,7 @@ export function getTeamNames(
         t ? t('game.teamName.bottom', 'Bottom') : 'Bottom',
       ]
     case GameType.TeamMelee:
-    case GameType.TeamFreeForAll:
+    case GameType.TeamFreeForAll: {
       const teamNames = []
       const amount = numTeams(gameType, gameSubType, umsForces)
       for (let i = 1; i <= amount; i++) {
@@ -208,6 +208,7 @@ export function getTeamNames(
         )
       }
       return teamNames
+    }
     case GameType.UseMapSettings:
       return umsForces.map(f => f.name)
     default:

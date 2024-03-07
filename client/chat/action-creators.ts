@@ -1,6 +1,8 @@
 import {
   ChannelModerationAction,
   ChatServiceErrorCode,
+  EditChannelRequest,
+  EditChannelResponse,
   GetBatchedChannelInfosResponse,
   GetChannelHistoryServerResponse,
   GetChannelInfoResponse,
@@ -10,6 +12,7 @@ import {
   SbChannelId,
   SearchChannelsResponse,
   SendChatMessageServerRequest,
+  UpdateChannelUserPreferencesRequest,
 } from '../../common/chat'
 import { apiUrl, urlPath } from '../../common/urls'
 import { SbUser, SbUserId } from '../../common/users/sb-user'
@@ -81,6 +84,71 @@ export function joinChannelWithErrorHandling(
 
         throw err
       })
+  })
+}
+
+export function updateChannel({
+  channelId,
+  channelChanges,
+  channelBanner,
+  channelBadge,
+  spec,
+}: {
+  channelId: SbChannelId
+  channelChanges: EditChannelRequest
+  channelBanner?: File
+  channelBadge?: File
+  spec: RequestHandlingSpec<void>
+}): ThunkAction {
+  return abortableThunk(spec, async dispatch => {
+    if (
+      Object.values(channelChanges).filter(c => c !== undefined).length === 0 &&
+      !channelBanner &&
+      !channelBadge
+    ) {
+      return
+    }
+
+    const formData = new FormData()
+    formData.append(
+      'channelChanges',
+      JSON.stringify(channelChanges, (_, value) => (value === '' ? null : value)),
+    )
+
+    if (channelBanner) {
+      formData.append('banner', channelBanner)
+    }
+    if (channelBadge) {
+      formData.append('badge', channelBadge)
+    }
+
+    const result = await fetchJson<EditChannelResponse>(apiUrl`chat/${channelId}`, {
+      method: 'PATCH',
+      signal: spec.signal,
+      body: formData,
+    })
+
+    dispatch({
+      type: '@chat/getChannelInfo',
+      payload: result,
+      meta: {
+        channelId,
+      },
+    })
+  })
+}
+
+export function updateChannelUserPreferences(
+  channelId: SbChannelId,
+  preferences: UpdateChannelUserPreferencesRequest,
+  spec: RequestHandlingSpec<void>,
+) {
+  return abortableThunk(spec, async () => {
+    return await fetchJson(apiUrl`chat/${channelId}/userPreferences`, {
+      method: 'POST',
+      body: encodeBodyAsParams<UpdateChannelUserPreferencesRequest>(preferences),
+      signal: spec.signal,
+    })
   })
 }
 

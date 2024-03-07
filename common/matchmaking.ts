@@ -20,9 +20,7 @@ export enum MatchmakingType {
 
 export const ALL_MATCHMAKING_TYPES: ReadonlyArray<MatchmakingType> = Object.values(MatchmakingType)
 
-// TODO(2Pac): Remove the optionality of the translation function here once all the places this is
-// used is updated: https://github.com/ShieldBattery/ShieldBattery/issues/886
-export function matchmakingTypeToLabel(type: MatchmakingType, t?: TFunction): string {
+export function matchmakingTypeToLabel(type: MatchmakingType, t: TFunction): string {
   switch (type) {
     case MatchmakingType.Match1v1:
       return t ? t('matchmaking.type.1v1', '1v1') : '1v1'
@@ -86,9 +84,7 @@ const DIVISIONS_TO_RATING: ReadonlyArray<MatchmakingDivisionWithBounds> = [
   [MatchmakingDivision.Champion, 2400, Infinity],
 ]
 
-// TODO(2Pac): Remove the optionality of the translation function here once all the places this is
-// used is updated: https://github.com/ShieldBattery/ShieldBattery/issues/886
-export function matchmakingDivisionToLabel(rank: MatchmakingDivision, t?: TFunction): string {
+export function matchmakingDivisionToLabel(rank: MatchmakingDivision, t: TFunction): string {
   switch (rank) {
     case MatchmakingDivision.Unrated:
       return t ? t('matchmaking.division.unrated', 'Unrated') : 'Unrated'
@@ -480,9 +476,10 @@ export interface AddMatchmakingTimeBody {
  */
 export interface MatchmakingMapPool {
   id: number
-  type: MatchmakingType
+  matchmakingType: MatchmakingType
   startDate: Date
   maps: string[]
+  maxVetoCount: number
 }
 
 export type MatchmakingMapPoolJson = Jsonify<MatchmakingMapPool>
@@ -490,9 +487,10 @@ export type MatchmakingMapPoolJson = Jsonify<MatchmakingMapPool>
 export function fromMatchmakingMapPoolJson(pool: MatchmakingMapPoolJson): MatchmakingMapPool {
   return {
     id: pool.id,
-    type: pool.type,
+    matchmakingType: pool.matchmakingType,
     startDate: new Date(pool.startDate),
     maps: pool.maps,
+    maxVetoCount: pool.maxVetoCount,
   }
 }
 

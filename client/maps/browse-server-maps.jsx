@@ -5,7 +5,6 @@ import React from 'react'
 import { withTranslation } from 'react-i18next'
 import { connect } from 'react-redux'
 import styled from 'styled-components'
-import { TranslationNamespace } from '../../common/i18n'
 import { ALL_TILESETS, MapSortType, MapVisibility } from '../../common/maps'
 import { openOverlay } from '../activities/action-creators'
 import { ActivityBackButton } from '../activities/activity-back-button'
@@ -181,7 +180,7 @@ class MapList extends React.PureComponent {
   }
 }
 
-@withTranslation(TranslationNamespace.Global, { withRef: true })
+@withTranslation('global', { withRef: true })
 @connect(state => ({ auth: state.auth, maps: state.maps, mapPreferences: state.mapPreferences }))
 export default class Maps extends React.Component {
   static propTypes = {
@@ -302,8 +301,8 @@ export default class Maps extends React.Component {
           $padding={THUMBNAIL_SIZES[thumbnailSize].padding}>
           <MapList
             maps={maps}
-            user={auth.user}
-            canManageMaps={auth.permissions.manageMaps}
+            user={auth.self.user}
+            canManageMaps={auth.self.permissions.manageMaps}
             thumbnailSize={thumbnailSize}
             favoriteStatusRequests={favoriteStatusRequests}
             onMapSelect={onMapSelect}
@@ -362,7 +361,7 @@ export default class Maps extends React.Component {
       }
       return (
         <>
-          <SectionHeader>All maps</SectionHeader>
+          <SectionHeader>{t('maps.server.allMaps', 'All maps')}</SectionHeader>
           <Subtitle1>{text}</Subtitle1>
         </>
       )
@@ -417,7 +416,12 @@ export default class Maps extends React.Component {
         <Contents>
           <ContentsBody>
             {maps.lastError ? (
-              <ErrorText>Something went wrong: {maps.lastError.message}</ErrorText>
+              <ErrorText>
+                {t('maps.server.error', {
+                  defaultValue: 'Something went wrong: {{errorMessage}}',
+                  errorMessage: maps.lastError.message,
+                })}
+              </ErrorText>
             ) : (
               <>
                 {this.renderUploadedMap()}

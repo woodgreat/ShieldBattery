@@ -1,27 +1,29 @@
-use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::io;
 use std::mem;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
+use std::pin::{pin, Pin};
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures::pin_mut;
 use futures::prelude::*;
-use http::header::{HeaderMap, ORIGIN};
+use hashbrown::{HashMap, HashSet};
 use quick_error::quick_error;
+use reqwest::header::{HeaderMap, ORIGIN};
+use smallvec::SmallVec;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::app_messages::{
     GamePlayerResult, GameResults, GameResultsReport, GameSetupInfo, LobbyPlayerId, LocalUser,
-    MapForce, NetworkStallInfo, PlayerInfo, Race, Route, Settings, SetupProgress, UmsLobbyRace,
+    MapForce, NetworkStallInfo, PlayerInfo, Route, Settings, SetupProgress, UmsLobbyRace,
     GAME_STATUS_ERROR,
 };
 use crate::app_socket;
-use crate::bw::{self, Bw, get_bw, GameType, StormPlayerId, UserLatency};
+use crate::bw::players::{AllianceState, BwPlayerId, PlayerLoseType, StormPlayerId, VictoryState};
+use crate::bw::{self, get_bw, Bw, GameType, LobbyOptions, UserLatency};
+use crate::bw_scr::BwScr;
 use crate::cancel_token::{CancelToken, Canceler, SharedCanceler};
 use crate::forge;
 use crate::game_thread::{
@@ -34,12 +36,14 @@ use crate::proto::messages::game_message_payload::Payload;
 use crate::proto::messages::{ClientAckResponseMessage, ClientReadyMessage};
 use crate::replay;
 
+pub type SendMessages = mpsc::Sender<GameStateMessage>;
+
 pub struct GameState {
     init_state: InitState,
     network: NetworkManager,
     network_send: mpsc::Sender<GameStateToNetworkMessage>,
     ws_send: app_socket::SendMessages,
-    internal_send: self::SendMessages,
+    internal_send: SendMessages,
     init_main_thread: std::sync::mpsc::Sender<()>,
     send_main_thread_requests: std::sync::mpsc::Sender<GameThreadRequest>,
     #[allow(dead_code)]
@@ -48,8 +52,6 @@ pub struct GameState {
     can_start_game: AwaitableTaskState,
     game_started: bool,
 }
-
-pub type SendMessages = mpsc::Sender<GameStateMessage>;
 
 enum AwaitableTaskState<T = ()> {
     Complete,
@@ -103,24 +105,6 @@ pub enum GameStateMessage {
     Network(NetworkToGameStateMessage),
     CleanupQuit,
     QuitIfNotStarted,
-}
-
-impl GameSetupInfo {
-    pub fn game_type(&self) -> Option<GameType> {
-        let (primary, subtype) = match &*self.game_type {
-            "melee" => (0x2, 0x1),
-            "ffa" => (0x3, 0x1),
-            "oneVOne" => (0x4, 0x1),
-            "ums" => (0xa, 0x1),
-            // For team games the shieldbattery subtype is team count
-            "teamMelee" => (0xb, self.game_sub_type? - 1),
-            "teamFfa" => (0xc, self.game_sub_type? - 1),
-            // For TvB the shieldbattery subtype is num players on top team
-            "topVBottom" => (0xf, self.game_sub_type?),
-            _ => return None,
-        };
-        Some(GameType { primary, subtype })
-    }
 }
 
 quick_error! {
@@ -180,7 +164,7 @@ quick_error! {
 impl GameState {
     fn set_settings(&mut self, settings: &Settings) {
         if let InitState::WaitingForInput(ref mut state) = self.init_state {
-            crate::forge::init(&settings.local);
+            forge::init(&settings.local);
             get_bw().set_settings(settings);
             state.settings_set = true;
         } else {
@@ -196,7 +180,7 @@ impl GameState {
         }
     }
 
-    fn set_routes(&mut self, routes: Vec<Route>) -> impl Future<Output = ()> {
+    fn set_routes(&mut self, routes: Vec<Route>) -> impl Future<Output = ()> + '_ {
         if let InitState::WaitingForInput(ref mut state) = self.init_state {
             state.routes_set = true;
             // TODO log error
@@ -269,15 +253,18 @@ impl GameState {
         let game_request_send = self.send_main_thread_requests.clone();
 
         let network_send = self.network_send.clone();
-        let init_routes_when_ready_future = self.network.init_routes_when_ready();
-        let network_ready_future = self.network.wait_network_ready();
-        let net_game_info_set_future = self.network.set_game_info(info.clone());
+
+        let network = self.network.clone();
         let allow_start = self.wait_can_start_game().boxed();
 
         self.init_main_thread
             .send(())
             .expect("Main thread should be waiting for a wakeup");
         async move {
+            let init_routes_when_ready_future = network.init_routes_when_ready();
+            let network_ready_future = network.wait_network_ready();
+            let net_game_info_set_future = network.set_game_info(info.clone());
+
             let sbat_replay_data = match info.is_replay() {
                 true => Some(read_sbat_replay_data(Path::new(&info.map_path))),
                 false => None,
@@ -297,7 +284,7 @@ impl GameState {
             unsafe {
                 get_bw().remaining_game_init(&local_user.name);
                 if is_host {
-                    create_lobby(&info, game_type)?;
+                    create_lobby(&info)?;
                 }
             }
             init_routes_when_ready_future
@@ -479,8 +466,15 @@ impl GameState {
                 .await
                 .map_err(|_| GameInitError::Closed)?;
 
-            game_done.await;
+            // NOTE(tec27): We await the game results before game_done since we get results as soon
+            // as the Victory/Defeat dialog is shown, which is before the game loop exits
             let results = results.await?;
+            if !info.is_replay() {
+                send_game_result(&results, &info, &local_user, &ws_send).await;
+            }
+            debug!("Network stall statistics: {:?}", results.network_stalls);
+
+            game_done.await;
 
             // Make sure (or at least try to) that quit messages get delivered to everyone and don't
             // get lost, so that quitting players don't trigger a drop screen.
@@ -488,7 +482,7 @@ impl GameState {
             for (uid, _) in results
                 .results
                 .iter()
-                .filter(|(_, r)| r.result == 0 /* playing */)
+                .filter(|(_, r)| r.result == VictoryState::Playing)
             {
                 if let Some(slot) = setup_info
                     .slots
@@ -509,12 +503,6 @@ impl GameState {
                 }
             }
 
-            if !info.is_replay() {
-                send_game_result(&results, &info, &local_user, &ws_send).await;
-            }
-
-            debug!("Network stall statistics: {:?}", results.network_stalls);
-
             if !deliver_final_network.is_empty() {
                 select! {
                     _ = future::join_all(deliver_final_network) => {},
@@ -534,7 +522,7 @@ impl GameState {
 
     // Message handler, so ideally only return futures that are about sending
     // messages to other tasks.
-    fn handle_message(&mut self, message: GameStateMessage) -> impl Future<Output = ()> {
+    fn handle_message(&mut self, message: GameStateMessage) -> impl Future<Output = ()> + '_ {
         use self::GameStateMessage::*;
 
         match message {
@@ -580,7 +568,7 @@ impl GameState {
                 let (cancel_token, canceler) = CancelToken::new();
                 self.running_game = Some(canceler);
                 tokio::spawn(async move {
-                    pin_mut!(task);
+                    let task = pin!(task);
                     cancel_token.bind(task).await
                 });
             }
@@ -604,7 +592,7 @@ impl GameState {
                 let (cancel_token, canceler) = CancelToken::new();
                 self.running_game = Some(canceler);
                 tokio::spawn(async move {
-                    pin_mut!(task);
+                    let task = pin!(task);
                     cancel_token.bind(task).await
                 });
             }
@@ -637,10 +625,10 @@ impl GameState {
         future::ready(()).boxed()
     }
 
-    fn handle_game_thread_message(
-        &mut self,
+    fn handle_game_thread_message<'s>(
+        &'s mut self,
         message: GameThreadMessage,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 's>> {
         use crate::game_thread::GameThreadMessage::*;
         match message {
             WindowMove(..) => (),
@@ -652,8 +640,9 @@ impl GameState {
                 if let InitState::Started(ref mut state) = self.init_state {
                     for player in &mut state.joined_players {
                         let old_id = player.player_id;
-                        player.player_id =
-                            new_mapping.get(player.storm_id.0 as usize).and_then(|x| *x);
+                        player.player_id = new_mapping
+                            .get(player.storm_id.0 as usize)
+                            .and_then(|&id| id);
                         if old_id.is_some() != player.player_id.is_some() {
                             warn!(
                                 "Player {} lost/gained player id after randomization: {:?} -> {:?}",
@@ -699,14 +688,21 @@ impl GameState {
                     warn!("Notified of network stall before init was started");
                 }
             }
+            DebugInfoRequest(info) => {
+                return match info {
+                    game_thread::DebugInfoRequest::Network(out) => {
+                        self.network.request_debug_info(out).boxed()
+                    }
+                }
+            }
         }
         future::ready(()).boxed()
     }
 
-    fn handle_network_message(
-        &mut self,
+    fn handle_network_message<'s>(
+        &'s mut self,
         msg: NetworkToGameStateMessage,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 's>> {
         use crate::network_manager::NetworkToGameStateMessage::*;
         match msg {
             ReceivePayload(ref player_id, payload) => match payload {
@@ -788,7 +784,7 @@ async fn send_game_result(
         player_results: results
             .results
             .iter()
-            .map(|(&uid, result)| (uid, result.clone()))
+            .map(|(&uid, result)| (uid, *result))
             .collect(),
     };
 
@@ -832,7 +828,7 @@ struct InitInProgress {
 struct JoinedPlayer {
     name: String,
     storm_id: StormPlayerId,
-    player_id: Option<u8>,
+    player_id: Option<BwPlayerId>,
     sb_user_id: u32,
 }
 
@@ -973,7 +969,7 @@ impl InitInProgress {
             if !retain {
                 warn!("Player {} has left", joined_player.name);
                 if let Some(bw_slot) = joined_player.player_id {
-                    (*players.add(bw_slot as usize)).storm_id = u32::MAX;
+                    (*players.add(bw_slot.0 as usize)).storm_id = u32::MAX;
                 }
             }
             retain
@@ -987,10 +983,9 @@ impl InitInProgress {
             let joined_pos = self.joined_players.iter().position(|x| x.name == name);
             if let Some(joined_pos) = joined_pos {
                 if self.joined_players[joined_pos].storm_id != storm_id {
-                    return Err(GameInitError::StormIdChanged(name.into()));
+                    return Err(GameInitError::StormIdChanged(name.to_string()));
                 }
             } else if let Some(slot) = self.setup_info.slots.iter().find(|x| x.name == name) {
-                // TODO(tec27): This isn't really a player id, more of a slot offset?
                 let player_id;
                 let bw_slot = (0..16).find(|&i| {
                     let player = players.add(i);
@@ -999,12 +994,12 @@ impl InitInProgress {
                 });
                 if let Some(bw_slot) = bw_slot {
                     (*players.add(bw_slot)).storm_id = storm_id.0 as u32;
-                    player_id = Some(bw_slot as u8);
+                    player_id = Some(BwPlayerId(bw_slot as u8));
                 } else {
-                    return Err(GameInitError::UnexpectedPlayer(name.into()));
+                    return Err(GameInitError::UnexpectedPlayer(name.to_string()));
                 }
                 if self.joined_players.iter().any(|x| x.player_id == player_id) {
-                    return Err(GameInitError::UnexpectedPlayer(name.into()));
+                    return Err(GameInitError::UnexpectedPlayer(name.to_string()));
                 }
                 // I believe there isn't any reason why a slot associated with
                 // human wouldn't have shieldbattery user ids, so just fail here
@@ -1014,13 +1009,13 @@ impl InitInProgress {
                     .ok_or_else(|| GameInitError::NoShieldbatteryId(name.into()))?;
                 debug!("Player {} received storm id {}", name, storm_id.0);
                 self.joined_players.push(JoinedPlayer {
-                    name: name.into(),
+                    name: name.to_string(),
                     storm_id,
                     player_id,
                     sb_user_id,
                 });
             } else {
-                return Err(GameInitError::UnexpectedPlayer(name.into()));
+                return Err(GameInitError::UnexpectedPlayer(name.to_string()));
             }
         }
         Ok(())
@@ -1065,227 +1060,10 @@ impl InitInProgress {
     }
 
     fn received_results(&mut self, game_results: GameThreadResults) {
-        use crate::game_thread::PlayerLoseType;
+        debug!("Got results from game thread: {game_results:#?}");
 
-        #[derive(Copy, Clone, Eq, PartialEq)]
-        #[repr(u8)]
-        enum GameResult {
-            Playing = 0,
-            Disconnected = 1,
-            Defeat = 2,
-            Victory = 3,
-        }
-
-        let mut results = [GameResult::Playing; bw::MAX_STORM_PLAYERS];
-        let local_storm_id = self
-            .joined_players
-            .iter()
-            .find(|x| x.name == self.local_user.name)
-            .map(|x| x.storm_id.0 as usize)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Local user ({}) was not in joined players? ({:?})",
-                    self.local_user.name, self.joined_players,
-                );
-            });
-
-        let mut storm_to_player_id = [255; 8];
-        let mut player_to_storm_id = [255; 8];
-        for player in &self.joined_players {
-            if let Some(player_id) = player.player_id {
-                if player_id >= 8 {
-                    // This is an observer, skip
-                    continue;
-                }
-
-                let storm_id = player.storm_id.0 as usize;
-                let player_id = player_id as usize;
-                // This should generally always be true (or other stuff is broken) but just in case
-                if storm_id < 8 {
-                    storm_to_player_id[storm_id] = player_id;
-                    player_to_storm_id[player_id] = storm_id;
-                }
-
-                debug!(
-                    "{} has victory_state {}",
-                    storm_id, game_results.victory_state[player_id]
-                );
-                results[storm_id] = match game_results.victory_state[player_id] {
-                    1 => GameResult::Disconnected,
-                    2 => GameResult::Defeat,
-                    3 => GameResult::Victory,
-                    _ => {
-                        if storm_id == local_storm_id {
-                            // NOTE(tec27): This will possibly get mapped to a disconnect later, if
-                            // allied victory is still possible
-                            GameResult::Defeat
-                        } else {
-                            GameResult::Playing
-                        }
-                    }
-                };
-            }
-        }
-        let storm_to_player_id = storm_to_player_id;
-        let player_to_storm_id = player_to_storm_id;
-
-        let lose_type = game_results.player_lose_type;
-        let is_ums = self.setup_info.game_type == "ums";
-        let has_victory = results.contains(&GameResult::Victory);
-        for storm_id in 0..8 {
-            let dropped = game_results.player_was_dropped[storm_id];
-            let quit =
-                game_results.player_has_quit[storm_id] || (!dropped && storm_id == local_storm_id);
-
-            debug!(
-                "{} has player_was_dropped {}, player_has_quit {}",
-                storm_id, dropped, quit
-            );
-
-            if dropped {
-                results[storm_id] = if lose_type == Some(PlayerLoseType::UnknownDisconnect) {
-                    // Player was dropped because our client was in the wrong, so they're probably
-                    // still playing in the parallel universe game
-                    GameResult::Playing
-                } else {
-                    // Player was actually dropped, so change their defeat -> disconnect
-                    GameResult::Disconnected
-                };
-            } else if quit && !is_ums && !has_victory && results[storm_id] == GameResult::Defeat {
-                let player_id = storm_to_player_id[storm_id];
-                if player_id < 8 {
-                    let alliances = game_results.alliances[player_id];
-                    for (p, _) in alliances.iter().enumerate().filter(|&(_, a)| *a == 2) {
-                        let s = player_to_storm_id[p];
-                        if s < 8
-                            && !game_results.player_was_dropped[s]
-                            && !game_results.player_has_quit[s]
-                        {
-                            // Change Defeat -> Disconnect because we can't know the terminal result yet,
-                            // and this alliance could allow this player to win still
-                            results[storm_id] = GameResult::Disconnected;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        match lose_type {
-            Some(PlayerLoseType::UnknownDisconnect) => {
-                results[local_storm_id] = GameResult::Disconnected;
-            }
-            Some(PlayerLoseType::UnknownChecksumMismatch) => {
-                results[local_storm_id] = GameResult::Playing;
-            }
-            None => (),
-        }
-
-        if !is_ums && has_victory {
-            // If someone has won and has the "allied victory" box checked, bring their allies along
-            // for the victory even if they disconnected. (Note that we don't do this for UMS games
-            // because it's assumed the UMS triggers manage their own victory state as they wish)
-            let mut to_process: Vec<usize> = vec![];
-
-            for player in &self.joined_players {
-                if let Some(player_id) = player.player_id {
-                    if player_id >= 8 {
-                        // This is an observer, skip
-                        continue;
-                    }
-                    let storm_id = player.storm_id.0 as usize;
-                    if results[storm_id] == GameResult::Victory {
-                        to_process.push(player_id as usize);
-                    }
-                }
-            }
-
-            while let Some(winner_player_id) = to_process.pop() {
-                let winner_alliances = game_results.alliances[winner_player_id];
-                debug!(
-                    "processing player {}, alliances: {:?}",
-                    winner_player_id, winner_alliances
-                );
-
-                for player in &self.joined_players {
-                    if let Some(player_id) = player.player_id {
-                        if player_id >= 8 {
-                            // This is an observer, skip
-                            continue;
-                        }
-
-                        let player_id = player_id as usize;
-                        if player_id == winner_player_id {
-                            // Don't need to worry about the player themselves
-                            continue;
-                        }
-
-                        let storm_id = player.storm_id.0 as usize;
-                        let allied_with_winner =
-                            game_results.alliances[player_id][winner_player_id] == 2;
-                        if allied_with_winner
-                            && winner_alliances[player_id] == 2
-                            && !matches!(
-                                results[storm_id],
-                                GameResult::Playing | GameResult::Victory
-                            )
-                        {
-                            results[storm_id] = GameResult::Victory;
-                            // Changing this player's result can mean that their allies now win, so
-                            // we need to process them as well
-                            to_process.push(player_id);
-                        }
-                    }
-                }
-            }
-
-            // Now that we've processed all the possible victories, any players left as disconnected
-            // are actually defeated
-            for player in &self.joined_players {
-                if let Some(player_id) = player.player_id {
-                    if player_id >= 8 {
-                        // This is an observer, skip
-                        continue;
-                    }
-                    let storm_id = player.storm_id.0 as usize;
-                    if results[storm_id] == GameResult::Disconnected {
-                        results[storm_id] = GameResult::Defeat;
-                    }
-                }
-            }
-        }
-
-        let results = self
-            .joined_players
-            .iter()
-            .filter_map(|player| {
-                if let Some(player_id) = player.player_id {
-                    if player_id >= 8 {
-                        // Observer, skip
-                        return None;
-                    }
-
-                    Some((
-                        player.sb_user_id,
-                        GamePlayerResult {
-                            result: results[player.storm_id.0 as usize] as u8,
-                            race: match game_results.race[player_id as usize] {
-                                bw::RACE_ZERG => Race::Zerg,
-                                bw::RACE_TERRAN => Race::Terran,
-                                bw::RACE_PROTOSS => Race::Protoss,
-                                r => {
-                                    warn!("Invalid race ({}) for player {}", r, player_id);
-                                    Race::Zerg
-                                }
-                            },
-                            // TODO(tec27): implement APM calculation
-                            apm: 0,
-                        },
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect::<HashMap<_, _>>();
+        let time_ms = game_results.time.as_millis() as u64;
+        let results = determine_game_results(game_results, &self.joined_players, &self.local_user);
 
         self.stall_durations.sort_unstable();
         let stall_median = self
@@ -1300,8 +1078,7 @@ impl InitInProgress {
 
         let message = Arc::new(GameResults {
             results,
-            // Assuming fastest speed
-            time_ms: game_results.time_ms,
+            time_ms,
             network_stalls: NetworkStallInfo {
                 count: self.stall_count as u32,
                 median: stall_median as u32,
@@ -1315,16 +1092,10 @@ impl InitInProgress {
     }
 }
 
-unsafe fn create_lobby(info: &GameSetupInfo, game_type: GameType) -> Result<(), GameInitError> {
+unsafe fn create_lobby(info: &GameSetupInfo) -> Result<(), GameInitError> {
     let map_path = Path::new(&info.map_path);
     get_bw()
-        .create_lobby(
-            map_path,
-            &info.map,
-            &info.name,
-            game_type,
-            info.turn_rate.unwrap_or(0),
-        )
+        .create_lobby(map_path, &info.map, &info.name, info.into())
         .map_err(GameInitError::Bw)
 }
 
@@ -1383,12 +1154,12 @@ unsafe fn join_lobby(
         Ok(o) => Arc::new(o),
         Err(_) => return future::err(GameInitError::NullInPath(info.map_path.clone())).boxed(),
     };
-    let turn_rate = info.turn_rate.unwrap_or(0);
+    let options: LobbyOptions = info.into();
     async move {
         let mut repeat_interval = tokio::time::interval(Duration::from_millis(10));
         loop {
             repeat_interval.tick().await;
-            match try_join_lobby_once(game_info, is_eud, turn_rate, &map_path).await {
+            match try_join_lobby_once(game_info, is_eud, options, &map_path).await {
                 Ok(()) => break,
                 Err(e) => debug!("Storm join error: {:08x}", e),
             }
@@ -1412,7 +1183,7 @@ unsafe fn join_lobby(
 async unsafe fn try_join_lobby_once(
     mut game_info: bw::BwGameData,
     is_eud: bool,
-    turn_rate: u32,
+    options: LobbyOptions,
     map_path: &Arc<CString>,
 ) -> Result<(), u32> {
     // Storm sends game join packets and then waits for a response *synchronously* (waiting for up to
@@ -1425,7 +1196,7 @@ async unsafe fn try_join_lobby_once(
     std::thread::spawn(move || {
         let address = Ipv4Addr::new(10, 27, 27, 0);
         let bw = get_bw();
-        let result = bw.join_lobby(&mut game_info, is_eud, turn_rate, &map_path, address);
+        let result = bw.join_lobby(&mut game_info, is_eud, options, &map_path, address);
         let _ = send.send(result);
     });
 
@@ -1541,19 +1312,20 @@ unsafe fn setup_slots(slots: &[PlayerInfo], game_type: GameType, ums_forces: &[M
                 x.team == team
                     && x.player_type == bw::PLAYER_TYPE_LOBBY_COMPUTER
                     && x.race == bw::RACE_RANDOM
-            }) {
-                if players
-                    .iter()
-                    .any(|x| x.team == team && x.race != bw::RACE_RANDOM)
-                {
-                    panic!("Computer team {} has both random and non-random slots, which is not allowed", i);
-                }
+            }) && players
+                .iter()
+                .any(|x| x.team == team && x.race != bw::RACE_RANDOM)
+            {
+                panic!(
+                    "Computer team {} has both random and non-random slots, which is not allowed",
+                    i
+                );
             }
         }
     }
 }
 
-unsafe fn storm_player_names(bw: &dyn bw::Bw) -> Vec<Option<String>> {
+unsafe fn storm_player_names(bw: &BwScr) -> Vec<Option<String>> {
     let storm_players = bw.storm_players();
     storm_players
         .iter()
@@ -1695,4 +1467,1844 @@ async fn read_sbat_replay_data(path: &Path) -> Result<Option<replay::SbatReplayD
         }
     }
     Ok(None)
+}
+
+fn determine_game_results(
+    mut game_thread_results: GameThreadResults,
+    joined_players: &[JoinedPlayer],
+    local_user: &LocalUser,
+) -> HashMap<u32, GamePlayerResult> {
+    let mut results = joined_players
+        .iter()
+        .filter_map(|player| {
+            player.player_id.and_then(|player_id| {
+                if player_id.is_observer() {
+                    return None;
+                }
+
+                game_thread_results.player_results.get(&player_id).map(|r| {
+                    (
+                        player.sb_user_id,
+                        GamePlayerResult {
+                            result: r.victory_state,
+                            race: r.race,
+                            // TODO(tec27): implement APM calculation
+                            apm: 0,
+                        },
+                    )
+                })
+            })
+        })
+        .collect();
+
+    // For UMS games, we just send exactly what we were given, we expect the UMS logic to control
+    // game results
+    if game_thread_results.game_type.is_ums() {
+        debug!("Game is UMS, not modifying reported results");
+        return results;
+    }
+
+    let storm_to_sb = joined_players
+        .iter()
+        .map(|p| (p.storm_id, p.sb_user_id))
+        .collect::<HashMap<_, _>>();
+    let sb_to_storm = storm_to_sb
+        .iter()
+        .map(|(&k, &v)| (v, k))
+        .collect::<HashMap<_, _>>();
+    let sb_to_bw = joined_players
+        .iter()
+        .filter_map(|p| {
+            p.player_id.and_then(|bw| {
+                if bw.is_observer() {
+                    None
+                } else {
+                    Some((p.sb_user_id, bw))
+                }
+            })
+        })
+        .collect::<HashMap<_, _>>();
+    let bw_to_sb = sb_to_bw
+        .iter()
+        .map(|(&k, &v)| (v, k))
+        .collect::<HashMap<_, _>>();
+
+    // When we grab results from BW, unless the local player has actually been defeated (e.g. had
+    // all their buildings destroyed), they will still be marked as Playing. We map any Playing
+    // status to Defeat (since Victory would have been applied). Logic further on may still map this
+    // to other statuses.
+    if let Some(r) = results.get_mut(&local_user.id) {
+        if r.result == VictoryState::Playing {
+            r.result = VictoryState::Defeat;
+        }
+    };
+
+    let has_victory = game_thread_results
+        .player_results
+        .values()
+        .any(|r| r.victory_state == VictoryState::Victory);
+    let only_computers_playing = !has_victory
+        && !game_thread_results.player_results.iter().any(|(bw_id, r)| {
+            r.victory_state == VictoryState::Playing && bw_to_sb.contains_key(bw_id)
+        })
+        && game_thread_results.player_results.iter().any(|(bw_id, r)| {
+            r.victory_state == VictoryState::Playing && !bw_to_sb.contains_key(bw_id)
+        });
+
+    if only_computers_playing {
+        debug!("Only computers left playing");
+        // If only computers are left playing, and all computers are allied with one another, we
+        // assign them all a victory.
+        // If they are not all allied, a final result for this game will never be known :(
+        let comp_ids = game_thread_results
+            .player_results
+            .keys()
+            .copied()
+            .filter(|id| !bw_to_sb.contains_key(id))
+            .collect::<SmallVec<[_; 8]>>();
+        let mut all_allied = true;
+        for (&comp_id, result) in game_thread_results
+            .player_results
+            .iter_mut()
+            .filter(|(&id, _)| !bw_to_sb.contains_key(&id))
+        {
+            for &ally_id in comp_ids.iter() {
+                if ally_id != comp_id
+                    && result.alliance_with(ally_id) != AllianceState::AlliedVictory
+                {
+                    all_allied = false;
+                    break;
+                }
+            }
+        }
+
+        if all_allied {
+            debug!("All computers left playing are allied, assigning victory to them.");
+            for bw_id in comp_ids.iter() {
+                if let Some(r) = game_thread_results.player_results.get_mut(bw_id) {
+                    r.victory_state = VictoryState::Victory;
+                };
+            }
+        } else {
+            debug!("Not all playing computers are allied, no final result will be known");
+        }
+    }
+
+    for (&sb_id, result) in results.iter_mut() {
+        let storm_id = sb_to_storm
+            .get(&sb_id)
+            .expect("should have had storm id for SB user");
+        let dropped = game_thread_results
+            .network_results
+            .get(storm_id)
+            .map_or(false, |r| r.was_dropped);
+
+        // If the player was dropped but it was a mass disconnect, we assume they are probably still
+        // playing in the other games, so we mark them back to Playing
+        if dropped
+            && result.result == VictoryState::Disconnected
+            && game_thread_results.local_player_lose_type == Some(PlayerLoseType::MassDisconnect)
+        {
+            result.result = VictoryState::Playing;
+        }
+    }
+
+    // NOTE(tec27): we recalculate this here because it may have changed due to the above logic
+    let has_victory = game_thread_results
+        .player_results
+        .values()
+        .any(|r| r.victory_state == VictoryState::Victory);
+    if !has_victory {
+        // If we don't see a victory yet, the game is still ongoing, so map any Defeats to
+        // Disconnected if they could still possibly win from allied victory
+
+        // The set of players who are still "live", e.g. still have a chance at victory
+        let mut live_players = results
+            .iter()
+            .filter_map(|(sb, r)| {
+                if r.result == VictoryState::Playing
+                    && !sb_to_storm
+                        .get(sb)
+                        .map(|storm| {
+                            game_thread_results
+                                .network_results
+                                .get(storm)
+                                .map_or(true, |r| r.has_quit)
+                        })
+                        .unwrap_or(true)
+                {
+                    sb_to_bw.get(sb).copied()
+                } else {
+                    None
+                }
+            })
+            .collect::<HashSet<_>>();
+        let mut to_process = live_players.iter().copied().collect::<SmallVec<[_; 8]>>();
+        while let Some(live_bw_id) = to_process.pop() {
+            let live_player_result = game_thread_results
+                .player_results
+                .get(&live_bw_id)
+                .expect("Should have had PlayerResult for live player");
+            for ally in
+                live_player_result
+                    .alliances
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(ally_id, alliance)| {
+                        let ally_id = BwPlayerId(ally_id as u8);
+                        if !ally_id.is_observer() && *alliance == AllianceState::AlliedVictory {
+                            Some(ally_id)
+                        } else {
+                            None
+                        }
+                    })
+            {
+                if live_players.insert(ally) {
+                    to_process.push(ally);
+                }
+            }
+        }
+
+        for (&sb_id, result) in results.iter_mut() {
+            let storm_id = sb_to_storm
+                .get(&sb_id)
+                .expect("should have had storm id for SB user");
+            // BW never marks our local user as having quit by this point, but we want to treat them
+            // that way so the logic is easier
+            let quit = sb_id == local_user.id
+                || game_thread_results
+                    .network_results
+                    .get(storm_id)
+                    .map_or(true, |r| r.has_quit);
+
+            if quit && result.result == VictoryState::Defeat {
+                let bw_id = sb_to_bw
+                    .get(&sb_id)
+                    .expect("should have had bw id for SB user");
+                if live_players.contains(bw_id) {
+                    result.result = VictoryState::Disconnected;
+                }
+            }
+        }
+    } else {
+        // We see a victory, so the game should be completed here. Use allied victory settings to
+        // bring any disconnected players along for the victory, mark the rest of the disconnected
+        // players as defeated
+        debug!("At least 1 Victory result, processing allied victors...");
+        let mut to_process = SmallVec::<[BwPlayerId; 8]>::new();
+        for (&bw_id, result) in game_thread_results.player_results.iter() {
+            if result.victory_state == VictoryState::Victory {
+                to_process.push(bw_id);
+            }
+        }
+
+        while let Some(victor_bw_id) = to_process.pop() {
+            let victor_player_result = game_thread_results
+                .player_results
+                .get(&victor_bw_id)
+                .expect("should have had PlayerResult for victor");
+            let alliances = victor_player_result.alliances;
+            debug!("processing player {victor_bw_id:?}, alliances: {alliances:?}");
+            for (sb_id, ally_result) in results.iter_mut().filter(|(&sb, r)| {
+                let bw_id = *sb_to_bw
+                    .get(&sb)
+                    .expect("Should have had BW ID id for ally");
+                if bw_id == victor_bw_id
+                    || victor_player_result.alliance_with(bw_id) != AllianceState::AlliedVictory
+                    || !matches!(r.result, VictoryState::Disconnected | VictoryState::Defeat)
+                {
+                    return false;
+                }
+
+                let bw_result = game_thread_results
+                    .player_results
+                    .get(&bw_id)
+                    .expect("Should have had PlayerResult for ally");
+                bw_result.alliance_with(victor_bw_id) == AllianceState::AlliedVictory
+            }) {
+                ally_result.result = VictoryState::Victory;
+                // Changing this player's result may also change the result of people *they* were
+                // allied with, so add them to the processing list
+                to_process.push(sb_to_bw[sb_id]);
+            }
+        }
+
+        // Now that we've processed any possible allied victories, anyone still left as disconnected
+        // can be marked as defeated
+        for result in results.values_mut() {
+            if result.result == VictoryState::Disconnected {
+                result.result = VictoryState::Defeat;
+            }
+        }
+    }
+
+    results
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::bw::players::{
+        AllianceState, AssignedRace, FinalNetworkStatus, PlayerLoseType, PlayerResult, VictoryState,
+    };
+
+    use super::*;
+
+    // TODO(tec27): Move this somewhere common for all tests
+    static INIT_LOGS: std::sync::Once = std::sync::Once::new();
+
+    fn init_logs() {
+        INIT_LOGS.call_once(|| {
+            fern::Dispatch::new()
+                .level(log::LevelFilter::Debug)
+                .level_for("tokio_reactor", log::LevelFilter::Warn) // Too spammy otherwise
+                .chain(io::stdout())
+                .apply()
+                .unwrap();
+        });
+    }
+
+    fn make_standard_network_results(
+        num_players: u8,
+    ) -> HashMap<StormPlayerId, FinalNetworkStatus> {
+        (0..8)
+            .map(|i| {
+                (
+                    StormPlayerId(i),
+                    FinalNetworkStatus {
+                        has_quit: i >= num_players,
+                        was_dropped: false,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn results_1v1_opponent_leaves() {
+        init_logs();
+        // 0 has victory_state defeat
+        // 1 has victory_state victory
+        // 0 has was_dropped false, has_quit false
+        // 1 has was_dropped false, has_quit true
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: local_user.id,
+        };
+        let opponent = JoinedPlayer {
+            name: "opponent".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: 77,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::one_v_one(),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Victory,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: {
+                    let mut n = make_standard_network_results(2);
+                    n.get_mut(&StormPlayerId(1)).unwrap().has_quit = true;
+                    n
+                },
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local, opponent],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Victory,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_1v1_self_leaves() {
+        init_logs();
+        // 0 has victory_state playing
+        // 1 has victory_state playing
+        // 0 has was_dropped false, has_quit false
+        // 1 has was_dropped false, has_quit false
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: local_user.id,
+        };
+        let opponent = JoinedPlayer {
+            name: "opponent".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: 77,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::melee(),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: make_standard_network_results(2),
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local, opponent],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_1v1_self_all_buildings_killed() {
+        init_logs();
+        // 0 has victory_state defeat
+        // 1 has victory state victory
+        // 0 has was_dropped false, has_quit false
+        // 1 has was_dropped false, has_quit false
+        // (note that has_quit can differ depending on order of players leaving, at least until
+        // we calc/submit results when the dialog shows)
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: local_user.id,
+        };
+        let opponent = JoinedPlayer {
+            name: "opponent".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: 77,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::melee(),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Victory,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: make_standard_network_results(2),
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local, opponent],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Victory,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_1v1_opponent_dropped() {
+        init_logs();
+        // 0 has victory_state victory
+        // 1 has victory_state disconnected
+        // 0 has was_dropped false, has_quit false
+        // 1 has was_dropped true, has_quit true
+        // lose type = TargetedDisconnect
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: local_user.id,
+        };
+        let opponent = JoinedPlayer {
+            name: "opponent".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: 77,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::one_v_one(),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Victory,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Disconnected,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: {
+                    let mut n = make_standard_network_results(2);
+                    n.get_mut(&StormPlayerId(1)).unwrap().was_dropped = true;
+                    n.get_mut(&StormPlayerId(1)).unwrap().has_quit = true;
+                    n
+                },
+                local_player_lose_type: Some(PlayerLoseType::TargetedDisconnect),
+                time: Duration::from_millis(27270),
+            },
+            &[local, opponent],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Victory,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_2v2_victory_ally_left() {
+        init_logs();
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: local_user.id,
+        };
+        let ally = JoinedPlayer {
+            name: "ally".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: 77,
+        };
+        let opponent1 = JoinedPlayer {
+            name: "opponent1".to_string(),
+            storm_id: StormPlayerId(2),
+            player_id: Some(BwPlayerId(2)),
+            sb_user_id: 78,
+        };
+        let opponent2 = JoinedPlayer {
+            name: "opponent2".to_string(),
+            storm_id: StormPlayerId(3),
+            player_id: Some(BwPlayerId(3)),
+            sb_user_id: 79,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::top_v_bottom(2),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Victory,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(2),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(3),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Terran,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: {
+                    let mut n = make_standard_network_results(4);
+                    n.get_mut(&StormPlayerId(1)).unwrap().has_quit = true;
+                    n
+                },
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local, ally, opponent1, opponent2],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Victory,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Victory,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    78,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    79,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Terran,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_2v2_left_with_ally_still_playing() {
+        init_logs();
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: local_user.id,
+        };
+        let ally = JoinedPlayer {
+            name: "ally".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: 77,
+        };
+        let opponent1 = JoinedPlayer {
+            name: "opponent1".to_string(),
+            storm_id: StormPlayerId(2),
+            player_id: Some(BwPlayerId(2)),
+            sb_user_id: 78,
+        };
+        let opponent2 = JoinedPlayer {
+            name: "opponent2".to_string(),
+            storm_id: StormPlayerId(3),
+            player_id: Some(BwPlayerId(3)),
+            sb_user_id: 79,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::melee(),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(2),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(3),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Terran,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: make_standard_network_results(4),
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local, ally, opponent1, opponent2],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Disconnected,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    78,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    79,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Terran,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_2v2_loss() {
+        init_logs();
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: local_user.id,
+        };
+        let ally = JoinedPlayer {
+            name: "ally".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: 77,
+        };
+        let opponent1 = JoinedPlayer {
+            name: "opponent1".to_string(),
+            storm_id: StormPlayerId(2),
+            player_id: Some(BwPlayerId(2)),
+            sb_user_id: 78,
+        };
+        let opponent2 = JoinedPlayer {
+            name: "opponent2".to_string(),
+            storm_id: StormPlayerId(3),
+            player_id: Some(BwPlayerId(3)),
+            sb_user_id: 79,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::top_v_bottom(2),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(2),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(3),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Terran,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: {
+                    let mut n = make_standard_network_results(4);
+                    n.get_mut(&StormPlayerId(1)).unwrap().has_quit = true;
+                    n
+                },
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local, ally, opponent1, opponent2],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    78,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    79,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Terran,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_2v2_nonsymmetric_allies() {
+        init_logs();
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: local_user.id,
+        };
+        let ally = JoinedPlayer {
+            name: "ally".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: 77,
+        };
+        let opponent1 = JoinedPlayer {
+            name: "opponent1".to_string(),
+            storm_id: StormPlayerId(2),
+            player_id: Some(BwPlayerId(2)),
+            sb_user_id: 78,
+        };
+        let opponent2 = JoinedPlayer {
+            name: "opponent2".to_string(),
+            storm_id: StormPlayerId(3),
+            player_id: Some(BwPlayerId(3)),
+            sb_user_id: 79,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::melee(),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(2),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(3),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Terran,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: make_standard_network_results(4),
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local, ally, opponent1, opponent2],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    78,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    79,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Terran,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_2v2_self_disconnect() {
+        init_logs();
+        // Ally: disconnected, was_dropped + has_quit
+        // Enemies: disconnected, was_dropped + has quit
+        // Me: victory, not dropped or quit
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: local_user.id,
+        };
+        let ally = JoinedPlayer {
+            name: "ally".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: 77,
+        };
+        let opponent1 = JoinedPlayer {
+            name: "opponent1".to_string(),
+            storm_id: StormPlayerId(2),
+            player_id: Some(BwPlayerId(2)),
+            sb_user_id: 78,
+        };
+        let opponent2 = JoinedPlayer {
+            name: "opponent2".to_string(),
+            storm_id: StormPlayerId(3),
+            player_id: Some(BwPlayerId(3)),
+            sb_user_id: 79,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::top_v_bottom(2),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Victory,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Disconnected,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(2),
+                        PlayerResult {
+                            victory_state: VictoryState::Disconnected,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(3),
+                        PlayerResult {
+                            victory_state: VictoryState::Disconnected,
+                            race: AssignedRace::Terran,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: {
+                    let mut n = make_standard_network_results(4);
+                    n.get_mut(&StormPlayerId(1)).unwrap().has_quit = true;
+                    n.get_mut(&StormPlayerId(1)).unwrap().was_dropped = true;
+                    n.get_mut(&StormPlayerId(2)).unwrap().has_quit = true;
+                    n.get_mut(&StormPlayerId(2)).unwrap().was_dropped = true;
+                    n.get_mut(&StormPlayerId(3)).unwrap().has_quit = true;
+                    n.get_mut(&StormPlayerId(3)).unwrap().was_dropped = true;
+                    n
+                },
+                local_player_lose_type: Some(PlayerLoseType::MassDisconnect),
+                time: Duration::from_millis(27270),
+            },
+            &[local, ally, opponent1, opponent2],
+            &local_user,
+        );
+
+        // The desire here is that we mark ourselves however the game said, but we leave everyone
+        // else as "Playing" if they were dropped as part of the mass disconnect, so that, ideally,
+        // the majority report from the other side of the connection will outweigh our reports.
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Victory,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    78,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    79,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Terran,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_2v2_with_dropped_player() {
+        init_logs();
+        // Ally (dropped): disconnected, was_dropped + has_quit
+        // Enemies: playing, not dropped or quit
+        // Me: playing, not dropped or quit
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: local_user.id,
+        };
+        let ally = JoinedPlayer {
+            name: "ally".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: 77,
+        };
+        let opponent1 = JoinedPlayer {
+            name: "opponent1".to_string(),
+            storm_id: StormPlayerId(2),
+            player_id: Some(BwPlayerId(2)),
+            sb_user_id: 78,
+        };
+        let opponent2 = JoinedPlayer {
+            name: "opponent2".to_string(),
+            storm_id: StormPlayerId(3),
+            player_id: Some(BwPlayerId(3)),
+            sb_user_id: 79,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::melee(),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Disconnected,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::AlliedVictory;
+                                a[1] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(2),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(3),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Terran,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: {
+                    let mut n = make_standard_network_results(4);
+                    n.get_mut(&StormPlayerId(1)).unwrap().has_quit = true;
+                    n.get_mut(&StormPlayerId(1)).unwrap().was_dropped = true;
+                    n
+                },
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local, ally, opponent1, opponent2],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Disconnected,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    78,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    79,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Terran,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_ums_game() {
+        init_logs();
+        // UMS should exactly reproduce whatever the game thread sent us
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: local_user.id,
+        };
+        let opponent = JoinedPlayer {
+            name: "opponent".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(1)),
+            sb_user_id: 77,
+        };
+        let third = JoinedPlayer {
+            name: "third".to_string(),
+            storm_id: StormPlayerId(2),
+            player_id: Some(BwPlayerId(2)),
+            sb_user_id: 78,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::ums(),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::AlliedVictory;
+                                a[2] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(2),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::AlliedVictory;
+                                a[2] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: {
+                    let mut n = make_standard_network_results(2);
+                    n.get_mut(&StormPlayerId(1)).unwrap().has_quit = true;
+                    n
+                },
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local, opponent, third],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    77,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    78,
+                    GamePlayerResult {
+                        result: VictoryState::Playing,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_with_allied_computers() {
+        init_logs();
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: local_user.id,
+        };
+        let opponent1 = JoinedPlayer {
+            name: "opponent1".to_string(),
+            storm_id: StormPlayerId(1),
+            player_id: Some(BwPlayerId(2)),
+            sb_user_id: 78,
+        };
+        let opponent2 = JoinedPlayer {
+            name: "opponent2".to_string(),
+            storm_id: StormPlayerId(2),
+            player_id: Some(BwPlayerId(3)),
+            sb_user_id: 79,
+        };
+
+        // BW ID 1 + 4 are computers, allied with each other and players 2 + 3
+        // Local player (0) has their buildings destroyed and thus loses, the remaining computer
+        // should bring along 2 + 3 as victors
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::melee(),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::AlliedVictory;
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a[4] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(2),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::AlliedVictory;
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(3),
+                        PlayerResult {
+                            victory_state: VictoryState::Defeat,
+                            race: AssignedRace::Terran,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::AlliedVictory;
+                                a[2] = AllianceState::AlliedVictory;
+                                a[3] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(4),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::AlliedVictory;
+                                a[4] = AllianceState::AlliedVictory;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: {
+                    let mut n = make_standard_network_results(3);
+                    n.get_mut(&StormPlayerId(1)).unwrap().has_quit = true;
+                    n.get_mut(&StormPlayerId(2)).unwrap().has_quit = true;
+                    n
+                },
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local, opponent1, opponent2],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([
+                (
+                    local_user.id,
+                    GamePlayerResult {
+                        result: VictoryState::Defeat,
+                        race: AssignedRace::Zerg,
+                        apm: 0,
+                    }
+                ),
+                (
+                    78,
+                    GamePlayerResult {
+                        result: VictoryState::Victory,
+                        race: AssignedRace::Protoss,
+                        apm: 0,
+                    }
+                ),
+                (
+                    79,
+                    GamePlayerResult {
+                        result: VictoryState::Victory,
+                        race: AssignedRace::Terran,
+                        apm: 0,
+                    }
+                )
+            ])
+        )
+    }
+
+    #[test]
+    fn results_with_unallied_computers() {
+        init_logs();
+        let local_user = LocalUser {
+            id: 1,
+            name: "local".to_string(),
+        };
+        let local = JoinedPlayer {
+            name: local_user.name.clone(),
+            storm_id: StormPlayerId(0),
+            player_id: Some(BwPlayerId(0)),
+            sb_user_id: local_user.id,
+        };
+
+        let results = determine_game_results(
+            GameThreadResults {
+                game_type: GameType::melee(),
+                player_results: HashMap::from([
+                    (
+                        BwPlayerId(0),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Zerg,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[0] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(1),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[1] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                    (
+                        BwPlayerId(2),
+                        PlayerResult {
+                            victory_state: VictoryState::Playing,
+                            race: AssignedRace::Protoss,
+                            alliances: {
+                                let mut a = [AllianceState::Unallied; 8];
+                                a[2] = AllianceState::Allied;
+                                a
+                            },
+                        },
+                    ),
+                ]),
+                network_results: make_standard_network_results(1),
+                local_player_lose_type: None,
+                time: Duration::from_millis(27270),
+            },
+            &[local],
+            &local_user,
+        );
+
+        assert_eq!(
+            results,
+            HashMap::from([(
+                local_user.id,
+                GamePlayerResult {
+                    result: VictoryState::Defeat,
+                    race: AssignedRace::Zerg,
+                    apm: 0,
+                }
+            ),])
+        )
+    }
 }

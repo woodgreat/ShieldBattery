@@ -9,6 +9,8 @@ import { SbPolicyType } from '../policies/policy-type'
 import { SbPermissions } from './permissions'
 import { UserStats } from './user-stats'
 
+export const SEARCH_MATCH_HISTORY_LIMIT = 40
+
 export type SbUserId = Opaque<number, 'SbUser'>
 
 /**
@@ -17,6 +19,7 @@ export type SbUserId = Opaque<number, 'SbUser'>
  */
 export interface SbUser {
   id: SbUserId
+  /** The user's display name. */
   name: string
 }
 
@@ -31,6 +34,8 @@ export function makeSbUserId(id: number): SbUserId {
 
 /** Information about the current user. */
 export interface SelfUser extends SbUser {
+  /** The name the user logs in with (may differ from their display name). */
+  loginName: string
   email: string
   emailVerified: boolean
   /** The last version of the privacy policy this user has seen/accepted. */
@@ -93,6 +98,16 @@ export interface GetUserProfileResponse {
     maps: MapInfoJson[]
     users: SbUser[]
   }
+}
+
+/**
+ * The response returned when searching the user's match history.
+ */
+export interface SearchMatchHistoryResponse {
+  games: GameRecordJson[]
+  maps: MapInfoJson[]
+  users: SbUser[]
+  hasMoreGames: boolean
 }
 
 export interface GetBatchUserInfoResponse {

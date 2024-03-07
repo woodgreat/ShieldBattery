@@ -1,6 +1,6 @@
 import queryString from 'query-string'
-import React, { useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import React, { useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import {
   EMAIL_MAXLENGTH,
@@ -27,7 +27,7 @@ import {
 } from '../forms/validators'
 import { detectedLocale } from '../i18n/i18next'
 import { RaisedButton } from '../material/button'
-import CheckBox from '../material/check-box'
+import { CheckBox, CheckBoxProps } from '../material/check-box'
 import { InputError } from '../material/input-error'
 import { push } from '../navigation/routing'
 import { fetchJson } from '../network/fetch'
@@ -47,7 +47,7 @@ import {
   FieldRow,
   LoadingArea,
 } from './auth-content'
-import { redirectIfLoggedIn } from './auth-utils'
+import { useRedirectAfterLogin } from './auth-utils'
 import { UserErrorDisplay } from './user-error-display'
 
 const SignupBottomAction = styled(AuthBottomAction)`
@@ -75,10 +75,10 @@ const DialogLinkElem = styled.a`
 
 function DialogLink({
   dialogType,
-  text,
+  children,
 }: {
   dialogType: DialogType.TermsOfService | DialogType.AcceptableUse | DialogType.PrivacyPolicy
-  text: string
+  children: string
 }) {
   const dispatch = useAppDispatch()
 
@@ -90,7 +90,7 @@ function DialogLink({
 
   return (
     <DialogLinkElem href='#' onClick={onClick} tabIndex={1}>
-      {text}
+      {children}
     </DialogLinkElem>
   )
 }
@@ -100,22 +100,10 @@ const CheckBoxError = styled(InputError)`
   padding-bottom: 4px;
 `
 
-// TODO(2Pac): Move this to the Checkbox file once that's TS-ified
-interface CheckboxProps {
-  name: string
-  checked: boolean
-  label: React.ReactNode
-  value?: string
-  disabled?: boolean
-  className?: string
-  inputProps?: React.InputHTMLAttributes<HTMLInputElement>
-  onChange: (event: React.ChangeEvent<HTMLInputElement>) => void
-}
-
 function CheckBoxRowWithError({
   errorText,
   ...checkboxProps
-}: { errorText?: string } & CheckboxProps) {
+}: { errorText?: string } & CheckBoxProps) {
   return (
     <>
       <MultiCheckBoxFieldRow>
@@ -150,7 +138,7 @@ function usernameAvailableValidator(): Validator<string, SignupModel> {
       // TODO(tec27): handle non-404 errors differently
     }
 
-    return t('auth.usernameValidator.taken', 'Username is already taken')
+    return t('auth.usernameValidator.notAvailable', 'Username is not available')
   }, 250)
 }
 
@@ -162,9 +150,7 @@ export function Signup() {
   const [isLoading, setIsLoading] = useState(false)
   const [lastError, setLastError] = useState<Error>()
 
-  useEffect(() => {
-    redirectIfLoggedIn({ auth })
-  }, [auth])
+  useRedirectAfterLogin()
 
   const [usernameAvailable] = useState(() => usernameAvailableValidator())
 
@@ -316,22 +302,13 @@ export function Signup() {
               {...bindCheckable('policyAgreement')}
               label={
                 <span>
-                  {t('auth.signup.readAndAgree', 'I have read and agree to the')}{' '}
-                  <DialogLink
-                    dialogType={DialogType.TermsOfService}
-                    text={t('auth.signup.termsOfServiceLink', 'Terms of Service')}
-                  />
-                  ,{' '}
-                  <DialogLink
-                    dialogType={DialogType.AcceptableUse}
-                    text={t('auth.signup.acceptableUseLink', 'Acceptable Use')}
-                  />
-                  , and{' '}
-                  <DialogLink
-                    dialogType={DialogType.PrivacyPolicy}
-                    text={t('auth.signup.privacyLink', 'Privacy')}
-                  />{' '}
-                  policies
+                  <Trans t={t} i18nKey='auth.signup.readAndAgree'>
+                    I have read and agree to the{' '}
+                    <DialogLink dialogType={DialogType.TermsOfService}>Terms of Service</DialogLink>
+                    , <DialogLink dialogType={DialogType.AcceptableUse}>Acceptable Use</DialogLink>,
+                    and <DialogLink dialogType={DialogType.PrivacyPolicy}>Privacy</DialogLink>{' '}
+                    policies
+                  </Trans>
                 </span>
               }
               inputProps={{ tabIndex: 1 }}

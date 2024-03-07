@@ -1,9 +1,10 @@
 import PropTypes from 'prop-types'
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { MaterialIcon } from '../icons/material/material-icon'
 import { IconButton } from '../material/button'
-import Entry from '../material/left-nav/entry'
+import { Entry } from '../material/left-nav/entry'
 
 const LeaveButton = styled(IconButton)`
   width: 36px;
@@ -14,8 +15,13 @@ const LeaveButton = styled(IconButton)`
 `
 
 const LobbyNavEntry = ({ lobby, currentPath, hasUnread, onLeaveClick }) => {
+  const { t } = useTranslation()
   const button = (
-    <LeaveButton icon={<MaterialIcon icon='close' />} title='Leave lobby' onClick={onLeaveClick} />
+    <LeaveButton
+      icon={<MaterialIcon icon='close' />}
+      title={t('lobbies.lobby.leaveLobby', 'Leave lobby')}
+      onClick={onLeaveClick}
+    />
   )
   return (
     <Entry

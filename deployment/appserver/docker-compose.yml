@@ -32,29 +32,35 @@ services:
       - VIRTUAL_HOST=${SB_VIRTUAL_HOST}
       - VIRTUAL_PORT=5555
       - LETSENCRYPT_HOST=${SB_VIRTUAL_HOST}
-      - DATABASE_URL=postgres://${SB_DB_USER:-shieldbattery}:${SB_DB_PASSWORD}@db/${SB_DB:-shieldbattery}
+      - DATABASE_URL=postgres://${SB_DB_USER:-shieldbattery}:${SB_DB_PASSWORD}@db/${SB_DB_NAME:-shieldbattery}
       - SB_HTTP_PORT=5555
       - SB_HTTPS_REVERSE_PROXY=true
+      - SB_CANONICAL_HOST
+      - SB_GQL_ORIGIN
+      - SB_JWT_SECRET
       - SB_REDIS_HOST=redis
       - SB_REDIS_PORT=6379
       - 'SB_ROUTE_CREATOR_HOST=::'
       - SB_ROUTE_CREATOR_PORT=14099
-      - SB_FILE_STORE=${SB_FILE_STORE}
+      - SB_FILE_STORE
       - SB_MAP_PARSER_MAX_CONCURRENT=${SB_MAP_PARSER_MAX_CONCURRENT:-1}
       - SB_SPRITE_DATA=server/bw_sprite_data
-      - SB_CANONICAL_HOST=${SB_CANONICAL_HOST}
-      - SB_SESSION_TTL=${SB_SESSION_TTL}
-      - SB_RALLY_POINT_SECRET=${SB_RALLY_POINT_SECRET}
-      - SB_MAILGUN_KEY=${SB_MAILGUN_KEY}
-      - SB_MAILGUN_DOMAIN=${SB_MAILGUN_DOMAIN}
-      - SB_MAILGUN_FROM=${SB_MAILGUN_FROM}
-      - SB_ANALYTICS_ID=${SB_ANALYTICS_ID}
-      - SB_DATADOG_KEY=${SB_DATADOG_KEY}
+      - SB_SESSION_TTL
+      - SB_RALLY_POINT_SECRET
+      - SB_MAILGUN_KEY
+      - SB_MAILGUN_DOMAIN
+      - SB_MAILGUN_FROM
+      - SB_ANALYTICS_ID
+      - SB_DATADOG_KEY
+      - SB_DISABLE_CRAWLERS
+      - SB_DISCORD_WEBHOOK_URL
+      - GOOGLE_APPLICATION_CREDENTIALS=/google-credentials.json
     networks:
       - frontend
       - backend
     volumes:
       - app_logs:/home/node/shieldbattery/server/logs:rw
+      - ./google-credentials.json:/google-credentials.json:ro
       - uploaded_files:/home/node/shieldbattery/server/uploaded_files:rw
       - type: bind
         source: ./bw_sprite_data
@@ -67,6 +73,43 @@ services:
     # this image. The reason why we're not waiting for `db` service to actually be ready here is
     # because we're waiting for the `update_server` service to start, and `update_server` service
     # won't start until the `db` service is ready.
+    depends_on:
+      - db
+      - nginx_proxy
+      - proxy_gen
+      - redis
+      - update_server
+
+  server_rs:
+    image: shieldbattery/server-rs:${SB_VERSION:-latest}
+    restart: unless-stopped
+    init: true
+    expose:
+      - 5556
+    environment:
+      - VIRTUAL_HOST=${SB_GQL_VIRTUAL_HOST}
+      - VIRTUAL_PORT=5556
+      - LETSENCRYPT_HOST=${SB_GQL_VIRTUAL_HOST}
+      - SB_DB_HOST=db
+      - SB_DB_PORT=5432
+      - SB_DB_USER=${SB_DB_USER:-shieldbattery}
+      - SB_DB_PASSWORD=${SB_DB_PASSWORD}
+      - SB_DB=${SB_DB:-shieldbattery}
+      - 'SB_GQL_HOST=[::]'
+      - SB_GQL_PORT=5556
+      - SB_HTTPS_REVERSE_PROXY=true
+      - SB_REDIS_HOST=redis
+      - SB_REDIS_PORT=6379
+      - SB_CANONICAL_HOST
+      - SB_MAILGUN_KEY
+      - SB_MAILGUN_DOMAIN
+      - SB_MAILGUN_FROM
+      - SB_DATADOG_KEY
+      - SB_JWT_SECRET
+      - SB_SESSION_TTL
+    networks:
+      - frontend
+      - backend
     depends_on:
       - db
       - nginx_proxy
@@ -158,7 +201,7 @@ services:
       - backend
     volumes:
       - ./db/init-scripts:/docker-entrypoint-initdb.d:ro
-      - ./db/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./db/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - db_data:/var/lib/postgresql/data
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
 
@@ -219,3 +262,4 @@ services:
     depends_on:
       - app_server
       - db
+      - server_rs

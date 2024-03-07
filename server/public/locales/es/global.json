@@ -1,9 +1,13 @@
 {
     "common": {
         "validators": {
-            "maxLength": "Ingrese como máximo {{maxLength}} caracteres",
-            "minLength": "Ingrese al menos {{minLength}} caracteres",
-            "required": "Requerido"
+            "required": "Requerido",
+            "maxLength_one": "Ingrese como máximo el carácter {{count}}",
+            "maxLength_many": "Ingrese como máximo {{count}} de caracteres",
+            "maxLength_other": "Ingrese como máximo {{count}} caracteres",
+            "minLength_one": "Ingrese al menos el carácter {{count}}",
+            "minLength_many": "Ingrese al menos {{count}} de caracteres",
+            "minLength_other": "Ingrese al menos {{count}} caracteres"
         },
         "actions": {
             "back": "Atrás",
@@ -21,43 +25,195 @@
             "apply": "Aplicar",
             "remove": "Eliminar",
             "previous": "Anterior",
-            "next": "Próximo"
+            "next": "Próximo",
+            "clear": "Claro",
+            "start": "Comenzar",
+            "decline": "Rechazar",
+            "accept": "Aceptar",
+            "block": "Bloquear",
+            "unblock": "Desatascar",
+            "stop": "Detener",
+            "test": "Prueba",
+            "edit": "Editar",
+            "reveal": "Revelar",
+            "submit": "Entregar"
+        },
+        "lists": {
+            "empty": "Nada que ver aqui"
         }
     },
     "settings": {
-        "app": {
-            "sound": {
-                "label": "Sonido"
-            },
-            "system": {
-                "label": "Sistema"
-            },
-            "label": "aplicación"
-        },
+        "close": "Cerrar configuración",
         "game": {
+            "starcraft": {
+                "title": "Barco de estrellas",
+                "browseManually": "Navegar manualmente",
+                "currentPathLabel": "Ruta de juego actual:",
+                "detectionFailed": "Error al detectar la ruta de instalación. Asegúrate de tener instalado StarCraft: Remastered e inténtalo de nuevo, o configura la ruta manualmente.",
+                "detectPath": "Detectar instalación",
+                "pathValid": "Esta ruta del juego parece ser una instalación válida.",
+                "instructions": {
+                    "advanced": "Si la detección falla, puede configurar la ruta manualmente. Haz clic en el botón a continuación y selecciona el directorio que contiene tu instalación de StarCraft: Remastered.",
+                    "description": "ShieldBattery requiere una instalación válida y actualizada de StarCraft: Remastered. Haga clic en el botón a continuación para detectar automáticamente la carpeta de instalación."
+                },
+                "pathInvalid": "Esta ruta no apunta a una instalación válida de StarCraft: Remastered. Asegúrese de que su instalación esté actualizada o pruebe con una ruta diferente."
+            },
+            "title": "Juego",
+            "video": {
+                "enableFpsLimit": "Habilitar límite de FPS",
+                "enableVerticalSync": "Habilitar sincronización vertical",
+                "environmentEffects": "Efectos ambientales",
+                "pillarbox": "Pillarbox (relación de aspecto 4:3)",
+                "realTimeLighting": "Iluminación en tiempo real",
+                "sdGraphicsFilter": "Filtro de gráficos SD",
+                "shadowStacking": "Apilamiento de sombras",
+                "showFps": "Mostrar fps",
+                "smoothUnitTurning": "Giro suave de la unidad",
+                "displayMode": {
+                    "fullscreen": "Pantalla completa",
+                    "title": "Modo de visualización",
+                    "windowed": "con ventana",
+                    "windowedFullscreen": "Con ventana (pantalla completa)"
+                },
+                "fpsLimit": "límite de FPS",
+                "hdGraphics": "gráficos de alta definición",
+                "title": "Video"
+            },
             "gameplay": {
-                "label": "Como se Juega"
+                "apmAlert": "Alerta cuando APM cae por debajo",
+                "apmColorText": "Texto en color",
+                "apmDisplay": "Pantalla APM",
+                "apmSound": "Reproducir sonido",
+                "apmValue": "valor APM",
+                "apmValueValidation": "Introduzca un valor entre 1 y 999",
+                "colorCycling": "Habilitar ciclo de color",
+                "consoleSkins": {
+                    "20thAnniversary": "20.º aniversario de StarCraft",
+                    "blizzcon2017": "BlizzCon 2017",
+                    "blizzcon2018": "BlizzCon 2018",
+                    "default": "Por defecto",
+                    "krcGold": "KRC oro",
+                    "krcSilver": "KRC plata",
+                    "title": "Piel de consola",
+                    "warcraft3": "Botín de WarCraft 3"
+                },
+                "devOnlySettings": "Configuración solo para desarrolladores",
+                "gameTimer": "temporizador de juego",
+                "ingameSkins": {
+                    "carbot": "Carbot",
+                    "none": "Ninguno",
+                    "preorder": "Hacer un pedido",
+                    "title": "Piel dentro del juego"
+                },
+                "latency": "Mostrar latencia",
+                "minimapPosition": {
+                    "bottomLeft": "Esquina izquierda inferior",
+                    "standard": "Estándar",
+                    "title": "Posición del minimapa"
+                },
+                "showBonusSkins": "Mostrar pieles de bonificación",
+                "skinsInfo": "Máscaras (deben comprarse en Blizzard)",
+                "title": "Como se Juega",
+                "unitPortraits": {
+                    "animated": "Animado",
+                    "disabled": "Desactivado",
+                    "still": "Aún",
+                    "title": "Retratos"
+                },
+                "visualizeNetworkStalls": "Visualice puestos de red"
             },
             "input": {
-                "label": "Aporte"
+                "mouseSensitivity": "Sensibilidad del ratón",
+                "title": "Aporte",
+                "hardwareCursor": "Cursores de hardware",
+                "customMouseSensitivity": "Sensibilidad personalizada del mouse",
+                "keyboardScrollSpeed": "Velocidad de desplazamiento del teclado",
+                "lockCursor": "Bloquear el cursor en la ventana",
+                "mouseScaling": "Usar la escala del mouse",
+                "mouseScrollSpeed": "Velocidad de desplazamiento del ratón"
             },
             "sound": {
-                "label": "Sonido"
-            },
-            "starcraft": {
-                "label": "Barco de estrellas"
-            },
-            "video": {
-                "label": "Video"
-            },
-            "label": "Juego"
-        },
-        "close": "Cerrar configuración",
-        "user": {
-            "label": "Usuario",
-            "language": {
-                "label": "Idioma"
+                "announcer": {
+                    "default": "Por defecto",
+                    "heyJini": "hola jin",
+                    "info": "Paquetes (deben comprarse en Blizzard)",
+                    "kimJungmin": "kim jungmin",
+                    "title": "Locutor",
+                    "umJaeKyung": "Um Jae Kyung",
+                    "jeonYongJun": "Jeon Yongjun",
+                    "umJeonKim": "Um, Jeon, Kim Trio"
+                },
+                "gameSubtitles": "subtítulos del juego",
+                "backgroundSounds": "El sonido se reproduce mientras está en segundo plano.",
+                "cinematicSubtitles": "Subtítulos cinematográficos",
+                "gameSounds": "Sonidos del juego",
+                "music": "Música",
+                "musicVolume": "Volumen de la música",
+                "originalVoiceOvers": "Locuciones originales de la unidad",
+                "soundVolume": "Volumen de sonido",
+                "title": "Sonido",
+                "unitAcknowledgements": "Reconocimientos de la unidad",
+                "unitSpeech": "Discurso de la unidad",
+                "buildingSounds": "Construyendo sonidos"
             }
+        },
+        "app": {
+            "system": {
+                "title": "Sistema",
+                "runOnStartup": "Ejecute ShieldBattery al iniciar el sistema",
+                "startMinimized": "Iniciar minimizado",
+                "startupOverline": "Puesta en marcha",
+                "filesOverline": "archivos",
+                "replayQuickOpen": "Inicie las repeticiones abiertas con ShieldBattery inmediatamente sin vista previa"
+            },
+            "title": "aplicación",
+            "sound": {
+                "masterVolume": "Volumen principal",
+                "title": "Sonido"
+            }
+        },
+        "errors": {
+            "save": "Hubo un problema al guardar la configuración."
+        },
+        "user": {
+            "language": {
+                "title": "Idioma",
+                "selectLanguage": "Selecciona un idioma"
+            },
+            "title": "Usuario",
+            "account": {
+                "authenticationHeader": "Autenticación",
+                "changeEmail": {
+                    "dialogTitle": "Cambiar e-mail",
+                    "patternError": "Introduzca una dirección de correo electrónico válida",
+                    "requiredError": "Introduzca una dirección de correo electrónico",
+                    "success": "El correo electrónico se cambió correctamente."
+                },
+                "changePassword": {
+                    "dialogTitle": "Cambiar la contraseña",
+                    "success": "Contraseña cambiada con éxito."
+                },
+                "displayName": "Nombre para mostrar",
+                "email": "Correo electrónico",
+                "error": "Hubo un problema al recuperar su información de usuario.",
+                "invalidCurrentPassword": "La contraseña actual es incorrecta",
+                "label": "Cuenta",
+                "loginName": "Nombre de inicio de sesión",
+                "networkError": "Error de red: {{errorMessage}}",
+                "changePasswordButton": "Cambiar la contraseña",
+                "confirmNewPassword": "Confirmar nueva contraseña",
+                "currentPassword": "Contraseña actual",
+                "newPassword": "Nueva contraseña",
+                "passwordValidator": {
+                    "confirm": "Ingrese una contraseña coincidente",
+                    "current": "introduce tu contraseña actual",
+                    "new": "Introduzca una nueva contraseña"
+                },
+                "unknownError": "Algo salió mal, inténtalo de nuevo más tarde."
+            }
+        },
+        "activity": {
+            "title": "Ajustes (Alt + S)"
         }
     },
     "auth": {
@@ -76,17 +232,7 @@
         "usernameValidator": {
             "pattern": "Nombre de usuario contiene caracteres inválidos",
             "required": "Introduzca un nombre de usuario",
-            "taken": "Este nombre de usuario ya está tomado"
-        },
-        "editAccount": {
-            "dialogTitle": "Editar cuenta",
-            "errorUpdatingAccount": "Hubo un problema al actualizar su cuenta. Por favor, inténtelo de nuevo más tarde.",
-            "incorrectPassword": "Contraseña actual incorrecta.",
-            "newPassword": "Nueva contraseña",
-            "changePassword": "¿Cambiar la contraseña?",
-            "confirmNewPassword": "Confirmar nueva contraseña",
-            "currentPassword": "Contraseña actual",
-            "email": "Correo electrónico"
+            "notAvailable": "nombre de usuario no esta disponible"
         },
         "emailValidator": {
             "pattern": "Introduzca una dirección de correo electrónico válida",
@@ -152,21 +298,16 @@
         },
         "passwordValidator": {
             "confirm": "Confirmar la contraseña",
-            "current": "introduce tu contraseña actual",
             "matching": "Introduce una contraseña que coincida",
             "required": "Ingrese una contraseña",
-            "resetCode": "Ingrese su código de restablecimiento de contraseña",
-            "matchingPassword": "Introduce una contraseña que coincida"
+            "resetCode": "Ingrese su código de restablecimiento de contraseña"
         },
         "signup": {
-            "acceptableUseLink": "Uso aceptable",
             "ageConfirmation": "Certifico que tengo 13 años de edad o más",
             "alreadyHaveAccount": "¿Ya tienes una cuenta?",
             "confirmPassword": "Confirmar Contraseña",
             "createAccount": "Crear una cuenta",
-            "privacyLink": "Privacidad",
-            "readAndAgree": "he leído y estoy de acuerdo con",
-            "termsOfServiceLink": "Términos de servicio",
+            "readAndAgree": "He leído y acepto las <2>Condiciones de servicio</2>, <4>Uso aceptable</4> y <6>Políticas de privacidad</6>",
             "title": "Crear una cuenta",
             "emailAddress": "Dirección de correo electrónico",
             "logIn": "Acceso",
@@ -183,14 +324,11 @@
             "changeLanguage": "Cambiar idioma",
             "faq": "Preguntas más frecuentes",
             "home": "Hogar",
-            "ladder": "Escalera",
-            "leagues": "ligas",
             "login": "Acceso"
         },
         "faq": {
             "hotkeyCustomizationAnswer": "Sí, admitimos teclas de acceso rápido personalizadas, pero actualmente no tenemos un editor de teclas de acceso rápido. Si desea utilizar teclas de acceso rápido personalizadas, inicie StarCraft: Remastered a través del lanzador de Blizzard y personalícelas allí primero. Después de hacerlo, los lanzamientos futuros a través de ShieldBattery usarán esas teclas de acceso rápido.",
             "hotkeyCustomizationQuestion": "¿Se permite o se proporciona la personalización de teclas de acceso rápido?",
-            "isShieldBatteryFreeAnswer": "<0>¡ShieldBattery es de uso totalmente gratuito!</0><1>Sin embargo, nos cuesta tiempo y dinero alojar y desarrollar ShieldBattery. Si desea ayudarnos a cubrir esos costos, se lo agradeceríamos mucho. Hemos establecido varias formas de contribuir:</1>",
             "isShieldBatteryFreeQuestion": "¿ShieldBattery cuesta algo? ¿Cómo puedo apoyar el proyecto?",
             "linuxSupportAnswer": "<0>Actualmente, esto no es algo para lo que tengamos soporte oficial.</0><1>Sin embargo, hay una integración de ShieldBattery con Wine aportada por la comunidad. Consulta nuestro <2>Discord</2> para aprender a ejecutar ShieldBattery en Wine.</1>",
             "officialSupportAnswer": "No, ShieldBattery es un proyecto desarrollado por apasionados miembros de la comunidad y no cuenta con el apoyo o reconocimiento oficial de Blizzard.",
@@ -205,7 +343,8 @@
             "systemRequirementsQuestion": "¿Cuáles son los requisitos del sistema para jugar en ShieldBattery?",
             "title": "Preguntas frecuentes",
             "header": "Preguntas más frecuentes",
-            "linuxSupportQuestion": "¿ShieldBattery funciona en Linux o OS X?"
+            "linuxSupportQuestion": "¿ShieldBattery funciona en Linux o OS X?",
+            "isShieldBatteryFreeAnswer": "<0>¡ShieldBattery es de uso totalmente gratuito!</0><1>Sin embargo, nos cuesta tiempo y dinero alojar y desarrollar ShieldBattery. Si desea ayudarnos a cubrir esos costos, se lo agradeceríamos mucho. Hemos establecido varias formas de contribuir:</1>"
         },
         "splash": {
             "benefits": {
@@ -302,7 +441,10 @@
         "playerHeader": "Jugador",
         "rankHeader": "Rango",
         "updatedText": "Actualizado: {{timestamp}}",
-        "winLossHeader": "Ganar perder"
+        "winLossHeader": "Ganar perder",
+        "activity": {
+            "title": "Escalera"
+        }
     },
     "clientDownload": {
         "andMore": "¡Y más!",
@@ -316,11 +458,6 @@
     "comingSoon": {
         "subtitle": "Ayude a financiar el desarrollo de ShieldBattery",
         "headline": "¡Esta característica estará disponible en breve!"
-    },
-    "forms": {
-        "fileInput": {
-            "clearFiles": "Borrar archivos"
-        }
     },
     "matchmaking": {
         "division": {
@@ -356,7 +493,8 @@
             "partyTooLargeTitle": "fiesta demasiado grande",
             "seconds": "Segundos",
             "soon": "Pronto™",
-            "title": "Emparejamiento deshabilitado"
+            "title": "Emparejamiento deshabilitado",
+            "nextDateRange": "<0>{{nextStartDate}}</0><1>a</1><2>{{nextEndDate}}</2>"
         },
         "findMatch": {
             "action": "Encontrar pareja",
@@ -379,10 +517,14 @@
             "title": "Encontrar pareja",
             "updated": "Actualizado",
             "useAlternateRace": "Usa una carrera alternativa para evitar enfrentamientos espejo",
-            "veto1v1": "Veto hasta 3 mapas. Los mapas vetados nunca se seleccionarán para jugar.",
-            "veto2v2": "Veto hasta 3 mapas. Los mapas vetados se elegirán con mucha menos frecuencia que otros mapas.",
             "vetoesLeft": "<0>Vetos restantes: </0><1>{{vetoesLeft}}</1>",
-            "race": "Carrera"
+            "race": "Carrera",
+            "vetoDescriptionNoOverlap_one": "Veto hasta el mapa {{count}} mapas. Los mapas vetados nunca se seleccionarán para jugar.",
+            "vetoDescriptionNoOverlap_many": "Veto hasta {{count}} de mapas. Los mapas vetados nunca se seleccionarán para jugar.",
+            "vetoDescriptionNoOverlap_other": "Veto hasta {{count}} mapas. Los mapas vetados nunca se seleccionarán para jugar.",
+            "vetoDescriptionWithOverlap_one": "Veto hasta el mapa {{count}} mapas. Los mapas vetados se elegirán con mucha menos frecuencia que otros mapas.",
+            "vetoDescriptionWithOverlap_many": "Veto hasta {{count}} de mapas. Los mapas vetados se elegirán con mucha menos frecuencia que otros mapas.",
+            "vetoDescriptionWithOverlap_other": "Veto hasta {{count}} mapas. Los mapas vetados se elegirán con mucha menos frecuencia que otros mapas."
         },
         "match": {
             "gameFailedToLoad": "El juego no se ha podido cargar.",
@@ -408,6 +550,10 @@
         },
         "searchingOverlay": {
             "cancelSearch": "Cancelar búsqueda"
+        },
+        "activity": {
+            "finding": "Hallazgo…",
+            "findMatch": "Encontrar pareja"
         }
     },
     "clientUpdate": {
@@ -417,13 +563,14 @@
             "newUpdateDownloading": "Se está descargando una nueva actualización. Espere a que se complete la descarga para continuar.",
             "newUpdateReady": "Se ha descargado una nueva actualización y está lista para instalarse. Reinicie la aplicación para continuar.",
             "noErrorTitle": "Actualización disponible",
-            "restartNow": "Reiniciar ahora"
+            "restartNow": "Reiniciar ahora",
+            "progress": "{{transferred}} / {{total}} a {{perSecond}}/s"
         }
     },
     "chat": {
         "channelInfo": {
             "notFound": "No se pudo encontrar este canal. Es posible que no exista o que otra persona lo haya recreado.",
-            "defaultError": "Ocurrió un error: {{errorMessage}}",
+            "defaultError": "Ocurrió un error: {{statusText}}",
             "genericError": "Error al obtener la información del canal para #{{channelName}}: {{errorMessage}}"
         },
         "channelInfoCard": {
@@ -433,6 +580,7 @@
             "noDescription": "Este canal no tiene descripción.",
             "private": "Este canal es privado y requiere una invitación para unirse.",
             "userCount_one": "{{count}} miembro",
+            "userCount_many": "{{count}} de miembros",
             "userCount_other": "{{count}} miembros"
         },
         "channelList": {
@@ -459,7 +607,7 @@
             "channelName": "Nombre del Canal",
             "createAction": "Crear canal",
             "defaultError": "Ocurrió un error al crear el canal.",
-            "maximumOwnedError": "Ha alcanzado el límite de canales creados. Debe abandonar un canal que creó antes de poder crear otro.",
+            "maximumOwnedError": "Ha alcanzado el límite de canales creados. Debe abandonar un canal que haya creado antes de poder crear otro.",
             "title": "Crear canal"
         },
         "events": {
@@ -486,7 +634,7 @@
             "successMessage": "{{user}} fue prohibido"
         },
         "banUserErrorDisplay": {
-            "defaultError": "Ocurrió un error: {{errorMessage}}",
+            "defaultError": "Ocurrió un error: {{statusText}}",
             "genericError": "Error al prohibir {{user}}: {{errorMessage}}",
             "moderateChannelModerator": "No puedes banear a otro moderador",
             "moderateChannelOwner": "No puedes banear al dueño del canal",
@@ -504,10 +652,28 @@
             "active": "Activo",
             "idle": "Inactivo",
             "offline": "Desconectado"
+        },
+        "channelHeader": {
+            "actionItems": {
+                "leaveChannel": "Salir del canal",
+                "channelSettings": "Configuración del canal",
+                "hideBanner": "Ocultar banner"
+            },
+            "moreActions": "Mas acciones",
+            "errors": {
+                "toggleBannerVisibility": "Algo salió mal al alternar la visibilidad del banner."
+            }
+        },
+        "channelSettings": {
+            "general": {
+                "descriptionLabel": "Descripción",
+                "topicLabel": "Tema",
+                "saveErrorMessage": "Algo salió mal al guardar la configuración.",
+                "inappropriateImageErrorMessage": "La imagen seleccionada es inapropiada. Seleccione una imagen diferente."
+            }
         }
     },
     "fileBrowser": {
-        "noFiles": "Nada que ver aqui",
         "rootFolder": "Carpeta raíz",
         "upOneDirectory": "Subir un directorio"
     },
@@ -548,7 +714,9 @@
             "draw": "Dibujar",
             "loss": "Pérdida",
             "unknown": "Desconocido",
-            "win": "Ganar"
+            "win": "Ganar",
+            "lossShort": "L",
+            "winShort": "W"
         },
         "teamName": {
             "bottom": "Abajo",
@@ -580,56 +748,6 @@
         "statusFinal": "Final",
         "statusLive": "Vivir"
     },
-    "league": {
-        "details": {
-            "about": "Acerca de",
-            "copyLink": "Copiar enlace a la liga",
-            "dateText": "{{startDate}} a {{endDate}}",
-            "goBack": "volver a la lista",
-            "info": "Información",
-            "joined": "Unido",
-            "joinError": "No pude unirme a la liga: {{errorMessage}}",
-            "leaderboard": "Tabla de clasificación",
-            "leaderboardError": "Hubo un problema al recuperar la tabla de posiciones: {{errorMessage}}",
-            "leaderBoardHeader": {
-                "lastPlayed": "Jugado por última vez",
-                "player": "Jugador",
-                "points": "Puntos",
-                "rank": "Rango",
-                "winLoss": "Ganar perder"
-            },
-            "leagueEndedError": "No pude unirme porque la liga ya terminó",
-            "leagueJoined": "Se unió a la liga",
-            "noPlayers": "No hay jugadores coincidentes.",
-            "notFound": "Liga no encontrada",
-            "retrieveError": "Hubo un error al recuperar esta liga: {{errorMessage}}",
-            "rulesAndInfo": "Reglas e información"
-        },
-        "explainer": {
-            "playDescription": "Una vez que ha comenzado una liga, todos los juegos de escalera que juegues te otorgarán puntos para la clasificación de la liga junto con tu clasificación de escalera normal. ¡Consulta la tabla de clasificación en la página de la liga para ver cómo te va!",
-            "playTitle": "Jugar.",
-            "winDescription": "Después de que termine una liga, la tabla de clasificación estará disponible para que los organizadores distribuyan premios y recompensas. Consulte la página de información de la liga para obtener más detalles.",
-            "joinTitle": "Unirse.",
-            "winTitle": "¡Ganar!",
-            "description": "¡Las ligas son una nueva forma de competir por premios, calificar para participar en torneos y más!",
-            "howLeaguesWork": "Cómo funcionan las ligas",
-            "joinDescription": "Encuentra una liga que se esté ejecutando actualmente o que acepte inscripciones en el formato que te gustaría jugar. Algunas ligas pueden tener diferentes requisitos, reglas o calificaciones, ¡así que asegúrese de leer la información antes de unirse!"
-        },
-        "list": {
-            "acceptingSignups": "Aceptar registros",
-            "currentlyRunning": "Actualmente en ejecución",
-            "howDoLeaguesWork": "¿Cómo funcionan las ligas?",
-            "loadingError": "Error al cargar ligas",
-            "manageLeagues": "Administrar ligas",
-            "noLeagues": "Sin ligas coincidentes",
-            "pageHeadline": "ligas",
-            "starts": "Comienza {{startDate}}",
-            "viewInfo": "ver información",
-            "ends": "Finaliza {{endDate}}",
-            "finished": "Finalizado",
-            "joined": "Unido"
-        }
-    },
     "messaging": {
         "blockedMessage": "mensaje bloqueado",
         "mention": "Mencionar",
@@ -643,7 +761,10 @@
         "acceptableUse": "Uso aceptable",
         "policyUpdateNotification": "Se ha actualizado <2>{{label}}</2> de ShieldBattery.",
         "privacyPolicy": "Política de privacidad",
-        "termsOfService": "Términos de servicio"
+        "termsOfService": "Términos de servicio",
+        "acceptableUseAllCaps": "Política de uso aceptable",
+        "privacyPolicyAllCaps": "política de privacidad",
+        "termsOfServiceAllCaps": "Términos de servicio"
     },
     "replays": {
         "local": {
@@ -653,13 +774,30 @@
             "rootFolderName": "repeticiones",
             "title": "Repeticiones locales",
             "watchReplay": "Ver repetición"
+        },
+        "activity": {
+            "title": "repeticiones"
+        },
+        "fileDropText": "Deja repeticiones aquí para verlas con ShieldBattery.",
+        "loading": {
+            "dialogTitle": "Cargando repetición…",
+            "errorGeneric": "Algo salió mal al cargar la repetición.",
+            "initFailureBody": "No se pudo cargar la repetición seleccionada. Es posible que esté corrupto o que haya sido creado por una versión de StarCraft más nueva que la admitida actualmente.",
+            "initFailureTitle": "Error al cargar la reproducción"
+        },
+        "replayInfoDialog": {
+            "title": "Información de reproducción",
+            "watch": "Mirar"
         }
     },
     "user": {
         "miniMatchHistory": {
-            "noGames": "Nada que ver aqui",
             "noGameSelected": "Ningún juego seleccionado",
             "viewDetails": "Ver detalles"
+        },
+        "matchHistory": {
+            "noMatchingGames": "Nada de juegos de combinación.",
+            "retrievingError": "Se produjo un error al recuperar el historial de partidos."
         }
     },
     "windowControls": {
@@ -696,19 +834,41 @@
                 "removed": "Eliminado de favoritos",
                 "removedError": "Ocurrió un error al eliminar de favoritos"
             },
-            "filterOptions": "Opciones de filtro",
             "noCommunityMaps": "Aún no se han hecho públicos mapas de la comunidad.",
             "noOfficialMaps": "Aún no se han subido mapas oficiales.",
             "noUploadedMaps": "No has subido ningún mapa. Puede cargar un mapa haciendo clic en el botón de exploración a continuación.",
             "regenerateError": "Ocurrió un error al regenerar imágenes",
-            "sortMaps": "Ordenar mapas",
             "tab": {
                 "community": "Comunidad",
                 "myMaps": "mis mapas",
                 "official": "Oficial"
             },
-            "thumbnailSize": "tamaño de la uña del pulgar",
-            "noResults": "No hay resultados."
+            "noResults": "No hay resultados.",
+            "allMaps": "Todos los mapas",
+            "error": "Algo salió mal: {{errorMessage}}",
+            "sortMaps": {
+                "title": "Ordenar mapas",
+                "option": {
+                    "dateUploaded": "Fecha de carga",
+                    "name": "Nombre",
+                    "numberOfPlayers": "Número de jugadores"
+                }
+            },
+            "thumbnailSize": {
+                "option": {
+                    "large": "Grande",
+                    "medium": "Medio",
+                    "small": "Pequeño"
+                },
+                "title": "tamaño de la uña del pulgar"
+            },
+            "filterOptions": {
+                "section": {
+                    "numberOfPlayers": "Número de jugadores",
+                    "tileset": "Conjunto de fichas"
+                },
+                "title": "Opciones de filtro"
+            }
         },
         "thumbnail": {
             "addToFavorites": "Agregar a los favoritos",
@@ -716,7 +876,24 @@
             "regenerateImage": "Regenerar imagen",
             "removeFromFavorites": "Quitar de favoritos",
             "showMapPreview": "Mostrar vista previa del mapa",
-            "viewMapDetails": "Ver detalles del mapa"
+            "viewMapDetails": "Ver detalles del mapa",
+            "noMapPreview": "Vista previa del mapa no disponible"
+        },
+        "activity": {
+            "title": "mapas"
+        },
+        "mapSelect": {
+            "browseMaps": "Explorar mapas"
+        },
+        "tileset": {
+            "ashworld": "Ashworld",
+            "badlands": "Páramos",
+            "desert": "Desierto",
+            "ice": "Hielo",
+            "installation": "Instalación",
+            "jungleWorld": "mundo de la jungla",
+            "spacePlatform": "plataforma espacial",
+            "twilight": "Crepúsculo"
         }
     },
     "material": {
@@ -742,7 +919,6 @@
         "leftNav": {
             "chatChannels": "Canales de chat",
             "customGame": "Juego personalizado",
-            "editAccount": "Editar cuenta",
             "gameInProgress": "Juego en progreso…",
             "joinChannel": "Unirse a un canal (Alt + H)",
             "loadingChannel": "Cargando…",
@@ -755,7 +931,390 @@
             "viewChangelog": "Ver registro de cambios",
             "viewProfile": "Ver perfil",
             "whisperCloseError": "Error al cerrar la sesión de susurro: {{errorMessage}}",
-            "whispers": "susurros"
+            "whispers": "susurros",
+            "home": "Hogar",
+            "reportBug": "Reportar un error"
         }
+    },
+    "notifications": {
+        "activityButton": {
+            "read": "Notificaciones (Alt + N)",
+            "unread": "Notificaciones - no leídas (Alt + N)"
+        },
+        "errors": {
+            "markRead": "Ocurrió un error al marcar una notificación como leída"
+        },
+        "list": {
+            "title": "Notificaciones"
+        },
+        "popup": {
+            "markAsRead": "Marcar como leído"
+        }
+    },
+    "starcraft": {
+        "shieldbatteryHealth": {
+            "bottomContents": "Si puede, informar estos como falsos positivos a su proveedor de antivirus ayudará a que esto deje de suceder también para otros usuarios.",
+            "middleContents": "Esto es a menudo el resultado de que el software antivirus instalado toma medidas sobre los falsos positivos. Es posible que deba agregar excepciones para estos archivos o indicarle al software que los elimine de la cuarentena. También puede intentar reinstalar ShieldBattery.",
+            "noProblems": "Su instalación local ahora está libre de problemas.",
+            "rescanFiles": "Volver a escanear archivos",
+            "title": "Problemas de instalación detectados",
+            "topContents": "Hemos detectado que faltan o se han modificado los siguientes archivos de ShieldBattery:"
+        },
+        "starcraftHealth": {
+            "header": "Los siguientes problemas deben corregirse antes de poder jugar juegos en ShieldBattery:",
+            "installPathContents": "Tu configuración de ruta de StarCraft no apunta a una instalación válida. Corrija el valor en <2>Configuración</2>. Si no tienes el juego instalado, puedes descargarlo fácilmente desde el <5><0>sitio web de Blizzard</0></5>. Es posible que deba reiniciar ShieldBattery después de la instalación.",
+            "noProblems": "Su instalación local ahora está libre de problemas.",
+            "starcraftVersionContents": "Tu instalación de StarCraft no está actualizada. ShieldBattery admite instalaciones de la versión 1.16.1 o la última versión remasterizada. Instale la <2><0>última versión</0></2> y reinicie ShieldBattery.",
+            "title": "Problemas de instalación detectados"
+        }
+    },
+    "whispers": {
+        "createWhisper": {
+            "error": "Error: {{errorMessage}}",
+            "title": "Enviar un mensaje",
+            "username": "Nombre de usuario",
+            "usernamePattern": "Nombre de usuario contiene caracteres inválidos",
+            "usernameRequired": "Introduzca un nombre de usuario"
+        },
+        "errors": {
+            "cantWhisperYourself": "No puedes susurrar contigo mismo.",
+            "invalidAction": "Debe tener una sesión de susurro activa con un usuario para recuperar el historial de mensajes",
+            "loadingHistory": "Error al cargar el historial de mensajes: {{errorMessage}}",
+            "noSelfMessaging": "No puedes enviarte mensajes a ti mismo",
+            "openSession": "Error al abrir susurro al usuario: {{errorMessage}}",
+            "sendingMessage": "Error al enviar mensaje: {{errorMessage}}",
+            "unknownError": "Error desconocido",
+            "userNotFound": "Usuario no encontrado"
+        },
+        "navEntry": {
+            "closeWhisper": "Cerrar susurro"
+        }
+    },
+    "parties": {
+        "errors": {
+            "acceptPartyInvite": {
+                "general": "Ocurrió un error al aceptar una invitación",
+                "notFoundOrNotInvited": "la fiesta ya no existe",
+                "partyFull": "la fiesta esta llena"
+            },
+            "alreadySearching": "Algunos miembros del grupo ya están jugando, buscando una partida o en un lobby personalizado:",
+            "cancelQueue": "Error al cancelar el emparejamiento: {{errorMessage}}",
+            "changeLeader": {
+                "general": "Ocurrió un error al cambiar el líder"
+            },
+            "declinePartyInvite": {
+                "general": "Ocurrió un error al rechazar una invitación"
+            },
+            "findMatchAsParty": {
+                "alreadyInGameplayActivity": "El grupo ya está buscando un tipo de emparejamiento diferente",
+                "general": "Algo salió mal :(",
+                "insufficientPermissions": "Solo los líderes del partido pueden hacer cola para el emparejamiento",
+                "invalidAction": "El grupo es demasiado grande para ese tipo de emparejamiento.",
+                "notFoundOrNotInParty": "Partido no encontrado o no estás en él",
+                "title": "Error al buscar una coincidencia"
+            },
+            "inviteToParty": {
+                "alreadyMember": "{{user}} ya está en tu grupo",
+                "blocked": "Error al enviar la invitación, ha sido bloqueado por este usuario",
+                "general": "Ocurrió un error al enviar una invitación",
+                "invalidSelfAction": "No puedes invitarte a la fiesta.",
+                "notificationFailure": "Error al enviar una invitación. Inténtalo de nuevo"
+            },
+            "kickPlayer": {
+                "general": "Ocurrió un error al patear al jugador."
+            },
+            "leaveParty": {
+                "general": "Ocurrió un error al salir de la fiesta."
+            },
+            "removePartyInvite": {
+                "general": "Ocurrió un error al eliminar una invitación"
+            },
+            "unknownError": "ocurrió un error desconocido"
+        },
+        "events": {
+            "kickFromParty": "Te han echado de la fiesta."
+        },
+        "inviteDialog": {
+            "findPlayers": "encontrar jugadores",
+            "sendInvites": "Enviar invitaciones",
+            "title": "Invitar jugadores a la fiesta"
+        },
+        "messageLayout": {
+            "inviteToParty": "<0><0></0></0> ha sido invitado a la fiesta",
+            "joinParty": "<0><0></0></0> se ha unido a la fiesta",
+            "kickFromParty": "<0><0></0></0> ha sido expulsado de la fiesta",
+            "leaderChange": "<0><0></0></0> es ahora el líder",
+            "leaveParty": "<0><0></0></0> ha abandonado la fiesta",
+            "queueCancel": {
+                "error": "El emparejamiento ha sido cancelado debido a un error",
+                "matchmakingDisabled": "El emparejamiento se canceló porque actualmente está deshabilitado",
+                "rejected": "<0><0></0></0> emparejamiento cancelado",
+                "userLeft": "El emparejamiento se canceló porque <2><0></0></2> abandonó la fiesta"
+            },
+            "queueReady": "El grupo ahora está buscando una coincidencia.",
+            "queueStart": "<0><0></0></0> está iniciando una búsqueda de una coincidencia <4>{{matchmakingLabel}}</4>",
+            "selfJoin": "Te has unido a la fiesta. El líder es <2><0></0></2>."
+        },
+        "notificationUi": "<0>{{user}}</0> te envió una invitación a la fiesta.",
+        "queueAcceptDialog": {
+            "contents": "Tu grupo está buscando una coincidencia <2>{{matchmakingLabel}}</2>.",
+            "error": "Error: {{error}}",
+            "title": "Elige tu raza"
+        },
+        "view": {
+            "cancelSearch": "Cancelar búsqueda",
+            "invitePlayers": "invitar jugadores",
+            "kickFromParty": "patada de fiesta",
+            "leaveParty": "dejar la fiesta",
+            "makeLeader": "Hacer líder",
+            "openSlot": "Vacío"
+        },
+        "navEntry": {
+            "invitePlayers": "invitar jugadores",
+            "leaveParty": "dejar la fiesta",
+            "title": "Fiesta"
+        }
+    },
+    "users": {
+        "contextMenu": {
+            "addFriend": "Añadir amigo",
+            "friendRemoved": "Amigo eliminado",
+            "friendRequestAccepted": "Solicitud de amistad aceptada",
+            "friendRequestRemoved": "Solicitud de amistad eliminada",
+            "friendRequestSent": "Solicitud de amistad enviada",
+            "inviteToParty": "Invitar a una fiesta",
+            "kickFromParty": "patada de fiesta",
+            "loadingUsers": "Cargando usuario…",
+            "removeFriend": "Eliminar amigo",
+            "removeFriendRequest": "Eliminar solicitud de amistad",
+            "uninviteFromParty": "Dejar de invitar a la fiesta",
+            "userBlocked": "Usuario bloqueado",
+            "userUnblocked": "Usuario desbloqueado",
+            "viewProfile": "Ver perfil",
+            "whisper": "Susurro"
+        },
+        "errors": {
+            "friendsList": {
+                "blockedByUser": "has sido bloqueado por este usuario",
+                "errorAcceptingFriendRequest": "Error al aceptar la solicitud de amistad",
+                "errorBlockingUser": "Error al bloquear usuario",
+                "errorDecliningFriendRequest": "Error al rechazar la solicitud de amistad",
+                "errorRemovingFriend": "Error al eliminar amigo",
+                "errorRemovingFriendRequest": "Error al eliminar la solicitud de amistad",
+                "errorSendingFriendRequest": "Error al enviar solicitud de amistad",
+                "errorUnblockingUser": "Error al desbloquear usuario",
+                "invalidSelfAction": "no puedes realizar esta acción en ti mismo`",
+                "limitReached": "ha alcanzado la cantidad máxima de amigos o bloques, elimine algunos para agregar más",
+                "load": "Error al cargar la lista de amigos",
+                "noMatchingEntry": "no se encontró ninguna entrada coincidente"
+            },
+            "profile": {
+                "loadUser": "Hubo un problema al cargar este usuario."
+            }
+        },
+        "friendsList": {
+            "friendStart": "Ahora eres amigo de <2>{{user}}</2>.",
+            "header": {
+                "incoming": "Entrante",
+                "offline": "Desconectado",
+                "online": "En línea",
+                "outgoing": "Extrovertido"
+            },
+            "receivedFriendRequest": "<0>{{user}}</0> te envió una solicitud de amistad.",
+            "tabs": {
+                "addFriends": "Añade amigos",
+                "friendsList": "Lista de amigos",
+                "socialSettings": "Ajustes sociales"
+            },
+            "title": {
+                "addFriends": "Añade amigos",
+                "friends": "Amigos"
+            },
+            "tooltip": "Amigos (Alt + E)"
+        },
+        "profile": {
+            "achievements": "logros",
+            "latestGames": "Últimos juegos",
+            "points": "Puntos",
+            "rank": "Rango",
+            "rating": "Clasificación",
+            "record": "Registro",
+            "tabs": {
+                "admin": "Administración",
+                "matchHistory": "Historial de partidos",
+                "season": "Estaciones",
+                "stats": "Estadísticas",
+                "summary": "Resumen"
+            },
+            "totalGames": "Juegos totales"
+        },
+        "profileOverlay": {
+            "info": "Información",
+            "joined": "Se unió a {{date}}",
+            "ranked": "Clasificado",
+            "rightClick": "Haga clic derecho en el usuario para más acciones",
+            "viewProfile": "Ver perfil"
+        },
+        "titles": {
+            "novice": "Principiante"
+        }
+    },
+    "lobbies": {
+        "createLobby": {
+            "backToList": "volver a la lista",
+            "disabledInPartyText": "Actualmente se está desarrollando la creación de un lobby como partido. Deja tu fiesta para continuar.",
+            "disabledInPartyTitle": "Deshabilitado mientras está en la fiesta",
+            "lobbyNameRequired": "Ingrese un nombre de lobby",
+            "mapRequired": "Selecciona un mapa para jugar",
+            "selectMap": "Seleccionar mapa",
+            "title": "Crear vestíbulo",
+            "gameSubTypeHeader": "equipos",
+            "gameSubTypeOption": "{{numTeams}} equipos",
+            "gameSubTypeOptionTvB": "{{topSlots}} frente a {{bottomSlots}}",
+            "gameTypeHeader": "Tipo de juego",
+            "lobbyName": "Nombre del vestíbulo",
+            "advancedSettings": "Ajustes avanzados",
+            "turnRate": "Ritmo de turno",
+            "turnRateAuto": "Auto",
+            "turnRateDynamic": "DTR (No recomendado)",
+            "useLegacyLimits": "Usar límite de unidades heredadas"
+        },
+        "errors": {
+            "alreadyInLobby": "Ya estás en otro vestíbulo.",
+            "load": "Hubo un problema al cargar este lobby"
+        },
+        "events": {
+            "banned": "Has sido expulsado del lobby.",
+            "kicked": "Te han echado del vestíbulo."
+        },
+        "joinLobby": {
+            "disabledInPartyText": "Unirse a un lobby como partido está actualmente en desarrollo. Deja tu fiesta para continuar.",
+            "disabledInPartyTitle": "Deshabilitado mientras está en la fiesta",
+            "noOpenLobbies": "No hay vestíbulos abiertos.",
+            "title": "Unirse al vestíbulo",
+            "noActiveLobbies": "No hay grupos de presión activos.",
+            "openSlotCount_one": "{{count}} ranura abierta",
+            "openSlotCount_many": "{{count}} de ranuras abiertas",
+            "openSlotCount_other": "{{count}} ranuras abiertas",
+            "action": "Unirse al lobby"
+        },
+        "loading": {
+            "content": "<0>{{gameType}}</0><1> en </1><2>{{mapName}}</2>"
+        },
+        "lobby": {
+            "gameType": "Tipo de juego",
+            "leaveLobby": "Salir del vestíbulo",
+            "startGame": "Empezar juego",
+            "turnRate": "Ritmo de turno",
+            "turnRateAuto": "Auto",
+            "turnRateDynamic": "DTR",
+            "unitLimit": "Límite de unidad",
+            "unitLimitExtended": "Extendido",
+            "unitLimitLegacy": "Legado"
+        },
+        "messageLayout": {
+            "banPlayer": "<0><0></0></0> ha sido expulsado del lobby",
+            "countdownCanceled": "La cuenta regresiva del juego ha sido cancelada.",
+            "countdownStarted": "La cuenta regresiva del juego ha comenzado",
+            "gameInitializationCanceled": "La inicialización del juego ha sido cancelada.",
+            "hostChange": "<0><0></0></0> ahora es el anfitrión",
+            "joinLobby": "<0><0></0></0> se ha unido al lobby",
+            "kickPlayer": "<0><0></0></0> ha sido expulsado del lobby",
+            "leaveLobby": "<0><0></0></0> ha salido de la sala de espera",
+            "selfJoin": "Te has unido a <1>{{lobby}}</1>. El anfitrión es <4><0></0></4>."
+        },
+        "slots": {
+            "closeSlot": "Cerrar ranura",
+            "kickPlayer": "patear al jugador",
+            "makeObserver": "Hacer observador",
+            "makePlayer": "hacer jugador",
+            "name": "Cerrado",
+            "open": "Abierto",
+            "openSlot": "ranura abierta",
+            "removeComputer": "Quitar computadora",
+            "slotActions": "Acciones de tragamonedas",
+            "addComputer": "Agregar computadora",
+            "banPlayer": "Prohibir jugador"
+        },
+        "state": {
+            "exists": "El vestíbulo ya existe. ¿Únete?",
+            "nonexistent": "El vestíbulo no existe. crearlo?",
+            "started": "El lobby ya comenzó."
+        },
+        "activity": {
+            "title": "Vestíbulos"
+        }
+    },
+    "leagues": {
+        "explainer": {
+            "description": "¡Las ligas son una nueva forma de competir por premios, calificar para participar en torneos y más!",
+            "howLeaguesWork": "Cómo funcionan las ligas",
+            "joinDescription": "Encuentra una liga que se esté ejecutando actualmente o que acepte inscripciones en el formato que te gustaría jugar. Algunas ligas pueden tener diferentes requisitos, reglas o calificaciones, ¡así que asegúrese de leer la información antes de unirse!",
+            "joinTitle": "Unirse.",
+            "playDescription": "Una vez que ha comenzado una liga, todos los juegos de escalera que juegues te otorgarán puntos para la clasificación de la liga junto con tu clasificación de escalera normal. ¡Consulta la tabla de clasificación en la página de la liga para ver cómo te va!",
+            "winDescription": "Después de que termine una liga, la tabla de clasificación estará disponible para que los organizadores distribuyan premios y recompensas. Consulte la página de información de la liga para obtener más detalles.",
+            "winTitle": "¡Ganar!",
+            "playTitle": "Jugar."
+        },
+        "leagueDetails": {
+            "about": "Acerca de",
+            "copyLink": "Copiar enlace a la liga",
+            "dateText": "{{startDate}} a {{endDate}}",
+            "goBack": "volver a la lista",
+            "info": "Información",
+            "joined": "Unido",
+            "joinError": "No pude unirme a la liga: {{errorMessage}}",
+            "leaderboard": "Tabla de clasificación",
+            "leaderboardError": "Hubo un problema al recuperar la tabla de posiciones: {{errorMessage}}",
+            "leaderBoardHeader": {
+                "lastPlayed": "Jugado por última vez",
+                "player": "Jugador",
+                "points": "Puntos",
+                "rank": "Rango",
+                "winLoss": "Ganar perder"
+            },
+            "leagueEndedError": "No pude unirme porque la liga ya terminó",
+            "leagueJoined": "Se unió a la liga",
+            "noPlayers": "No hay jugadores coincidentes.",
+            "notFound": "Liga no encontrada",
+            "retrieveError": "Hubo un error al recuperar esta liga: {{errorMessage}}",
+            "rulesAndInfo": "Reglas e información"
+        },
+        "list": {
+            "acceptingSignups": "Aceptar registros",
+            "currentlyRunning": "Actualmente en ejecución",
+            "ends": "Finaliza {{endDate}}",
+            "finished": "Finalizado",
+            "howDoLeaguesWork": "¿Cómo funcionan las ligas?",
+            "joined": "Unido",
+            "loadingError": "Error al cargar ligas",
+            "manageLeagues": "Administrar ligas",
+            "noLeagues": "Sin ligas coincidentes",
+            "pageHeadline": "ligas",
+            "starts": "Comienza {{startDate}}",
+            "viewInfo": "ver información"
+        },
+        "activity": {
+            "title": "ligas"
+        }
+    },
+    "rootErrorBoundary": {
+        "reloadApp": "recargar aplicación",
+        "contents": "Infórmanos de este problema en nuestro <2>Discord</2>.",
+        "title": "Algo salió mal :("
+    },
+    "forms": {
+        "fileInput": {
+            "chooseFile": "Elija el archivo"
+        }
+    },
+    "bugReport": {
+        "details": "Detalles",
+        "detailsDescription": "Describa el error y proporcione tantos detalles como sea posible sobre lo que estaba haciendo cuando se produjo el error.",
+        "detailsRequired": "Los informes de errores deben incluir detalles.",
+        "error": "Error: {{errorMessage}}",
+        "logUploadDescription": "Su informe de error incluirá registros de ShieldBattery de su máquina para ayudar a diagnosticar el problema. Los registros se pueden conservar hasta por 30 días y solo el personal de ShieldBattery puede verlos.",
+        "reportSubmitted": "Informe de error enviado.",
+        "title": "Reportar un error"
     }
 }

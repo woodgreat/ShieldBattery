@@ -2,9 +2,9 @@ import React, { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChannelModerationAction, SbChannelId } from '../../common/chat'
 import { appendToMultimap } from '../../common/data-structures/maps'
-import { CAN_LEAVE_SHIELDBATTERY_CHANNEL, MULTI_CHANNEL } from '../../common/flags'
+import { CAN_LEAVE_SHIELDBATTERY_CHANNEL } from '../../common/flags'
 import { SbUserId } from '../../common/users/sb-user'
-import { useSelfPermissions } from '../auth/state-hooks'
+import { useSelfPermissions } from '../auth/auth-utils'
 import { openDialog } from '../dialogs/action-creators'
 import { DialogType } from '../dialogs/dialog-type'
 import { DestructiveMenuItem } from '../material/menu/item'
@@ -30,8 +30,8 @@ export function addChannelUserMenuItems(
   /* eslint-disable react-hooks/rules-of-hooks */
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
-  const selfPermissions = useAppSelector(s => s.auth.permissions)
-  const selfUserId = useAppSelector(s => s.auth.user.id)
+  const selfPermissions = useSelfPermissions()
+  const selfUserId = useAppSelector(s => s.auth.self!.user.id)
   const user = useAppSelector(s => s.users.byId.get(userId))
   const joinedChannelInfo = useAppSelector(s => s.chat.idToJoinedInfo.get(channelId))
   const channelUserProfiles = useAppSelector(s => s.chat.idToUserProfiles.get(channelId))
@@ -104,14 +104,13 @@ export function addChannelUserMenuItems(
 
   const channelUserProfile = channelUserProfiles.get(user.id)
   if (
-    MULTI_CHANNEL &&
     channelUserProfile &&
     user.id !== selfUserId &&
     (channelId !== 1 || CAN_LEAVE_SHIELDBATTERY_CHANNEL)
   ) {
     if (
-      selfPermissions.editPermissions ||
-      selfPermissions.moderateChatChannels ||
+      selfPermissions?.editPermissions ||
+      selfPermissions?.moderateChatChannels ||
       joinedChannelInfo.ownerId === selfUserId
     ) {
       appendToMultimap(
@@ -192,7 +191,7 @@ export function addChannelMessageMenuItems(
   const selfPermissions = useSelfPermissions()
   /* eslint-enable react-hooks/rules-of-hooks */
 
-  if (selfPermissions.moderateChatChannels) {
+  if (selfPermissions?.moderateChatChannels) {
     items.push(
       <DestructiveMenuItem
         key='delete-message'

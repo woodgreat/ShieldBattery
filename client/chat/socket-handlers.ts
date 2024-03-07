@@ -17,14 +17,6 @@ type EventToChatActionMap = {
 }
 
 const eventToChatAction: EventToChatActionMap = {
-  init3(channelId, event) {
-    return {
-      type: '@chat/initChannel',
-      payload: event,
-      meta: { channelId },
-    }
-  },
-
   join2(channelId, event) {
     return {
       type: '@chat/updateJoin',
@@ -33,9 +25,19 @@ const eventToChatAction: EventToChatActionMap = {
     }
   },
 
+  edit: (channelId, event) => dispatch => {
+    dispatch({
+      type: '@chat/getChannelInfo',
+      payload: event,
+      meta: {
+        channelId,
+      },
+    })
+  },
+
   leave2: (channelId, event) => (dispatch, getState) => {
     const { auth } = getState()
-    if (auth.user.id === event.userId) {
+    if (auth.self!.user.id === event.userId) {
       // It was us who left the channel
       dispatch({
         type: '@chat/updateLeaveSelf',
@@ -53,7 +55,7 @@ const eventToChatAction: EventToChatActionMap = {
   kick: (channelId, event) => (dispatch, getState) => {
     const { auth } = getState()
 
-    if (auth.user.id === event.targetId) {
+    if (auth.self!.user.id === event.targetId) {
       // It was us who has been kicked from the channel
       dispatch(
         openSnackbar({
@@ -80,7 +82,7 @@ const eventToChatAction: EventToChatActionMap = {
   ban: (channelId, event) => (dispatch, getState) => {
     const { auth } = getState()
 
-    if (auth.user.id === event.targetId) {
+    if (auth.self!.user.id === event.targetId) {
       // It was us who has been banned from the channel
       // TODO(2Pac): Send a notification to the banned user that they've been banned, instead of
       // just showing a snackbar which is easily missed if the user is not looking.
@@ -115,7 +117,7 @@ const eventToChatAction: EventToChatActionMap = {
       } = getState()
 
       const isBlocked = blocks.has(event.message.from)
-      const isUrgent = !isBlocked && event.mentions.some(m => m.id === auth.user.id)
+      const isUrgent = !isBlocked && event.mentions.some(m => m.id === auth.self!.user.id)
       if (!isBlocked) {
         // Notify the main process of the new message, so it can display an appropriate notification
         ipcRenderer.send('chatNewMessage', {
@@ -177,6 +179,20 @@ type EventToChatUserActionMap = {
 }
 
 const eventToChatUserAction: EventToChatUserActionMap = {
+  init3(channelId, event) {
+    return {
+      type: '@chat/initChannel',
+      payload: event,
+      meta: { channelId },
+    }
+  },
+  preferencesChanged(channelId, event) {
+    return {
+      type: '@chat/preferencesChanged',
+      payload: event,
+      meta: { channelId },
+    }
+  },
   permissionsChanged(channelId, event) {
     return {
       type: '@chat/permissionsChanged',
@@ -190,7 +206,7 @@ const CHANNEL_PATH = '/chat3/:channelId'
 
 export default function registerModule({ siteSocket }: { siteSocket: NydusClient }) {
   siteSocket.registerRoute(CHANNEL_PATH, (route: RouteInfo, event: ChatEvent) => {
-    if (!eventToChatAction.hasOwnProperty(event.action)) return
+    if (!Object.hasOwn(eventToChatAction, event.action)) return
 
     const action = eventToChatAction[event.action](
       makeSbChannelId(Number(route.params.channelId)),
@@ -202,7 +218,7 @@ export default function registerModule({ siteSocket }: { siteSocket: NydusClient
   siteSocket.registerRoute(
     `${CHANNEL_PATH}/users/:userId`,
     (route: RouteInfo, event: ChatUserEvent) => {
-      if (!eventToChatUserAction.hasOwnProperty(event.action)) return
+      if (!Object.hasOwn(eventToChatUserAction, event.action)) return
 
       const action = eventToChatUserAction[event.action](
         makeSbChannelId(Number(route.params.channelId)),

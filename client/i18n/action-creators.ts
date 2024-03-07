@@ -8,16 +8,20 @@ import logger from '../logging/logger'
 import { RequestHandlingSpec, abortableThunk } from '../network/abortable-thunk'
 import { encodeBodyAsParams, fetchJson } from '../network/fetch'
 import { TIMING_LONG, openSnackbar } from '../snackbars/action-creators'
+import { getBestLanguage } from './language-detector'
 
 export function maybeChangeLanguageLocally(locale?: string): ThunkAction {
-  return async dispatch => {
-    if (!locale || locale === i18n.language) {
+  return dispatch => {
+    if (!locale || locale === i18n.language || !i18n.isInitialized) {
+      return
+    }
+    const detectedLanguage = getBestLanguage([locale])
+    if (!detectedLanguage || detectedLanguage === i18n.language) {
       return
     }
 
-    try {
-      await i18n.changeLanguage(locale)
-    } catch (error: any) {
+    i18n.changeLanguage(detectedLanguage).catch(error => {
+      logger.error(`There was an error changing the language: ${error?.stack ?? error}`)
       dispatch(
         openSimpleDialog(
           i18n.t('auth.language.changeErrorHeader', 'Error changing the language'),
@@ -28,8 +32,7 @@ export function maybeChangeLanguageLocally(locale?: string): ThunkAction {
           true,
         ),
       )
-      logger.error(`There was an error changing the language: ${error?.stack ?? error}`)
-    }
+    })
   }
 }
 
@@ -40,15 +43,17 @@ export function changeUserLanguage(
   return abortableThunk(spec, async (dispatch, getState) => {
     try {
       const {
-        auth: {
-          user: { id },
-        },
+        auth: { self },
       } = getState()
-      const result = await fetchJson<ChangeLanguagesResponse>(apiUrl`users/${id}/language`, {
-        method: 'POST',
-        body: encodeBodyAsParams<ChangeLanguageRequest>({ language }),
-        signal: spec.signal,
-      })
+
+      const result = await fetchJson<ChangeLanguagesResponse>(
+        apiUrl`users/${self!.user.id}/language`,
+        {
+          method: 'POST',
+          body: encodeBodyAsParams<ChangeLanguageRequest>({ language }),
+          signal: spec.signal,
+        },
+      )
 
       dispatch({
         type: '@auth/changeLanguage',

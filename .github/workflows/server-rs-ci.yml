@@ -1,0 +1,140 @@
+name: server-rs CI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/server-rs-ci.yml'
+      - 'common/typeshare.ts'
+      - 'schema.graphql'
+      - 'server-rs/**'
+  pull_request:
+    paths:
+      - '.github/workflows/server-rs-ci.yml'
+      - 'common/typeshare.ts'
+      - 'schema.graphql'
+      - 'server-rs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./server-rs
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./server-rs
+
+      - name: clippy
+        run: cargo clippy --all-targets --workspace -- -D warnings
+
+  fmt:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./server-rs
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./server-rs
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./server-rs
+
+      - name: cargo test
+        run: cargo test --all-targets --no-fail-fast
+
+      - name: cargo run --bin gen-schema
+        id: gen-schema
+        run: cargo run --bin gen-schema
+
+      - name: Check graphql schema
+        uses: tj-actions/verify-changed-files@v15
+        id: check-schema
+        with:
+          files: ./schema.graphql
+
+      - name: Display graphql error
+        if: ${{ steps.check-schema.outputs.files_changed == 'true' || failure() && steps.gen-schema.conclusion == 'failure' }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.setFailed('The generated graphql files seem outdated. Please run `pnpm gen-schema && pnpm gen-graphql` in the directory root and commit the updated files.')
+
+  typeshare:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Using pnpm v8.x
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Using Node.js 20.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install typeshare-cli
+        uses: baptiste0928/cargo-install@v2
+        with:
+          crate: typeshare-cli
+
+      - name: Run typeshare
+        id: gen-typeshare
+        run: pnpm gen-typeshare
+
+      - name: Check typeshare
+        uses: tj-actions/verify-changed-files@v15
+        id: check-typeshare
+        with:
+          files: common/typeshare.ts
+
+      - name: Display typeshare
+        if: ${{ steps.check-typeshare.outputs.files_changed == 'true' || failure() && steps.gen-typeshare.conclusion == 'failure' }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.setFailed('The typeshare types seem outdated. Please run "pnpm gen-typeshare" in the directory root and commit the updated files.')

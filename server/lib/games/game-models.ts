@@ -1,8 +1,8 @@
-import sql from 'sql-template-strings'
 import { GameRecord, GameRouteDebugInfo } from '../../../common/games/games'
 import { ReconciledResults } from '../../../common/games/results'
 import { SbUserId } from '../../../common/users/sb-user'
 import db, { DbClient } from '../db'
+import { sql } from '../db/sql'
 import { Dbify } from '../db/types'
 
 type DbGameRecord = Dbify<GameRecord>
@@ -55,7 +55,7 @@ export async function getGameRecord(gameId: string): Promise<GameRecord | undefi
         game_length, results
       FROM games
       WHERE id = ${gameId}`)
-    return result.rowCount > 0 ? convertFromDb(result.rows[0]) : undefined
+    return result.rowCount ? convertFromDb(result.rows[0]) : undefined
   } finally {
     done()
   }
@@ -151,6 +151,41 @@ export async function getRecentGamesForUser(
       ORDER BY u.start_time DESC
       LIMIT ${numGames}
     `)
+    return result.rows.map(row => convertFromDb(row))
+  } finally {
+    done()
+  }
+}
+
+/**
+ * Retrieves game information for the match history of a user.
+ */
+export async function searchGamesForUser(
+  {
+    userId,
+    limit,
+    offset,
+  }: {
+    userId: SbUserId
+    limit: number
+    offset: number
+  },
+  withClient?: DbClient,
+): Promise<GameRecord[]> {
+  const { client, done } = await db(withClient)
+  try {
+    const query = sql`
+      SELECT *
+      FROM games_users gu
+      INNER JOIN games g ON gu.game_id = g.id
+      WHERE gu.user_id = ${userId}
+      ORDER BY g.start_time DESC
+      LIMIT ${limit}
+      OFFSET ${offset};
+    `
+
+    const result = await client.query<DbGameRecord>(query)
+
     return result.rows.map(row => convertFromDb(row))
   } finally {
     done()

@@ -28,7 +28,7 @@ import { GradientScrollDivider, useScrollIndicatorState } from '../material/scro
 import { defaultSpring } from '../material/springs'
 import { Tooltip } from '../material/tooltip'
 import { useAppDispatch, useAppSelector } from '../redux-hooks'
-import { startReplayFromPath } from '../replays/action-creators'
+import { startReplay } from '../replays/action-creators'
 import { useStableCallback } from '../state-hooks'
 import { colorDividers, colorTextPrimary, colorTextSecondary } from '../styles/colors'
 import {
@@ -157,13 +157,13 @@ export function PostMatchDialog({
   })
   const onWatchReplay = useStableCallback(() => {
     if (replayPath) {
-      dispatch(startReplayFromPath(replayPath))
+      dispatch(startReplay({ path: replayPath }))
     }
   })
   const canSearchMatchmaking = useAppSelector(s => {
     const currentParty = s.party.current
     const isSearching = !!s.matchmaking.searchInfo
-    return !isSearching && (!currentParty || currentParty.leader === s.auth.user.id)
+    return !isSearching && (!currentParty || currentParty.leader === s.auth.self?.user.id)
   })
 
   const leagueValues = useMemo(() => {
@@ -637,6 +637,7 @@ const RankLabel = styled.div`
 `
 
 function IconWithLabel({ division, isWin }: { division: MatchmakingDivision; isWin: boolean }) {
+  const { t } = useTranslation()
   const transition = useTransition(division, {
     key: division,
     config: (_item, _index, phase) => key => {
@@ -673,7 +674,7 @@ function IconWithLabel({ division, isWin }: { division: MatchmakingDivision; isW
       {transition((style, division) => (
         <IconWithLabelElement style={style}>
           <StyledDivisionIcon division={division} size={176} />
-          <RankLabel>{matchmakingDivisionToLabel(division)}</RankLabel>
+          <RankLabel>{matchmakingDivisionToLabel(division, t)}</RankLabel>
         </IconWithLabelElement>
       ))}
     </IconWithLabelRoot>

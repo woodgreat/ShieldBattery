@@ -1,7 +1,7 @@
 import { Logger } from 'pino'
 import { singleton } from 'tsyringe'
 import { assertUnreachable } from '../../../common/assert-unreachable'
-import { GameSource } from '../../../common/games/configuration'
+import { GameSource, GameType } from '../../../common/games/configuration'
 import {
   GameRecord,
   GameRecordUpdate,
@@ -20,7 +20,7 @@ import { UNIQUE_VIOLATION } from '../db/pg-error-codes'
 import transact from '../db/transaction'
 import { CodedError } from '../errors/coded-error'
 import { findUnreconciledGames, setReconciledResult } from '../games/game-models'
-import { hasCompletedResults, reconcileResults } from '../games/results'
+import { reconcileResults } from '../games/results'
 import { JobScheduler } from '../jobs/job-scheduler'
 import { updateLeaderboards } from '../leagues/leaderboard'
 import {
@@ -49,7 +49,7 @@ import {
   setReportedResults,
   setUserReconciledResult,
 } from '../models/games-users'
-import { Redis } from '../redis'
+import { Redis } from '../redis/redis'
 import { Clock } from '../time/clock'
 import { incrementUserStatsCount, makeCountKeys } from '../users/user-stats-model'
 import { ClientSocketsManager } from '../websockets/socket-groups'
@@ -90,12 +90,12 @@ export default class GameResultService {
         const reconcileBefore = new Date(this.clock.now())
         reconcileBefore.setMinutes(reconcileBefore.getMinutes() - FORCE_RECONCILE_TIMEOUT_MINUTES)
         const toReconcile = await findUnreconciledGames(reconcileBefore)
-        // TODO(tec27): add prometheues metric for number of unreconciled games found
+        // TODO(tec27): add prometheus metric for number of unreconciled games found
 
         for (const gameId of toReconcile) {
           try {
             const gameRecord = await this.retrieveGame(gameId)
-            this.maybeReconcileResults(gameRecord, true /* force */)
+            await this.maybeReconcileResults(gameRecord, true /* force */)
           } catch (err: unknown) {
             if (
               err instanceof SyntaxError ||
@@ -298,9 +298,15 @@ export default class GameResultService {
   }
 
   private async maybeReconcileResults(gameRecord: GameRecord, force = false): Promise<void> {
+    if (gameRecord.results) {
+      return
+    }
+
     const gameId = gameRecord.id
     const currentResults = await getCurrentReportedResults(gameId)
-    if (!force && !hasCompletedResults(currentResults)) {
+    const numHumans = gameRecord.config.teams.flatMap(t => t.filter(p => !p.isComputer)).length
+    const haveResults = currentResults.filter(r => !!r).length
+    if (!force && haveResults < numHumans) {
       return
     }
 
@@ -499,7 +505,7 @@ export default class GameResultService {
       // as when a user has an unknown result?
 
       const statsUpdatePromises: Array<Promise<UserStats>> = []
-      if (gameRecord.config.gameType !== 'ums' && !reconciled.disputed) {
+      if (gameRecord.config.gameType !== GameType.UseMapSettings && !reconciled.disputed) {
         for (const [userId, result] of reconciled.results.entries()) {
           if (result.result !== 'win' && result.result !== 'loss') {
             continue

@@ -1,10 +1,9 @@
-import { FullConfig, request } from '@playwright/test'
+import { test as setup } from '@playwright/test'
+import { setAdminJwt } from './admin-utils'
+import { LoginPage } from './pages/login-page'
 
-export default async function globalSetup(config: FullConfig) {
-  const { baseURL } = config.projects[0].use
-
-  const requestContext = await request.newContext()
-  const response = await requestContext.post(`${baseURL}/api/1/users`, {
+setup('create admin account', async ({ page, request, baseURL }) => {
+  const response = await request.post(`/api/1/users`, {
     headers: {
       Origin: baseURL!,
     },
@@ -22,6 +21,26 @@ export default async function globalSetup(config: FullConfig) {
     )
   }
 
-  await requestContext.storageState({ path: 'test-state/admin-state.json' })
-  await requestContext.dispose()
-}
+  const { jwt } = await response.json()
+  setAdminJwt(jwt)
+
+  const loginPage = new LoginPage(page)
+  await loginPage.navigateTo()
+  await loginPage.loginWith('admin', 'admin1234')
+  await page.waitForSelector('[data-test=left-nav]')
+
+  await page.goto('/users/1/admin/admin')
+  await page.waitForSelector('[data-test=permissions-form]')
+
+  const checkboxes = page.locator(
+    'form[data-test=permissions-form] input[type=checkbox]:not(:disabled)',
+  )
+  const count = await checkboxes.count()
+  for (let i = 0; i < count; i++) {
+    await checkboxes.nth(i).check()
+  }
+
+  await page.click('[data-test=save-permissions-button]')
+
+  await page.waitForSelector('[data-test=ban-history-section]')
+})

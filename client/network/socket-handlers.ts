@@ -1,8 +1,8 @@
 import { NydusClient } from 'nydus-client'
 import { batch } from 'react-redux'
 import { TypedIpcRenderer } from '../../common/ipc'
+import { UpdateRallyPointClientPingBatchRequest } from '../../common/rally-point'
 import { apiUrl } from '../../common/urls'
-import { NETWORK_SITE_CONNECTED, NETWORK_SITE_DISCONNECTED } from '../actions'
 import auth from '../auth/socket-handlers'
 import chat from '../chat/socket-handlers'
 import { dispatch } from '../dispatch-registry'
@@ -10,7 +10,6 @@ import games from '../games/socket-handlers'
 import loading from '../loading/socket-handlers'
 import logger from '../logging/logger'
 import notifications from '../notifications/socket-handlers'
-import serverStatus from '../serverstatus/server-status-checker'
 import users from '../users/socket-handlers'
 import whispers from '../whispers/socket-handlers'
 import { clientId } from './client-id'
@@ -27,15 +26,15 @@ function networkStatusHandler({
   // TODO(tec27): we could probably pass through reconnecting status as well
   siteSocket
     .on('connect', () => {
-      dispatch({ type: NETWORK_SITE_CONNECTED } as any)
       logger.verbose('site socket connected')
+      dispatch({ type: '@network/connect' })
       if (ipcRenderer) {
         ipcRenderer.send('networkSiteConnected')
       }
     })
     .on('disconnect', () => {
-      dispatch({ type: NETWORK_SITE_DISCONNECTED } as any)
       logger.verbose('site socket disconnected')
+      dispatch({ type: '@network/disconnect' })
     })
 }
 
@@ -58,29 +57,48 @@ function rallyPointHandler({
     }
   })
 
-  ipcRenderer.on('rallyPointPingResult', (event, server, ping) => {
+  const pingsToSend = new Map<number, number>()
+  let sendTimeout: ReturnType<typeof setTimeout> | undefined
+
+  const sendPings = () => {
+    const toSend = Array.from(pingsToSend.entries())
+    pingsToSend.clear()
+    sendTimeout = undefined
+
+    if (!toSend.length) {
+      return
+    }
+
     dispatch((_, getState) => {
       const {
-        auth: { user },
+        auth: { self },
       } = getState()
-      if (!user) {
+      if (!self) {
         return
       }
 
       const reqBody = {
-        ping,
-      }
-      fetchJson(apiUrl`rally-point/pings/${user.id}/${clientId}/${server.id}`, {
+        pings: toSend,
+      } satisfies UpdateRallyPointClientPingBatchRequest
+      fetchJson(apiUrl`rally-point/pings/${self.user.id}/${clientId}/batch`, {
         method: 'put',
         body: JSON.stringify(reqBody),
       }).catch(err => {
         logger.error(
-          `error while reporting rally-point ping for [${server.id}, ${server.description}]: ${
+          `error while reporting rally-point pings (${JSON.stringify(toSend)}): ${
             err.stack ?? err
           }`,
         )
       })
     })
+  }
+
+  ipcRenderer.on('rallyPointPingResult', (event, server, ping) => {
+    pingsToSend.set(server.id, ping)
+
+    if (!sendTimeout) {
+      setTimeout(sendPings, 66)
+    }
   })
 }
 
@@ -92,6 +110,7 @@ const envSpecificHandlers = IS_ELECTRON
       require('../lobbies/socket-handlers').default,
       require('../matchmaking/socket-handlers').default,
       require('../parties/socket-handlers').default,
+      require('../replays/ipc-handlers').default,
       require('../settings/ipc-handlers').default,
       require('../system-bar/ipc-handlers').default,
     ]
@@ -104,7 +123,6 @@ const handlers = [
   loading,
   networkStatusHandler,
   notifications,
-  serverStatus,
   users,
   whispers,
 ].concat(envSpecificHandlers)

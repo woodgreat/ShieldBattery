@@ -4,6 +4,7 @@ import {
   BasicChannelInfo,
   ChannelModerationAction,
   ChannelPermissions,
+  ChannelPreferences,
   DetailedChannelInfo,
   GetChannelHistoryServerResponse,
   JoinedChannelInfo,
@@ -16,6 +17,7 @@ import { asMockedFunction } from '../../../common/testing/mocks'
 import { DEFAULT_PERMISSIONS } from '../../../common/users/permissions'
 import { makeSbUserId, SbUser, SbUserId } from '../../../common/users/sb-user'
 import { DbClient } from '../db'
+import { ImageService } from '../images/image-service'
 import { getPermissions } from '../models/permissions'
 import { MIN_IDENTIFIER_MATCHES } from '../users/client-ids'
 import { RequestSessionLookup } from '../websockets/session-lookup'
@@ -52,7 +54,9 @@ import {
   searchChannels,
   TextMessageData,
   toBasicChannelInfo,
+  updateChannel,
   updateUserPermissions,
+  updateUserPreferences,
   UserChannelEntry,
 } from './chat-models'
 import ChatService, { getChannelPath, getChannelUserPath } from './chat-service'
@@ -71,7 +75,7 @@ const dbClient = {} as DbClient
 
 jest.mock('../db/transaction', () =>
   jest.fn(async next => {
-    await next(dbClient)
+    return await next(dbClient)
   }),
 )
 
@@ -106,11 +110,13 @@ jest.mock('./chat-models', () => {
     getUserChannelEntryForUser: jest.fn(),
     getUserChannelEntriesForUser: jest.fn().mockResolvedValue([]),
     createChannel: jest.fn(),
+    updateChannel: jest.fn(),
     addUserToChannel: jest.fn(),
     addMessageToChannel: jest.fn(),
     getMessagesForChannel: jest.fn().mockResolvedValue([]),
     deleteChannelMessage: jest.fn(),
     removeUserFromChannel: jest.fn(),
+    updateUserPreferences: jest.fn(),
     updateUserPermissions: jest.fn(),
     countBannedIdentifiersForChannel: jest.fn(),
     banUserFromChannel: jest.fn(),
@@ -169,6 +175,7 @@ describe('chat/chat-service', () => {
   }
   const shieldBatteryDetailedInfo: DetailedChannelInfo = {
     id: makeSbChannelId(1),
+    description: 'SHIELDBATTERY_DESCRIPTION',
     userCount: 5,
   }
   const shieldBatteryJoinedInfo: JoinedChannelInfo = {
@@ -189,6 +196,7 @@ describe('chat/chat-service', () => {
   }
   const testDetailedInfo: DetailedChannelInfo = {
     id: makeSbChannelId(2),
+    description: 'TEST_DESCRIPTION',
     userCount: 2,
   }
   const testJoinedInfo: JoinedChannelInfo = {
@@ -203,6 +211,9 @@ describe('chat/chat-service', () => {
   }
 
   const userPermissions = { ...DEFAULT_PERMISSIONS }
+  const channelPreferences: ChannelPreferences = {
+    hideBanner: false,
+  }
   const channelPermissions: ChannelPermissions = {
     kick: false,
     ban: false,
@@ -214,24 +225,28 @@ describe('chat/chat-service', () => {
     userId: user1.id,
     channelId: shieldBatteryChannel.id,
     joinDate: new Date('2023-03-11T00:00:00.000Z'),
+    channelPreferences,
     channelPermissions,
   }
   const user1TestChannelEntry: UserChannelEntry = {
     userId: user1.id,
     channelId: testChannel.id,
     joinDate: new Date('2023-03-12T00:00:00.000Z'),
+    channelPreferences,
     channelPermissions,
   }
   const user2ShieldBatteryChannelEntry: UserChannelEntry = {
     userId: user2.id,
     channelId: shieldBatteryChannel.id,
     joinDate: new Date('2023-03-11T00:00:00.000Z'),
+    channelPreferences,
     channelPermissions,
   }
   const user2TestChannelEntry: UserChannelEntry = {
     userId: user2.id,
     channelId: testChannel.id,
     joinDate: new Date('2023-03-12T00:00:00.000Z'),
+    channelPreferences,
     channelPermissions,
   }
 
@@ -385,8 +400,9 @@ describe('chat/chat-service', () => {
     const sessionLookup = new RequestSessionLookup()
     const userSocketsManager = new UserSocketsManager(nydus, sessionLookup, async () => {})
     const publisher = new TypedPublisher(nydus)
+    const imageService = new ImageService()
 
-    chatService = new ChatService(publisher, userSocketsManager)
+    chatService = new ChatService(publisher, userSocketsManager, imageService)
     connector = new NydusConnector(nydus, sessionLookup)
 
     client1 = connector.connectClient(user1, USER1_CLIENT_ID)
@@ -453,6 +469,7 @@ describe('chat/chat-service', () => {
             detailedChannelInfo: shieldBatteryDetailedInfo,
             joinedChannelInfo: shieldBatteryJoinedInfo,
             activeUserIds: [user3.id],
+            selfPreferences: channelPreferences,
             selfPermissions: channelPermissions,
           },
           {
@@ -460,6 +477,7 @@ describe('chat/chat-service', () => {
             detailedChannelInfo: testDetailedInfo,
             joinedChannelInfo: testJoinedInfo,
             activeUserIds: [user3.id],
+            selfPreferences: channelPreferences,
             selfPermissions: channelPermissions,
           },
         ],
@@ -529,18 +547,27 @@ describe('chat/chat-service', () => {
       // TODO(2Pac): Add something to FakeNydusServer to resolve when all current subscription
       // promises are complete?
       await new Promise(resolve => setTimeout(resolve, 20))
-      expect(client1.publish).toHaveBeenCalledWith(getChannelPath(shieldBatteryChannel.id), {
-        action: 'init3',
-        channelInfo: shieldBatteryBasicInfo,
-        detailedChannelInfo: shieldBatteryDetailedInfo,
-        joinedChannelInfo: shieldBatteryJoinedInfo,
-        activeUserIds: [user2.id, user1.id],
-        selfPermissions: channelPermissions,
-      })
+      expect(nydus.subscribeClient).toHaveBeenCalledWith(
+        client1,
+        getChannelPath(shieldBatteryChannel.id),
+        undefined,
+      )
       expect(nydus.subscribeClient).toHaveBeenCalledWith(
         client1,
         getChannelUserPath(shieldBatteryChannel.id, user1.id),
         undefined,
+      )
+      expect(client1.publish).toHaveBeenCalledWith(
+        getChannelUserPath(shieldBatteryChannel.id, user1.id),
+        {
+          action: 'init3',
+          channelInfo: shieldBatteryBasicInfo,
+          detailedChannelInfo: shieldBatteryDetailedInfo,
+          joinedChannelInfo: shieldBatteryJoinedInfo,
+          activeUserIds: [user2.id, user1.id],
+          selfPreferences: channelPreferences,
+          selfPermissions: channelPermissions,
+        },
       )
     })
   })
@@ -642,18 +669,27 @@ describe('chat/chat-service', () => {
       // TODO(2Pac): Add something to FakeNydusServer to resolve when all current subscription
       // promises are complete?
       await new Promise(resolve => setTimeout(resolve, 20))
-      expect(client1.publish).toHaveBeenCalledWith(getChannelPath(shieldBatteryChannel.id), {
-        action: 'init3',
-        channelInfo: shieldBatteryBasicInfo,
-        detailedChannelInfo: shieldBatteryDetailedInfo,
-        joinedChannelInfo: shieldBatteryJoinedInfo,
-        activeUserIds: [user2.id, user1.id],
-        selfPermissions: channelPermissions,
-      })
+      expect(nydus.subscribeClient).toHaveBeenCalledWith(
+        client1,
+        getChannelPath(shieldBatteryChannel.id),
+        undefined,
+      )
       expect(nydus.subscribeClient).toHaveBeenCalledWith(
         client1,
         getChannelUserPath(shieldBatteryChannel.id, user1.id),
         undefined,
+      )
+      expect(client1.publish).toHaveBeenCalledWith(
+        getChannelUserPath(shieldBatteryChannel.id, user1.id),
+        {
+          action: 'init3',
+          channelInfo: shieldBatteryBasicInfo,
+          detailedChannelInfo: shieldBatteryDetailedInfo,
+          joinedChannelInfo: shieldBatteryJoinedInfo,
+          activeUserIds: [user2.id, user1.id],
+          selfPreferences: channelPreferences,
+          selfPermissions: channelPermissions,
+        },
       )
     })
 
@@ -682,19 +718,143 @@ describe('chat/chat-service', () => {
       // TODO(2Pac): Add something to FakeNydusServer to resolve when all current subscription
       // promises are complete?
       await new Promise(resolve => setTimeout(resolve, 20))
-      expect(client1.publish).toHaveBeenCalledWith(getChannelPath(testChannel.id), {
-        action: 'init3',
-        channelInfo: testBasicInfo,
-        detailedChannelInfo: testDetailedInfo,
-        joinedChannelInfo: testJoinedInfo,
-        activeUserIds: [user1.id],
-        selfPermissions: channelPermissions,
-      })
+      expect(nydus.subscribeClient).toHaveBeenCalledWith(
+        client1,
+        getChannelPath(testChannel.id),
+        undefined,
+      )
       expect(nydus.subscribeClient).toHaveBeenCalledWith(
         client1,
         getChannelUserPath(testChannel.id, user1.id),
         undefined,
       )
+      expect(client1.publish).toHaveBeenCalledWith(getChannelUserPath(testChannel.id, user1.id), {
+        action: 'init3',
+        channelInfo: testBasicInfo,
+        detailedChannelInfo: testDetailedInfo,
+        joinedChannelInfo: testJoinedInfo,
+        activeUserIds: [user1.id],
+        selfPreferences: channelPreferences,
+        selfPermissions: channelPermissions,
+      })
+    })
+  })
+
+  describe('editChannel', () => {
+    test("should throw if channel doesn't exist", async () => {
+      asMockedFunction(getChannelInfo).mockResolvedValue(undefined)
+
+      await expect(
+        chatService.editChannel({
+          channelId: testChannel.id,
+          userId: user1.id,
+          isAdmin: false,
+          updates: {},
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(`"Channel not found"`)
+    })
+
+    test('should throw if not a channel owner or an admin', async () => {
+      asMockedFunction(getChannelInfo).mockResolvedValue(testChannel)
+
+      await expect(
+        chatService.editChannel({
+          channelId: testChannel.id,
+          userId: user1.id,
+          isAdmin: false,
+          updates: {},
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `"Only channel owner and admins can edit the channel"`,
+      )
+    })
+
+    test('works when updating description', async () => {
+      await joinUserToChannel(
+        user1,
+        testChannel,
+        user1TestChannelEntry,
+        joinUser1TestChannelMessage,
+      )
+
+      asMockedFunction(getChannelInfo).mockResolvedValue({
+        ...testChannel,
+        ownerId: user1.id,
+      })
+
+      const updates = {
+        description: 'NEW_DESCRIPTION',
+      }
+      asMockedFunction(updateChannel).mockResolvedValue({
+        ...testChannel,
+        ...updates,
+      })
+
+      const result = await chatService.editChannel({
+        channelId: testChannel.id,
+        userId: user1.id,
+        isAdmin: false,
+        updates,
+      })
+
+      const channelInfo = {
+        channelInfo: testBasicInfo,
+        detailedChannelInfo: {
+          ...testDetailedInfo,
+          description: updates.description,
+        },
+        joinedChannelInfo: testJoinedInfo,
+      }
+
+      expect(client1.publish).toHaveBeenCalledWith(getChannelPath(testChannel.id), {
+        action: 'edit',
+        ...channelInfo,
+      })
+      expect(result).toEqual(channelInfo)
+    })
+
+    test('works when updating topic', async () => {
+      await joinUserToChannel(
+        user1,
+        testChannel,
+        user1TestChannelEntry,
+        joinUser1TestChannelMessage,
+      )
+
+      asMockedFunction(getChannelInfo).mockResolvedValue({
+        ...testChannel,
+        ownerId: user1.id,
+      })
+
+      const updates = {
+        topic: 'NEW_TOPIC',
+      }
+      asMockedFunction(updateChannel).mockResolvedValue({
+        ...testChannel,
+        ...updates,
+      })
+
+      const result = await chatService.editChannel({
+        channelId: testChannel.id,
+        userId: user1.id,
+        isAdmin: false,
+        updates,
+      })
+
+      const channelInfo = {
+        channelInfo: testBasicInfo,
+        detailedChannelInfo: testDetailedInfo,
+        joinedChannelInfo: {
+          ...testJoinedInfo,
+          topic: updates.topic,
+        },
+      }
+
+      expect(client1.publish).toHaveBeenCalledWith(getChannelPath(testChannel.id), {
+        action: 'edit',
+        ...channelInfo,
+      })
+      expect(result).toEqual(channelInfo)
     })
   })
 
@@ -747,7 +907,7 @@ describe('chat/chat-service', () => {
           newOwnerId: undefined,
         })
 
-        expectMessageWasNotReceived(user2, shieldBatteryChannel, client1)
+        await expectMessageWasNotReceived(user2, shieldBatteryChannel, client1)
         expect(client1.unsubscribe).toHaveBeenCalledWith(
           getChannelUserPath(shieldBatteryChannel.id, user1.id),
         )
@@ -777,7 +937,7 @@ describe('chat/chat-service', () => {
         newOwnerId: undefined,
       })
 
-      expectMessageWasNotReceived(user2, testChannel, client1)
+      await expectMessageWasNotReceived(user2, testChannel, client1)
       expect(client1.unsubscribe).toHaveBeenCalledWith(getChannelUserPath(testChannel.id, user1.id))
     })
   })
@@ -895,7 +1055,7 @@ describe('chat/chat-service', () => {
           newOwnerId: undefined,
         })
 
-        expectMessageWasNotReceived(user1, shieldBatteryChannel, client2)
+        await expectMessageWasNotReceived(user1, shieldBatteryChannel, client2)
         expect(client2.unsubscribe).toHaveBeenCalledWith(
           getChannelUserPath(shieldBatteryChannel.id, user2.id),
         )
@@ -903,7 +1063,7 @@ describe('chat/chat-service', () => {
     })
 
     describe('when moderating non-ShieldBattery channel', () => {
-      const expectItWorks = () => {
+      const expectItWorks = async () => {
         expect(removeUserFromChannelMock).toHaveBeenCalledWith(user2.id, testChannel.id)
         expect(client1.publish).toHaveBeenCalledWith(getChannelPath(testChannel.id), {
           action: ChannelModerationAction.Kick,
@@ -912,7 +1072,7 @@ describe('chat/chat-service', () => {
           newOwnerId: undefined,
         })
 
-        expectMessageWasNotReceived(user1, testChannel, client2)
+        await expectMessageWasNotReceived(user1, testChannel, client2)
         expect(client2.unsubscribe).toHaveBeenCalledWith(
           getChannelUserPath(testChannel.id, user2.id),
         )
@@ -1045,7 +1205,7 @@ describe('chat/chat-service', () => {
             ChannelModerationAction.Kick,
           )
 
-          expectItWorks()
+          await expectItWorks()
         })
 
         test('works when target is channel moderator', async () => {
@@ -1070,7 +1230,7 @@ describe('chat/chat-service', () => {
             ChannelModerationAction.Kick,
           )
 
-          expectItWorks()
+          await expectItWorks()
         })
 
         test('works when target is regular user', async () => {
@@ -1092,7 +1252,7 @@ describe('chat/chat-service', () => {
             ChannelModerationAction.Kick,
           )
 
-          expectItWorks()
+          await expectItWorks()
         })
       })
 
@@ -1127,7 +1287,7 @@ describe('chat/chat-service', () => {
             ChannelModerationAction.Kick,
           )
 
-          expectItWorks()
+          await expectItWorks()
         })
 
         test('works when target is regular user', async () => {
@@ -1149,7 +1309,7 @@ describe('chat/chat-service', () => {
             ChannelModerationAction.Kick,
           )
 
-          expectItWorks()
+          await expectItWorks()
         })
       })
 
@@ -1178,7 +1338,7 @@ describe('chat/chat-service', () => {
             ChannelModerationAction.Kick,
           )
 
-          expectItWorks()
+          await expectItWorks()
         })
       })
 
@@ -2012,6 +2172,55 @@ describe('chat/chat-service', () => {
         userId: user2TestChannelEntry.userId,
         channelId: user2TestChannelEntry.channelId,
         permissions: user2TestChannelEntry.channelPermissions,
+      })
+    })
+  })
+
+  describe('updateUserPreferences', () => {
+    const updateUserPreferencesMock =
+      asMockedFunction(updateUserPreferences).mockResolvedValue(user1TestChannelEntry)
+
+    beforeEach(async () => {
+      asMockedFunction(getChannelInfo).mockResolvedValue(testChannel)
+    })
+
+    test("should throw if channel doesn't exist", async () => {
+      asMockedFunction(getChannelInfo).mockResolvedValue(undefined)
+
+      await expect(
+        chatService.updateUserPreferences(testChannel.id, user1.id, channelPreferences),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(`"Channel not found"`)
+    })
+
+    test('should throw if not in channel', async () => {
+      asMockedFunction(getUserChannelEntryForUser).mockResolvedValue(null)
+
+      await expect(
+        chatService.updateUserPreferences(testChannel.id, user1.id, channelPreferences),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(`"Must be in channel to update preferences"`)
+    })
+
+    test('works when updating channel preferences', async () => {
+      await joinUserToChannel(
+        user1,
+        testChannel,
+        user1TestChannelEntry,
+        joinUser1TestChannelMessage,
+      )
+
+      asMockedFunction(getChannelInfo).mockResolvedValue(testChannel)
+      asMockedFunction(getUserChannelEntryForUser).mockResolvedValue(user1TestChannelEntry)
+
+      await chatService.updateUserPreferences(testChannel.id, user1.id, channelPreferences)
+
+      expect(updateUserPreferencesMock).toHaveBeenCalledWith(
+        testChannel.id,
+        user1.id,
+        channelPreferences,
+      )
+      expect(client1.publish).toHaveBeenCalledWith(getChannelUserPath(testChannel.id, user1.id), {
+        action: 'preferencesChanged',
+        selfPreferences: channelPreferences,
       })
     })
   })

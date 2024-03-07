@@ -13,6 +13,7 @@ import { getMapInfo } from '../maps/map-models'
 import { getCurrentMapPool } from '../models/matchmaking-map-pools'
 import ensureLoggedIn from '../session/ensure-logged-in'
 import { validateRequest } from '../validation/joi-validator'
+import { filterVetoedMaps } from './map-vetoes'
 import MatchmakingPreferencesService from './matchmaking-preferences-service'
 import { matchmakingPreferencesValidator } from './matchmaking-validators'
 
@@ -27,7 +28,7 @@ export class MatchmakingPreferencesApi {
       params: Joi.object<{ matchmakingType: MatchmakingType }>({
         matchmakingType: Joi.valid(...ALL_MATCHMAKING_TYPES).required(),
       }).required(),
-      body: matchmakingPreferencesValidator(ctx.session!.userId).required(),
+      body: matchmakingPreferencesValidator(ctx.session!.user!.id).required(),
     })
 
     if (params.matchmakingType !== body.matchmakingType) {
@@ -49,14 +50,14 @@ export class MatchmakingPreferencesApi {
       }
     }
 
-    body.mapSelections = body.mapSelections?.filter(m => currentMapPool.maps.includes(m))
-
     const preferences = await this.matchmakingPreferencesService.upsertPreferences({
-      userId: ctx.session!.userId,
+      userId: ctx.session!.user!.id,
       matchmakingType: body.matchmakingType as any,
       race: body.race,
       mapPoolId: currentMapPool.id,
-      mapSelections: body.mapSelections,
+      mapSelections: body.mapSelections
+        ? filterVetoedMaps(currentMapPool, body.mapSelections)
+        : undefined,
       data: body.data,
     })
 

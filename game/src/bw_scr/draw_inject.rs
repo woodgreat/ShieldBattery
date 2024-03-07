@@ -2,11 +2,11 @@ use std::mem;
 use std::ptr::{self, addr_of_mut, null_mut};
 
 use bytemuck::{Pod, Zeroable};
-use egui::{TexturesDelta, TextureId};
 use egui::epaint;
-use egui::epaint::textures::{TextureFilter};
+use egui::epaint::textures::TextureFilter;
+use egui::{TextureId, TexturesDelta};
 use hashbrown::HashMap;
-use quick_error::{quick_error};
+use quick_error::quick_error;
 
 use super::bw_vector::{bw_vector_push, bw_vector_reserve};
 use super::draw_overlay;
@@ -83,7 +83,7 @@ impl RenderTarget {
     pub unsafe fn new(bw: *mut scr::RenderTarget, id: u32) -> RenderTarget {
         let width = (*bw).width as f32;
         let height = (*bw).height as f32;
-        // FIXME: This is more or less duplicating logic in draw_overlay::OverlayState::step,
+        // TODO(neive): This is more or less duplicating logic in draw_overlay::OverlayState::step,
         // (And assuming the render target sizes here are same as the values passed to step())
         // would be more cleaner to have the egui-visible width/height be passed from there.
         let (scale, h_recip) = if height > 1080.0 {
@@ -119,7 +119,8 @@ struct VertexBufferAlloc<T> {
 
 impl<T: Copy + bytemuck::NoUninit + bytemuck::AnyBitPattern> VertexBufferAlloc<T> {
     fn set_map<F, const N: usize>(&self, amount: usize, mut func: F)
-    where F: FnMut(usize) -> [T; N]
+    where
+        F: FnMut(usize) -> [T; N],
     {
         assert!(amount * N <= self.length);
         unsafe {
@@ -151,7 +152,10 @@ fn egui_vertex_to_colored_vertex(
     ColoredVertex {
         // egui vertex position is in 0.0 .. screen_points range with origin in top left,
         // while BW wants the vertex in 0.0 .. 1.0 range with origin in bottom left
-        pos: [vertex.pos.x * render_target.w_recip, 1.0 - vertex.pos.y * render_target.h_recip],
+        pos: [
+            vertex.pos.x * render_target.w_recip,
+            1.0 - vertex.pos.y * render_target.h_recip,
+        ],
         texture: [vertex.uv.x, vertex.uv.y],
         color: u32::from_le_bytes(vertex.color.to_array()),
     }
@@ -175,10 +179,7 @@ pub unsafe fn add_overlays(
     render_target: &RenderTarget,
 ) {
     update_textures(bw.renderer, state, &overlay_out.textures_delta);
-    // First layer that is drawn above minimap (Or maybe a tie with later draw taking prioriry)
-    // But also it'll be drawn over menus which is maybe not too nice?
-    // 0x15 is above F10 menu already
-    let layer = 0x1a;
+    let layer = overlay_out.draw_layer;
     for primitive in overlay_out.primitives.into_iter() {
         match primitive.primitive {
             epaint::Primitive::Mesh(mesh) => {
@@ -269,12 +270,10 @@ unsafe fn draw_egui_mesh(
     clip_rect: &egui::Rect,
 ) -> Result<(), DrawError> {
     let texture = match mesh.texture_id {
-        TextureId::Managed(_) => {
-            state.textures.get(&mesh.texture_id)
-                .map(|x| x.bw())
-        }
+        TextureId::Managed(_) => state.textures.get(&mesh.texture_id).map(|x| x.bw()),
         TextureId::User(id) => draw_overlay_texture_ptr(bw, id),
-    }.ok_or_else(|| DrawError::InvalidTexture(mesh.texture_id))?;
+    }
+    .ok_or(DrawError::InvalidTexture(mesh.texture_id))?;
     if mesh.vertices.len() < 0x10000 {
         draw_egui_mesh_main(
             layer,
@@ -321,9 +320,10 @@ unsafe fn draw_egui_mesh_main<I: IndexSize>(
     let vertex_alloc = allocate_vertices(bw.vertex_buf, 0x8, vertex_count);
     let index_alloc = allocate_indices(bw.vertex_buf, index_count);
     vertex_alloc.set_map(vertices.len(), |i| {
-        bytemuck::cast::<ColoredVertex, [f32; 5]>(
-            egui_vertex_to_colored_vertex(render_target, &vertices[i])
-        )
+        bytemuck::cast::<ColoredVertex, [f32; 5]>(egui_vertex_to_colored_vertex(
+            render_target,
+            &vertices[i],
+        ))
     });
     index_alloc.set_map(indices.len(), |i| [indices[i].to_u16()]);
     index_alloc.zero_after(indices.len());
@@ -397,11 +397,15 @@ unsafe fn add_draw_subcommand<D: Pod>(
 ) -> Result<(), DrawError> {
     let length = mem::size_of::<scr::DrawSubCommand>() + mem::size_of::<D>();
     let start_offset = (*alloc_buf).subcommand_buffer_bytes_used;
-    let end_offset = start_offset.checked_add(length as u32)
+    let end_offset = start_offset
+        .checked_add(length as u32)
         .filter(|&x| x <= (*alloc_buf).subcommand_buffer.len() as u32)
         .ok_or(DrawError::OutOfSubCommandBuffer)?;
     (*alloc_buf).subcommand_buffer_bytes_used = end_offset;
-    let command = (*alloc_buf).subcommand_buffer.as_mut_ptr().add(start_offset as usize);
+    let command = (*alloc_buf)
+        .subcommand_buffer
+        .as_mut_ptr()
+        .add(start_offset as usize);
     (command as *mut scr::DrawSubCommand).write(scr::DrawSubCommand {
         id,
         next: null_mut(),
@@ -418,10 +422,7 @@ unsafe fn add_draw_subcommand<D: Pod>(
     Ok(())
 }
 
-unsafe fn set_render_target_wh_recip(
-    command: *mut scr::DrawCommand,
-    render_target: &RenderTarget,
-) {
+unsafe fn set_render_target_wh_recip(command: *mut scr::DrawCommand, render_target: &RenderTarget) {
     (*command).shader_constants[0xe] = render_target.bw_w_recip;
     (*command).shader_constants[0xf] = render_target.bw_h_recip;
 }
@@ -438,19 +439,19 @@ unsafe fn new_draw_command(
     let command = (*commands).commands.as_mut_ptr().add(index);
     let draw_sort = addr_of_mut!((*commands).draw_sort_vector) as *mut scr::BwVector;
     let draw_sort_index = (*draw_sort).length as u16;
-    bw_vector_push(draw_sort, scr::DrawSort {
-        layer,
-        index: draw_sort_index,
-        command,
-    });
+    bw_vector_push(
+        draw_sort,
+        scr::DrawSort {
+            layer,
+            index: draw_sort_index,
+            command,
+        },
+    );
 
     Some(command)
 }
 
-unsafe fn pop_draw_commands(
-    commands: *mut scr::DrawCommands,
-    pos: u16,
-) {
+unsafe fn pop_draw_commands(commands: *mut scr::DrawCommands, pos: u16) {
     let pop_amount = (*commands).draw_command_count - pos;
     let draw_sort = addr_of_mut!((*commands).draw_sort_vector) as *mut scr::BwVector;
     (*draw_sort).length -= pop_amount as usize;
@@ -468,7 +469,11 @@ unsafe fn allocate_vertices(
     // Going to just check that alignment is at 4 and not even trying to fix it
     // if not.
     let start_offset = (*vertex_buf).allocated_size_bytes;
-    assert!(start_offset & 3 == 0, "Bad vertex alignment {:x}", start_offset);
+    assert!(
+        start_offset & 3 == 0,
+        "Bad vertex alignment {:x}",
+        start_offset
+    );
     let end_offset = start_offset + float_count * 4;
     while end_offset > vertex_buf_capacity_bytes(vertex_buf) {
         vertex_buf_grow(vertex_buf);
@@ -491,7 +496,11 @@ unsafe fn allocate_indices(
     count: u32,
 ) -> VertexBufferAlloc<u16> {
     let start_offset = (*vertex_buf).index_buffer_allocated_bytes;
-    assert!(start_offset & 1 == 0, "Bad index alignment {:x}", start_offset);
+    assert!(
+        start_offset & 1 == 0,
+        "Bad index alignment {:x}",
+        start_offset
+    );
     let end_offset = start_offset + count as usize * 2;
     while end_offset > index_buf_capacity_bytes(vertex_buf) {
         index_buf_grow(vertex_buf);
@@ -608,7 +617,9 @@ impl OwnedBwTexture {
 
     fn intentional_drop(mut self) {
         unsafe {
-            (*(*self.renderer).vtable).delete_texture.call2(self.renderer, &mut self.texture);
+            (*(*self.renderer).vtable)
+                .delete_texture
+                .call2(self.renderer, &mut self.texture);
         }
         // Skip destructor which is used for catching unintended drops.
         let _ = mem::ManuallyDrop::new(self);
@@ -627,6 +638,7 @@ impl Drop for OwnedBwTexture {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 unsafe fn update_texture(
     renderer: *mut scr::Renderer,
     texture: *mut scr::RendererTexture,
@@ -661,8 +673,8 @@ unsafe fn update_textures(
     for &(id, ref delta) in &delta.set {
         // Not really sure which is best way to handle this since BW will only
         // accept one filtering mode instead of min/mag split.
-        let bilinear = delta.options.magnification == TextureFilter::Linear ||
-            delta.options.minification == TextureFilter::Linear;
+        let bilinear = delta.options.magnification == TextureFilter::Linear
+            || delta.options.minification == TextureFilter::Linear;
         let size = delta.image.size();
         let size = (size[0] as u32, size[1] as u32);
         let rgba = egui_image_data_to_rgba(&delta.image, &mut state.temp_buffer);
@@ -672,23 +684,19 @@ unsafe fn update_textures(
             } else {
                 warn_once!("Tried to update nonexistent texture {id:?}");
             }
-        } else {
-            if let Some(texture) = OwnedBwTexture::new_rgba(renderer, size, rgba, bilinear) {
-                if let Some(old) = state.textures.insert(id, texture) {
-                    state.queued_texture_frees.push(old);
-                }
-            } else {
-                error!("Could not create texture of size {size:?}");
+        } else if let Some(texture) = OwnedBwTexture::new_rgba(renderer, size, rgba, bilinear) {
+            if let Some(old) = state.textures.insert(id, texture) {
+                state.queued_texture_frees.push(old);
             }
+        } else {
+            error!("Could not create texture of size {size:?}");
         }
     }
 }
 
 fn egui_image_data_to_rgba<'a>(image: &'a epaint::ImageData, buffer: &'a mut Vec<u8>) -> &'a [u8] {
     match image {
-        epaint::ImageData::Color(image) => {
-            bytemuck::cast_slice(&image.pixels)
-        }
+        epaint::ImageData::Color(image) => bytemuck::cast_slice(&image.pixels),
         epaint::ImageData::Font(image) => {
             buffer.clear();
             buffer.reserve(image.pixels.len() * 4);

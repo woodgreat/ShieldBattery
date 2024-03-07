@@ -1,3 +1,96 @@
+#### 9.4.0 (Jan 13, 2024)
+
+- Added a basic match history to user profiles (better filtering capabilities coming soon!)
+- Greatly improved Chinese translations. If you would like to help contribute translations for a
+  non-English language, please reach out to us in our Discord!
+- Chat channels are more customizable, with the option to upload banners, badges, and set a channel
+  description and topic
+- Improved StarCraft installation finder to use the Battle.net Launcher's settings. This will be
+  the default for new users, but existing users can re-run the detection in Settings -> StarCraft.
+- Reversed the sort order of replays (auto-saved replays should be sorted newest first now). An
+  improved UI with better sorting, searching, and filtering capabilities is coming soon.
+- Added in-client bug reporting. You can report bugs via the user menu in the bottom-left, which
+  will automatically upload log files to our servers to help us diagnose the issue.
+- Improved lobby error screens
+- Fixed language detection to choose better default languages
+- Various bug fixes
+
+#### 9.3.0 (Sep 5, 2023)
+
+- **Replay/Observer UI improvements.** We've added hotkeys for showing/hiding various parts of the
+  UI, so you can tailor your observing experience to just what you'd like to see. The hotkeys are:
+  - **A**: Toggle all panels
+  - **F**: Toggle production panel
+  - **E**: Toggle player list
+  - **W**: Toggle bottom UI
+- **New account settings page.** Account settings has now moved into the normal Settings area,
+  instead of being under the user menu. The new page also presents a few settings that are not yet
+  available, but will be soon! Stay tuned.
+- **Advanced lobby settings.** Lobbies now have two new advanced settings that can be configured:
+  turn rate and unit limits. In general we recommend users leave these at the defaults, but if you
+  have specific needs for particular maps and game modes, they're there now! Current settings for
+  these will also be displayed while in a lobby.
+- **Bug fixes and small enhancements:**
+  - Show morphing Zerg buildings correctly in replay/observer production view
+  - Show minimap dialog buttons for changing player vision in replay/observer UI
+  - Changed observer UI font and adjusted colors for better readability
+  - Fixed a number of issues with submitted game results that caused incorrect or unresolvable
+    games.
+  - Made game results submit earlier in the game ending process so that game results can be
+    resolved faster.
+
+#### 9.2.0 (Aug 10, 2023)
+
+- **Improved ping estimation**. Ping estimation used for game server selection and ingame latency
+  selection should now be more accurate. This means you're more likely to get a good server for you
+  and every opponent, and will see less lag ingame.
+- **Added support for more vetoes in map pools**. We now support veto counts other than 3, which
+  means we can have larger (or smaller!) map pools. Stay tuned for map pools making use of this
+  feature.
+- **Bug fixes.**
+  - Opening a replay in Explorer with ShieldBattery now works correctly if the app was not already
+    running.
+  - It is now possible to open a replay with ShieldBattery while logged out.
+  - The app will now be brought into focus when a replay is opened.
+  - The app controls should properly reflect the maximized state on launch now.
+  - Fixed ban reasons not showing to users properly.
+  - Fixed an issue causing race selection to immediately queue for matchmaking.
+
+#### 9.1.0 (July 25, 2023)
+
+- **Open replay files.** ShieldBattery can now be registered to open replay (.rep) files for faster
+  replay viewing. Replay files can also be dragged into the client for easy access.
+- **Updated translations.** Thank you to our contributors! If you'd like to help, please check out our
+  <a href="https://github.com/ShieldBattery/ShieldBattery/blob/master/docs/TRANSLATION_GUIDE.md" target="_blank" rel="nofollow noreferrer noopener">translation guide</a>.
+- **Various bug fixes:**
+  - Fixed race displayed on game results when a player chose random
+  - Fixed an issue with the language selector not displaying an initial selection
+  - The player search on the ladder page now works again
+  - Fixed an issue with chat channels sometimes ending up in the wrong order
+  - The "start minimized" option when launching the app on startup will now work properly
+  - Fixed Korean language selection not working if it was manually chosen.
+
+#### 9.0.0 (June 30, 2023)
+
+- **Multi-language support.** We've added an initial version of supporting multiple languages within
+  the app/website. Currently we have translations for: Chinese, Korean, Russian, and Spanish. Most
+  of these translations are machine-generated and there are likely mistakes and problems! If you'd
+  like to help contribute better translations, we've set up an easy process, just check out the
+  <a href="https://github.com/ShieldBattery/ShieldBattery/blob/master/docs/TRANSLATION_GUIDE.md" target="_blank" rel="nofollow noreferrer noopener">translation guide</a>
+  on our GitHub! Please also let us know if you encounter any issues with non-English languages.
+- **Multiple chat channels.** We've turned on the ability for users to create and join new chat
+  channels. If you wanted a channel for your tournament or clan, you're in luck! Just click the
+  header in the navigation panel to find and create new channels.
+- **New observer/replay UI.** The built-in SC:R observer UI has been replaced with a custom new
+  implementation. The SC:R version had a number of problems when loading through ShieldBattery, most
+  notably just failing to load at all a lot of the time. The new UI should be snappier, always load,
+  and allow us to build more cool features going forward. There are definitely some things missing
+  at the moment, so please let us know if there's anything that's really important to you in this UI
+  so we can focus on what matters.
+- **Revamped settings.** We've rebuilt our settings dialog into a full-screen experience to allow
+  for better organization and give us space to add new settings for upcoming features. Alongside
+  this, applicable settings will also be editable on the web version.
+
 #### 8.8.0 (March 17, 2023)
 
 - **Unified lobbies**. The Create and Join Lobby actions in the sidebar have been combined into a

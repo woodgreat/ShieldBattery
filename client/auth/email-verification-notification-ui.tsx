@@ -8,7 +8,7 @@ import { useAppDispatch } from '../redux-hooks'
 import { TIMING_LONG, openSnackbar } from '../snackbars/action-creators'
 import { amberA400 } from '../styles/colors'
 import { sendVerificationEmail } from './action-creators'
-import { useSelfUser } from './state-hooks'
+import { useSelfUser } from './auth-utils'
 
 const ColoredWarningIcon = styled(MaterialIcon).attrs({ icon: 'warning', size: 36 })`
   flex-shrink: 0;
@@ -25,6 +25,18 @@ export const EmailVerificationNotificationUi = React.forwardRef<
   HTMLDivElement,
   EmailVerificationNotificationUiProps
 >((props, ref) => {
+  return (
+    <ActionlessNotification
+      ref={ref}
+      showDivider={props.showDivider}
+      read={props.read}
+      icon={<ColoredWarningIcon />}
+      text={<EmailVerificationWarningContent />}
+    />
+  )
+})
+
+export function EmailVerificationWarningContent() {
   const { t } = useTranslation()
 
   const dispatch = useAppDispatch()
@@ -48,7 +60,7 @@ export const EmailVerificationNotificationUi = React.forwardRef<
             )
           },
           onError: err => {
-            logger.error(`Resending verification email failed: ${err?.stack ?? err}`)
+            logger.error(`Resending verification email failed: ${String(err?.stack ?? err)}`)
             dispatch(
               openSnackbar({
                 message: t(
@@ -67,23 +79,15 @@ export const EmailVerificationNotificationUi = React.forwardRef<
   )
 
   return (
-    <ActionlessNotification
-      ref={ref}
-      showDivider={props.showDivider}
-      read={props.read}
-      icon={<ColoredWarningIcon />}
-      text={
-        <span data-test='email-verification-notification'>
-          <Trans t={t} i18nKey='auth.emailVerification.emailUnverifiedMessage'>
-            Your email is unverified! Check for an email from ShieldBattery. If you don't see one,
-            we can{' '}
-            <a href='#' onClick={onClick}>
-              send another
-            </a>
-            .
-          </Trans>
-        </span>
-      }
-    />
+    <span data-test='email-verification-notification'>
+      <Trans t={t} i18nKey='auth.emailVerification.emailUnverifiedMessage'>
+        Your email is unverified! Check for an email from ShieldBattery. If you don't see one, we
+        can{' '}
+        <a href='#' onClick={onClick}>
+          send another
+        </a>
+        .
+      </Trans>
+    </span>
   )
-})
+}

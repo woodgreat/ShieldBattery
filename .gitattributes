@@ -14,6 +14,9 @@
 *.opus binary
 *.mp4 binary
 *.afdesign binary
+
+*.otf binary
+*.ttf binary
 *.woff2 binary
 
 # Custom for Visual Studio
@@ -24,3 +27,6 @@
 *.dbproj merge=union
 
 *.bat eol=crlf
+
+# Github Linguist attributes - https://github.com/github/linguist#overrides
+server/testing/google/**/* linguist-generated

@@ -56,7 +56,7 @@ const CarouselButton = styled(IconButton)`
   }
 `
 
-@withTranslation()
+@withTranslation('global', { withRef: true })
 export default class Carousel extends React.Component {
   static propTypes = {
     isLoading: PropTypes.bool,

@@ -1,29 +1,31 @@
 import { RouterContext } from '@koa/router'
 import Joi from 'joi'
+import { ReadonlyDeep } from 'type-fest'
+import { assertUnreachable } from '../../../common/assert-unreachable'
 import {
   PASSWORD_MINLENGTH,
   USERNAME_MAXLENGTH,
   USERNAME_MINLENGTH,
   USERNAME_PATTERN,
 } from '../../../common/constants'
-import { MatchmakingType } from '../../../common/matchmaking'
 import { SelfUser, UserErrorCode } from '../../../common/users/sb-user'
 import { ClientSessionInfo } from '../../../common/users/session'
+import { makeErrorConverterMiddleware } from '../errors/coded-error'
+import { asHttpError } from '../errors/error-with-payload'
 import { httpApi, httpBeforeAll } from '../http/http-api'
 import { httpBefore, httpDelete, httpGet, httpPost } from '../http/route-decorators'
 import { joiLocale } from '../i18n/locale-validator'
-import { getPermissions } from '../models/permissions'
-import { Redis } from '../redis'
 import createThrottle from '../throttle/create-throttle'
 import throttleMiddleware from '../throttle/middleware'
+import { Clock } from '../time/clock'
 import { isUserBanned, retrieveBanHistory } from '../users/ban-models'
 import { joiClientIdentifiers } from '../users/client-ids'
 import { UserApiError, convertUserApiErrors } from '../users/user-api-errors'
 import { UserIdentifierManager } from '../users/user-identifier-manager'
-import { attemptLogin, findSelfById, maybeMigrateSignupIp, updateUser } from '../users/user-model'
+import { attemptLogin, findSelfById, maybeMigrateSignupIp } from '../users/user-model'
+import { UserService } from '../users/user-service'
 import { validateRequest } from '../validation/joi-validator'
-import ensureLoggedIn from './ensure-logged-in'
-import initSession from './init'
+import { SessionError, SessionErrorCode, getJwt } from './jwt-session-middleware'
 
 // TODO(tec27): Think about maybe a different mechanism for this. I could see this causing problems
 // when lots of people need to create sessions at once from the same place (e.g. LAN events)
@@ -41,13 +43,31 @@ interface LogInRequestBody {
   locale?: string
 }
 
+export const convertSessionErrors = makeErrorConverterMiddleware(err => {
+  if (!(err instanceof SessionError)) {
+    throw err
+  }
+
+  switch (err.code) {
+    case SessionErrorCode.AlreadyHaveSession:
+      throw asHttpError(409, err)
+
+    default:
+      assertUnreachable(err.code)
+  }
+})
+
 @httpApi('/sessions')
-@httpBeforeAll(convertUserApiErrors)
+@httpBeforeAll(convertUserApiErrors, convertSessionErrors)
 export class SessionApi {
-  constructor(private userIdentifierManager: UserIdentifierManager, private redis: Redis) {}
+  constructor(
+    private userIdentifierManager: UserIdentifierManager,
+    private userService: UserService,
+    private clock: Clock,
+  ) {}
 
   @httpGet('/')
-  async getCurrentSession(ctx: RouterContext): Promise<ClientSessionInfo> {
+  async getCurrentSession(ctx: RouterContext): Promise<ReadonlyDeep<ClientSessionInfo>> {
     const {
       query: { locale },
     } = validateRequest(ctx, {
@@ -57,10 +77,10 @@ export class SessionApi {
       }),
     })
 
-    if (!ctx.session?.userId) {
+    if (!ctx.session?.user) {
       throw new UserApiError(UserErrorCode.SessionExpired, 'Session expired')
     }
-    const userId = ctx.session.userId
+    const userId = ctx.session.user.id
 
     let user: SelfUser | undefined
     try {
@@ -71,36 +91,20 @@ export class SessionApi {
     }
 
     if (!user) {
-      await ctx.regenerateSession()
+      await ctx.deleteSession()
       throw new UserApiError(UserErrorCode.SessionExpired, 'Session expired')
     }
 
     if (locale && !user.locale) {
-      user = await updateUser(user.id, { locale })
+      await this.userService.updateCurrentUser(user.id, { locale }, ctx)
     }
 
-    // This would be a very weird occurrence, so we just throw a 500 here.
-    if (!user) {
-      throw new Error("couldn't find current user")
-    }
-
-    const sessionInfo: ClientSessionInfo = {
-      sessionId: ctx.sessionId!,
-      user,
-      permissions: ctx.session.permissions,
-      lastQueuedMatchmakingType: ctx.session.lastQueuedMatchmakingType,
-    }
-    // Ensure that the currently saved session has matching values to what we just retrieved from
-    // the DB (prevents things like a user having a session with outdated email verification status
-    // due to a botched migration or something)
-    initSession(ctx, sessionInfo)
-
-    return sessionInfo
+    return { ...ctx.session, jwt: await getJwt(ctx, this.clock.now()) }
   }
 
   @httpPost('/')
   @httpBefore(throttleMiddleware(loginThrottle, ctx => ctx.ip))
-  async startNewSession(ctx: RouterContext): Promise<ClientSessionInfo> {
+  async startNewSession(ctx: RouterContext): Promise<ReadonlyDeep<ClientSessionInfo>> {
     const { body } = validateRequest(ctx, {
       body: Joi.object<LogInRequestBody>({
         username: Joi.string()
@@ -110,31 +114,18 @@ export class SessionApi {
           .required(),
         password: Joi.string().min(PASSWORD_MINLENGTH).required(),
         remember: Joi.boolean(),
-        // TODO(tec27): Make this required in future versions (cur v8.0.2). This is just to allow
-        // old clients to log in so it triggers auto-update
-        clientIds: joiClientIdentifiers(),
+        clientIds: joiClientIdentifiers().required(),
         locale: joiLocale(),
       }),
     })
 
     const { username, password, remember, clientIds, locale } = body
-    let user: SelfUser | undefined
 
-    if (ctx.session?.userId) {
-      try {
-        user = await findSelfById(ctx.session.userId)
-      } catch (err) {
-        ctx.log.error({ err }, 'error finding user')
-      }
-
-      if (!user) {
-        await ctx.regenerateSession()
-      }
+    if (ctx.session) {
+      await ctx.deleteSession()
     }
 
-    if (!user) {
-      user = await attemptLogin(username, password)
-    }
+    let user = await attemptLogin(username, password)
 
     if (!user) {
       throw new UserApiError(UserErrorCode.InvalidCredentials, 'Incorrect username or password')
@@ -148,59 +139,42 @@ export class SessionApi {
       const banHistory = await retrieveBanHistory(user.id, 1)
       const banEntry = banHistory.length ? banHistory[0] : undefined
       throw new UserApiError(UserErrorCode.AccountBanned, 'This account has been banned', {
-        reason: banEntry?.reason,
-        expiration: Number(banEntry?.endTime),
+        data: {
+          reason: banEntry?.reason,
+          expiration: Number(banEntry?.endTime),
+        },
       })
     } else if (await this.userIdentifierManager.banUserIfNeeded(user.id)) {
       // NOTE(tec27): We make sure to do this check *after* checking the account ban only, otherwise
-      // any banned used that attempts to logs in will be permanently banned.
+      // any banned user that attempts to logs in will be permanently banned.
       const banHistory = await retrieveBanHistory(user.id, 1)
       const banEntry = banHistory.length ? banHistory[0] : undefined
       throw new UserApiError(UserErrorCode.AccountBanned, 'This account has been banned', {
-        reason: banEntry?.reason,
-        expiration: Number(banEntry?.endTime),
+        data: {
+          reason: banEntry?.reason,
+          expiration: Number(banEntry?.endTime),
+        },
       })
     }
 
-    await ctx.regenerateSession()
-    const perms = (await getPermissions(user.id))!
+    await ctx.beginSession(user.id, !!remember)
+    user = ctx.session!.user
     await maybeMigrateSignupIp(user.id, ctx.ip)
 
     if (locale && !user.locale) {
-      user = await updateUser(user.id, { locale })
+      await this.userService.updateCurrentUser(user.id, { locale }, ctx)
     }
 
-    // This would be a very weird occurrence, so we just throw a 500 here.
-    if (!user) {
-      throw new Error("couldn't find current user")
-    }
-
-    const sessionInfo: ClientSessionInfo = {
-      sessionId: ctx.sessionId!,
-      user,
-      permissions: perms,
-      lastQueuedMatchmakingType: MatchmakingType.Match1v1,
-    }
-
-    initSession(ctx, sessionInfo)
-    if (!remember) {
-      // Make the cookie a session-expiring cookie
-      ctx.session!.cookie.maxAge = undefined
-      ctx.session!.cookie.expires = undefined
-    }
-
-    return sessionInfo
+    return { ...ctx.session!, jwt: await getJwt(ctx, this.clock.now()) }
   }
 
   @httpDelete('/')
-  @httpBefore(ensureLoggedIn)
   async endSession(ctx: RouterContext): Promise<void> {
-    if (!ctx.session?.userId) {
+    if (!ctx.session) {
       throw new UserApiError(UserErrorCode.SessionExpired, 'Session expired')
     }
 
-    await this.redis.srem('user_sessions:' + ctx.session.userId, ctx.sessionId!)
-    await ctx.regenerateSession()
+    await ctx.deleteSession()
     ctx.status = 204
   }
 }

@@ -5,14 +5,13 @@ import { UseTransitionProps } from 'react-spring'
 import styled from 'styled-components'
 import { useLocation } from 'wouter'
 import { SbChannelId } from '../../common/chat'
-import { MULTI_CHANNEL } from '../../common/flags'
+import { NEWS_PAGE } from '../../common/flags'
 import { matchmakingTypeToLabel } from '../../common/matchmaking'
 import { urlPath } from '../../common/urls'
 import { SbUserId } from '../../common/users/sb-user'
 import GameActivityNavEntry from '../active-game/game-activity-nav-entry'
 import { logOut } from '../auth/action-creators'
-import { redirectToLogin } from '../auth/auth-utils'
-import { useSelfUser } from '../auth/state-hooks'
+import { redirectToLogin, useSelfUser } from '../auth/auth-utils'
 import { openChangelog } from '../changelog/action-creators'
 import { leaveChannel } from '../chat/action-creators'
 import { ChatNavEntry } from '../chat/nav-entry'
@@ -31,6 +30,7 @@ import { isMatchmakingLoading } from '../matchmaking/matchmaking-reducer'
 import { SearchingMatchNavEntry } from '../matchmaking/searching-match-nav-entry'
 import { RaisedButton, useButtonHotkey } from '../material/button'
 import { ClickableSubheader } from '../material/left-nav/clickable-subheader'
+import { Entry } from '../material/left-nav/entry'
 import LeftNav from '../material/left-nav/left-nav'
 import Section from '../material/left-nav/section'
 import Subheader from '../material/left-nav/subheader'
@@ -45,6 +45,7 @@ import { leaveParty } from '../parties/action-creators'
 import { PartyNavEntry } from '../parties/party-nav-entry'
 import { useAppDispatch, useAppSelector } from '../redux-hooks'
 import { TIMING_LONG, openSnackbar } from '../snackbars/action-creators'
+import { useStableCallback } from '../state-hooks'
 import { colorTextSecondary } from '../styles/colors'
 import { overline, singleLine } from '../styles/typography'
 import { getBatchUserInfo, navigateToUserProfile } from '../users/action-creators'
@@ -89,14 +90,18 @@ const StyledPatreonIcon = styled(PatreonIcon)`
 `
 
 const APP_MENU_LINKS: Array<[text?: string, icon?: React.ReactNode, url?: string]> = [
-  ['Discord', <DiscordIcon />, 'https://discord.gg/S8dfMx94a4'],
-  ['Twitter', <StyledTwitterIcon />, 'https://twitter.com/ShieldBatteryBW'],
-  ['GitHub', <GitHubIcon />, 'https://github.com/ShieldBattery/ShieldBattery'],
+  ['Discord', <DiscordIcon key='discord' />, 'https://discord.gg/S8dfMx94a4'],
+  ['Twitter', <StyledTwitterIcon key='twitter' />, 'https://twitter.com/ShieldBatteryBW'],
+  ['GitHub', <GitHubIcon key='github' />, 'https://github.com/ShieldBattery/ShieldBattery'],
   [],
   ['Support the project'],
-  ['Patreon', <StyledPatreonIcon />, 'https://patreon.com/tec27'],
-  ['GitHub Sponsors', <GitHubIcon />, 'https://github.com/sponsors/ShieldBattery'],
-  ['Ko-fi', <KofiColorIcon />, 'https://ko-fi.com/tec27'],
+  ['Patreon', <StyledPatreonIcon key='patreon' />, 'https://patreon.com/tec27'],
+  [
+    'GitHub Sponsors',
+    <GitHubIcon key='githubsponsors' />,
+    'https://github.com/sponsors/ShieldBattery',
+  ],
+  ['Ko-fi', <KofiColorIcon key='kofi' />, 'https://ko-fi.com/tec27'],
 ]
 
 const MENU_TRANSITION: UseTransitionProps<boolean> = {
@@ -398,6 +403,17 @@ function ConnectedWhisperNavEntry({
   )
 }
 
+function HomeNavEntry() {
+  const { t } = useTranslation()
+  const [pathname] = useLocation()
+
+  return (
+    <Entry link='/' currentPath={pathname}>
+      {t('navigation.leftNav.home', 'Home')}
+    </Entry>
+  )
+}
+
 export function ConnectedLeftNav() {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
@@ -413,22 +429,22 @@ export function ConnectedLeftNav() {
   useButtonHotkey({ ref: joinChannelButtonRef, hotkey: ALT_H })
   useButtonHotkey({ ref: startWhisperButtonRef, hotkey: ALT_W })
 
-  const onLogOutClick = useCallback(() => {
+  const onLogOutClick = useStableCallback(() => {
     closeProfileOverlay()
     dispatch(logOut().action)
-  }, [closeProfileOverlay, dispatch])
-  const onChangelogClick = useCallback(() => {
+  })
+  const onChangelogClick = useStableCallback(() => {
     closeProfileOverlay()
     dispatch(openChangelog())
-  }, [closeProfileOverlay, dispatch])
-  const onEditAccountClick = useCallback(() => {
-    closeProfileOverlay()
-    dispatch(openDialog({ type: DialogType.Account }))
-  }, [closeProfileOverlay, dispatch])
-  const onViewProfileClick = useCallback(() => {
+  })
+  const onViewProfileClick = useStableCallback(() => {
     closeProfileOverlay()
     navigateToUserProfile(selfUser.id, selfUser.name)
-  }, [closeProfileOverlay, selfUser.id, selfUser.name])
+  })
+  const onReportBugClick = useStableCallback(() => {
+    closeProfileOverlay()
+    dispatch(openDialog({ type: DialogType.BugReport }))
+  })
 
   const footer = (
     <>
@@ -492,20 +508,22 @@ export function ConnectedLeftNav() {
       {IS_ELECTRON ? <ActiveGameSection /> : null}
       {IS_ELECTRON ? <LobbySection /> : null}
       {IS_ELECTRON ? <PartySection /> : null}
-      {MULTI_CHANNEL ? (
-        <Tooltip
-          text={t('navigation.leftNav.joinChannel', 'Join a channel (Alt + H)')}
-          position='right'>
-          <ClickableSubheader
-            ref={joinChannelButtonRef}
-            to={urlPath`/chat/list`}
-            icon={<MaterialIcon icon='add' />}>
-            {t('navigation.leftNav.chatChannels', 'Chat channels')}
-          </ClickableSubheader>
-        </Tooltip>
-      ) : (
-        <Subheader>{t('navigation.leftNav.chatChannels', 'Chat channels')}</Subheader>
-      )}
+      {NEWS_PAGE ? (
+        <>
+          <HomeNavEntry />
+          <SectionSpacer />
+        </>
+      ) : null}
+      <Tooltip
+        text={t('navigation.leftNav.joinChannel', 'Join a channel (Alt + H)')}
+        position='right'>
+        <ClickableSubheader
+          ref={joinChannelButtonRef}
+          href={urlPath`/chat/list`}
+          icon={<MaterialIcon icon='add' />}>
+          {t('navigation.leftNav.chatChannels', 'Chat channels')}
+        </ClickableSubheader>
+      </Tooltip>
       <Section>
         {Array.from(chatChannels.values(), c => (
           <ConnectedChatNavEntry key={c} channelId={c} onLeave={onChannelLeave} />
@@ -538,11 +556,13 @@ export function ConnectedLeftNav() {
           text={t('navigation.leftNav.viewChangelog', 'View changelog')}
           onClick={onChangelogClick}
         />
-        <MenuItem
-          icon={<MaterialIcon icon='edit' />}
-          text={t('navigation.leftNav.editAccount', 'Edit account')}
-          onClick={onEditAccountClick}
-        />
+        {IS_ELECTRON ? (
+          <MenuItem
+            icon={<MaterialIcon icon='bug_report' />}
+            text={t('navigation.leftNav.reportBug', 'Report a bug')}
+            onClick={onReportBugClick}
+          />
+        ) : undefined}
         <MenuDivider />
         <MenuItem
           icon={<MaterialIcon icon='logout' />}
@@ -573,5 +593,9 @@ export function LoggedOutLeftNav() {
   )
 
   // TODO(tec27): Add some encouragement to log in
-  return <LeftNav header={<LockupAndMenu />} footer={footer} />
+  return (
+    <LeftNav header={<LockupAndMenu />} footer={footer}>
+      {NEWS_PAGE ? <HomeNavEntry /> : null}
+    </LeftNav>
+  )
 }

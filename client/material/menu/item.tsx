@@ -44,10 +44,21 @@ export interface MenuItemProps {
   icon?: React.ReactNode
   focused?: boolean
   dense?: boolean
+  trailingContent?: React.ReactNode
+  testName?: string
   onClick?: (event: React.MouseEvent) => void
 }
 
-export function MenuItem({ text, icon, dense, focused, onClick, className }: MenuItemProps) {
+export function MenuItem({
+  text,
+  icon,
+  dense,
+  focused,
+  trailingContent,
+  onClick,
+  className,
+  testName,
+}: MenuItemProps) {
   const [buttonProps, rippleRef] = useButtonState({ onClick })
   const buttonRef = useRef<HTMLButtonElement>(null)
 
@@ -60,9 +71,15 @@ export function MenuItem({ text, icon, dense, focused, onClick, className }: Men
   }, [focused])
 
   return (
-    <Item ref={buttonRef} className={className} $dense={dense} {...buttonProps}>
+    <Item
+      ref={buttonRef}
+      className={className}
+      $dense={dense}
+      data-test={testName}
+      {...buttonProps}>
       {icon ? <ItemIcon>{icon}</ItemIcon> : null}
       <ItemText>{text}</ItemText>
+      {trailingContent}
       <Ripple ref={rippleRef} />
     </Item>
   )

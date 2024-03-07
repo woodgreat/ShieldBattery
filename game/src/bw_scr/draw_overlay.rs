@@ -1,30 +1,38 @@
-mod production;
-
 use std::borrow::Cow;
 use std::mem;
-use std::sync::Arc;
-use std::time::Instant;
+use std::ptr::NonNull;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
+use bw_dat::dialog::{Control, Dialog};
+use bw_dat::{Race, Unit};
+use egui::load::SizedTexture;
+use egui::style::TextStyle;
 use egui::{
-    Align, Align2, Color32, Event, Id, Label, Layout, Key, PointerButton, Pos2, Rect, Response,
-    Sense, Slider, TextureId, Vec2, Widget,
+    Align, Align2, Color32, Event, FontData, FontDefinitions, Id, Key, Label, Layout,
+    PointerButton, Pos2, Rect, Response, Sense, Slider, TextureId, Vec2, Widget,
 };
-use egui::style::{TextStyle};
 use winapi::shared::windef::{HWND, POINT};
-
-use bw_dat::{Unit, Race};
 
 use crate::bw;
 use crate::bw::apm_stats::ApmStats;
+use crate::game_thread::{self, GameThreadMessage};
+use crate::network_manager;
 
-use self::production::{ProductionState};
+use self::production::ProductionState;
+
+mod production;
 
 pub struct OverlayState {
     ctx: egui::Context,
     start_time: Instant,
+    /// Enables / disables UI interaction during OverlayState::step.
+    /// Based on what BW dialogs are visible.
+    ui_active: bool,
     ui_rects: Vec<Rect>,
     events: Vec<Event>,
     production: ProductionState,
+    replay_panels: ReplayPanelState,
     out_state: OutState,
     window_size: (u32, u32),
     /// If (and only if) a mouse button down event was captured,
@@ -39,6 +47,12 @@ pub struct OverlayState {
     /// Winapi coords, egui coords
     last_mouse_pos: ((i16, i16), Pos2),
     replay_ui_values: ReplayUiValues,
+    player_vision_was_auto_disabled: [bool; 8],
+    replay_start_handled: bool,
+    draw_layer: u16,
+    network_debug_state: network_manager::DebugState,
+    network_debug_info: NetworkDebugInfo,
+    dialog_debug_inspect_children: bool,
 }
 
 struct ReplayUiValues {
@@ -52,11 +66,34 @@ struct ReplayUiValues {
     production_max: u32,
 }
 
+struct ReplayPanelState {
+    hotkeys_active: bool,
+    show_statistics: bool,
+    show_production: bool,
+    show_console: bool,
+}
+
+/// One request from async thread will be active at once, check if it had completed
+/// when rendering a new frame, and if it has then start a new request.
+/// Otherwise re-render with old data.
+///
+/// Maybe this should be at BwScr level so that this module is more contained without
+/// triggering changes and having dependencies on rest of the program?
+struct NetworkDebugInfo {
+    current_request: Option<Arc<OnceLock<network_manager::DebugInfo>>>,
+    previous: Option<Arc<OnceLock<network_manager::DebugInfo>>>,
+    previous_time: Instant,
+}
+
 /// State that will be in StepOutput; mutated through &mut self
 /// during child functions of step()
 struct OutState {
     replay_visions: u8,
-    select_unit: Option<Unit>
+    select_unit: Option<Unit>,
+    // true => show, false => hide
+    show_hide_control: Option<(Control, bool)>,
+    show_hide_graphic_layer: Option<(u8, bool)>,
+    show_console: bool,
 }
 
 pub struct StepOutput {
@@ -64,11 +101,17 @@ pub struct StepOutput {
     pub primitives: Vec<egui::ClippedPrimitive>,
     pub replay_visions: u8,
     pub select_unit: Option<Unit>,
+    pub draw_layer: u16,
+    // true => show, false => hide
+    pub show_hide_control: Option<(Control, bool)>,
+    pub show_hide_graphic_layer: Option<(u8, bool)>,
+    pub show_console: bool,
 }
 
 /// Bw globals used by OverlayState::step
 pub struct BwVars {
     pub is_replay_or_obs: bool,
+    pub is_team_game: bool,
     pub game: bw_dat::Game,
     pub players: *mut bw::Player,
     pub main_palette: *mut u8,
@@ -76,8 +119,12 @@ pub struct BwVars {
     pub use_rgb_colors: u8,
     pub replay_visions: u8,
     pub active_units: bw::unit::UnitIterator,
+    pub first_player_unit: *mut *mut bw::Unit,
+    pub first_dialog: Option<Dialog>,
+    pub graphic_layers: Option<NonNull<bw::GraphicLayer>>,
 }
 
+#[derive(Copy, Clone)]
 pub enum Texture {
     StatRes(u16),
     CmdIcon(u16),
@@ -100,10 +147,10 @@ impl Texture {
 
     pub fn from_egui_user_id(val: u64) -> Option<Texture> {
         Some(match val {
-            TEXTURE_FIRST_STATRES ..= TEXTURE_LAST_STATRES => {
+            TEXTURE_FIRST_STATRES..=TEXTURE_LAST_STATRES => {
                 Texture::StatRes((val - TEXTURE_FIRST_STATRES) as u16)
             }
-            TEXTURE_FIRST_CMDICON ..= TEXTURE_LAST_CMDICON => {
+            TEXTURE_FIRST_CMDICON..=TEXTURE_LAST_CMDICON => {
                 Texture::CmdIcon((val - TEXTURE_FIRST_CMDICON) as u16)
             }
             _ => return None,
@@ -118,7 +165,9 @@ trait UiExt {
 
 impl UiExt for egui::Ui {
     fn add_fixed_width<W: Widget>(&mut self, widget: W, width: f32) {
-        self.with_fixed_width(width, |ui| { ui.add(widget); })
+        self.with_fixed_width(width, |ui| {
+            ui.add(widget);
+        })
     }
 
     fn with_fixed_width<F: FnOnce(&mut Self)>(&mut self, width: f32, add_widgets: F) {
@@ -139,10 +188,25 @@ impl UiExt for egui::Ui {
 impl OverlayState {
     pub fn new() -> OverlayState {
         let ctx = egui::Context::default();
+
+        // Add our custom fonts
+        let mut fonts = FontDefinitions::default();
+        fonts.font_data.insert(
+            "inter".to_string(),
+            FontData::from_static(include_bytes!("../../files/fonts/Inter-Regular.ttf")),
+        );
+        fonts
+            .families
+            .entry(egui::FontFamily::Proportional)
+            .or_default()
+            .insert(0, "inter".to_string());
+        ctx.set_fonts(fonts);
+
         let mut style_arc = ctx.style();
         let style = Arc::make_mut(&mut style_arc);
         // Make windows transparent
-        style.visuals.window_fill = style.visuals.window_fill.gamma_multiply(0.5);
+        style.visuals.window_fill = style.visuals.window_fill.gamma_multiply(0.7);
+
         // Increase default font sizes a bit.
         // 16.0 seems to give a size that roughly matches with the smallest text size BW uses.
         let text_styles = [
@@ -160,18 +224,28 @@ impl OverlayState {
         OverlayState {
             ctx,
             start_time: Instant::now(),
+            ui_active: false,
             ui_rects: Vec::new(),
             events: Vec::new(),
             production: ProductionState::new(),
+            replay_panels: ReplayPanelState {
+                hotkeys_active: false, // Will be set true if replay / obs at step()
+                show_statistics: true,
+                show_production: true,
+                show_console: true,
+            },
             out_state: OutState {
                 replay_visions: 0,
                 select_unit: None,
+                show_hide_control: None,
+                show_hide_graphic_layer: None,
+                show_console: true,
             },
             captured_mouse_down: [false; 2],
             mouse_down: [false; 2],
             window_size: (100, 100),
             screen_size: (100, 100),
-            last_mouse_pos: ((0, 0), Pos2 { x: 0.0, y: 0.0}),
+            last_mouse_pos: ((0, 0), Pos2 { x: 0.0, y: 0.0 }),
             replay_ui_values: ReplayUiValues {
                 name_width: 140.0,
                 resource_width: 80.0,
@@ -182,6 +256,24 @@ impl OverlayState {
                 production_image_size: 40.0,
                 production_max: 16,
             },
+            player_vision_was_auto_disabled: [false; 8],
+            replay_start_handled: false,
+            // - 26 is the first layer that is drawn above minimap
+            // (Or maybe a tie with later draw taking prioriry)
+            // - 22 is first above F10 menu
+            // - 20 is first above the console UI
+            // Since egui doesn't really have a way (for now?) to tell some
+            // of the output to be drawn on different layer from others
+            // (Other than managing multiple `egui::Context`s and drawing output
+            // from different context on different layer),
+            // going to set the layer higher on debug builds so that the debug
+            // window is nicer to use.
+            // Layer 19 as default could be fine too, but probably better to
+            // go bit over BW console UI if our UI ever ends up being that big.
+            draw_layer: if cfg!(debug_assertions) { 26 } else { 21 },
+            network_debug_state: network_manager::DebugState::new(),
+            network_debug_info: NetworkDebugInfo::new(),
+            dialog_debug_inspect_children: false,
         }
     }
 
@@ -208,6 +300,7 @@ impl OverlayState {
         } else {
             1.0
         };
+        self.ctx.set_pixels_per_point(pixels_per_point);
 
         // This exists for the weird 3412x1920 render target, since
         // 3412.0 / (1920.0 / 1080.0) ~= 1919.25
@@ -219,12 +312,10 @@ impl OverlayState {
             // but resolution floats are fine..
             if (rounded as u32) & 1 == 0 {
                 rounded
+            } else if input < rounded {
+                rounded - 1.0
             } else {
-                if input < rounded {
-                    rounded - 1.0
-                } else {
-                    rounded + 1.0
-                }
+                rounded + 1.0
             }
         }
 
@@ -241,11 +332,10 @@ impl OverlayState {
             },
         };
         let time = self.start_time.elapsed().as_secs_f64();
-        let events = mem::replace(&mut self.events, Vec::new());
-        let has_focus = true;
+        let events = mem::take(&mut self.events);
+        let focused = true;
         let input = egui::RawInput {
             screen_rect: Some(screen_rect),
-            pixels_per_point: Some(pixels_per_point),
             // BW doesn't guarantee texture larger than 2048 pixels working
             // (But it depends on user's system)
             max_texture_side: Some(2048),
@@ -255,90 +345,247 @@ impl OverlayState {
             events,
             hovered_files: Vec::new(),
             dropped_files: Vec::new(),
-            has_focus,
+            focused,
+            ..Default::default()
         };
         self.ui_rects.clear();
+        self.ui_active = if let Some(dialog) = bw.first_dialog {
+            // Checking if "Minimap" is the first dialog *should* be a good way
+            // to figure out if there are any BW menus open, as they *should*
+            // be placed as the first dialog, before minimap.
+            // Scanning the dialog list for the following names would be more
+            // fool-proof though (But how complete is this list? At least it is
+            // missing surrender menu, victory / defeat popups, anything else?)
+            // GameMenu
+            // HelpMenu
+            // Help
+            // Tips_Dlg
+            // ObjectDlg
+            // AbrtMenu
+            // QuitRepl
+            // Quit
+            // IDD_OPTIONS_POPUP
+            dialog.as_control().string() == "Minimap"
+        } else {
+            true
+        };
         let ctx = self.ctx.clone();
         self.out_state = OutState {
             replay_visions: bw.replay_visions,
             select_unit: None,
+            show_hide_control: None,
+            show_hide_graphic_layer: None,
+            show_console: self.replay_panels.show_console,
         };
+        let chat_textbox_open = bw::iter_dialogs(bw.first_dialog)
+            .find(|x| x.as_control().string() == "TextBox")
+            .and_then(|chat_dlg| chat_dlg.children().find(|x| x.id() == 7))
+            .map(|entry_textbox_ctrl| !entry_textbox_ctrl.is_hidden())
+            .unwrap_or(false);
+        self.replay_panels.hotkeys_active =
+            bw.is_replay_or_obs && self.ui_active && !chat_textbox_open;
         let output = ctx.run(input, |ctx| {
             if bw.is_replay_or_obs {
                 self.add_replay_ui(bw, apm, ctx);
             }
             let debug = cfg!(debug_assertions);
             if debug {
-                self.add_debug_ui(ctx);
+                self.add_debug_ui(bw, ctx);
             }
         });
         StepOutput {
             textures_delta: output.textures_delta,
-            primitives: self.ctx.tessellate(output.shapes),
+            primitives: self.ctx.tessellate(output.shapes, pixels_per_point),
             replay_visions: self.out_state.replay_visions,
             select_unit: self.out_state.select_unit,
+            draw_layer: self.draw_layer,
+            show_hide_control: self.out_state.show_hide_control,
+            show_hide_graphic_layer: self.out_state.show_hide_graphic_layer,
+            show_console: self.out_state.show_console,
         }
     }
 
-    fn add_debug_ui(&mut self, ctx: &egui::Context) {
+    fn add_debug_ui(&mut self, bw: &BwVars, ctx: &egui::Context) {
         let res = egui::Window::new("Debug")
             .default_pos((0.0, 0.0))
             .default_open(false)
             .movable(true)
             .show(ctx, |ui| {
-                ui.collapsing("Egui settings", |ui| {
-                    egui::ScrollArea::vertical()
-                        .max_height(self.screen_size.1 as f32 * 0.8)
-                        .show(ui, |ui| {
-                            ctx.settings_ui(ui);
-                        });
-                });
-                ui.collapsing("Replay UI", |ui| {
-                    let v = &mut self.replay_ui_values;
-                    for (var, text) in [
-                        (&mut v.name_width, "Name"),
-                        (&mut v.resource_width, "Resources"),
-                        (&mut v.supply_width, "Supply"),
-                        (&mut v.workers_width, "Workers"),
-                        (&mut v.apm_width, "APM"),
-                        (&mut v.production_pos.0, "Production X"),
-                        (&mut v.production_pos.1, "Production Y"),
-                        (&mut v.production_image_size, "Production size"),
-                    ] {
-                        ui.add(Slider::new(var, 0.0..=200.0).text(text));
-                    }
-                    for (var, text) in [
-                        (&mut v.production_max, "Production max"),
-                    ] {
-                        ui.add(Slider::new(var, 0u32..=50).text(text));
-                    }
-                });
-                let msg = format!("Windows mouse {}, {},\n    egui {}, {}",
-                    self.last_mouse_pos.0.0,
-                    self.last_mouse_pos.0.1,
-                    self.last_mouse_pos.1.x,
-                    self.last_mouse_pos.1.y,
-                );
-                ui.label(egui::RichText::new(msg).size(18.0));
-                let msg = format!("Windows size {}, {}, egui size {}, {}",
-                    self.window_size.0,
-                    self.window_size.1,
-                    self.screen_size.0,
-                    self.screen_size.1,
-                );
-                ui.label(egui::RichText::new(msg).size(18.0));
-                let modifiers = current_egui_modifiers();
-                let msg = format!("Ctrl {}, Alt {}, shift {}",
-                    modifiers.ctrl,
-                    modifiers.alt,
-                    modifiers.shift,
-                );
-                ui.label(egui::RichText::new(msg).size(18.0));
+                egui::ScrollArea::vertical()
+                    .max_height(self.screen_size.1 as f32 * 0.9)
+                    .show(ui, |ui| {
+                        self.add_debug_ui_contents(bw, ctx, ui);
+                    });
             });
-        self.add_ui_rect(&res);
+        self.force_add_ui_rect(&res);
+    }
+
+    fn add_debug_ui_contents(&mut self, bw: &BwVars, ctx: &egui::Context, ui: &mut egui::Ui) {
+        ui.collapsing("Egui settings", |ui| {
+            ctx.settings_ui(ui);
+        });
+        ui.collapsing("Replay UI", |ui| {
+            let v = &mut self.replay_ui_values;
+            for (var, text) in [
+                (&mut v.name_width, "Name"),
+                (&mut v.resource_width, "Resources"),
+                (&mut v.supply_width, "Supply"),
+                (&mut v.workers_width, "Workers"),
+                (&mut v.apm_width, "APM"),
+                (&mut v.production_pos.0, "Production X"),
+                (&mut v.production_pos.1, "Production Y"),
+                (&mut v.production_image_size, "Production size"),
+            ] {
+                ui.add(Slider::new(var, 0.0..=200.0).text(text));
+            }
+            #[allow(clippy::single_element_loop)]
+            for (var, text) in [(&mut v.production_max, "Production max")] {
+                ui.add(Slider::new(var, 0u32..=50).text(text));
+            }
+        });
+        ui.collapsing("Network", |ui| {
+            if let Some((values, time)) = self.network_debug_info.get() {
+                values.draw(ui, &mut self.network_debug_state);
+                let msg = format!("Updated {}ms ago", time.as_millis());
+                ui.label(egui::RichText::new(msg).size(18.0));
+            }
+        });
+        ui.collapsing("BW Dialogs", |ui| {
+            self.dialog_debug_ui(bw, ui);
+        });
+        ui.collapsing("Pre-SC:R graphic layers", |ui| {
+            ui.label("Click to show / hide");
+            if let Some(layers) = bw.graphic_layers {
+                for i in 0..8 {
+                    unsafe {
+                        let layer = layers.as_ptr().add(i as usize);
+                        let has_draw_func = (*layer).draw_func.is_some();
+                        let was_hidden = (*layer).draw == 0;
+                        let mut hidden = was_hidden;
+                        let mut name = format!("Layer {i}");
+                        if !has_draw_func {
+                            name.push_str(" (No draw func set)");
+                        }
+                        ui.toggle_value(&mut hidden, name);
+                        if hidden != was_hidden && has_draw_func {
+                            self.out_state.show_hide_graphic_layer = Some((i, !hidden));
+                        }
+                    }
+                }
+            }
+        });
+        ui.add(Slider::new(&mut self.draw_layer, 0u16..=0x1f).text("Draw layer"));
+        let msg = format!(
+            "Windows mouse {}, {},\n    egui {}, {}",
+            self.last_mouse_pos.0 .0,
+            self.last_mouse_pos.0 .1,
+            self.last_mouse_pos.1.x,
+            self.last_mouse_pos.1.y,
+        );
+        ui.label(egui::RichText::new(msg).size(18.0));
+        let msg = format!(
+            "Windows size {}, {}, egui size {}, {}",
+            self.window_size.0, self.window_size.1, self.screen_size.0, self.screen_size.1,
+        );
+        ui.label(egui::RichText::new(msg).size(18.0));
+        let modifiers = current_egui_modifiers();
+        let msg = format!(
+            "Ctrl {}, Alt {}, shift {}",
+            modifiers.ctrl, modifiers.alt, modifiers.shift,
+        );
+        ui.label(egui::RichText::new(msg).size(18.0));
+    }
+
+    fn dialog_debug_ui(&mut self, bw: &BwVars, ui: &mut egui::Ui) {
+        if !self.dialog_debug_inspect_children {
+            ui.label("Click to show / hide (Hidden dialogs stay interactable)");
+        }
+        ui.checkbox(&mut self.dialog_debug_inspect_children, "Inspect children");
+        for dialog in bw::iter_dialogs(bw.first_dialog) {
+            let ctrl = dialog.as_control();
+            let name = ctrl.string();
+            // (Coordinates are based on 4:3 => 640x480)
+            let rect = ctrl.screen_coords();
+            let name = format!(
+                "{} {},{},{},{}",
+                name, rect.left, rect.top, rect.right, rect.bottom
+            );
+            if !self.dialog_debug_inspect_children {
+                let mut hidden = ctrl.is_hidden();
+                ui.toggle_value(&mut hidden, name);
+                if hidden != ctrl.is_hidden() {
+                    self.out_state.show_hide_control = Some((ctrl, !hidden));
+                }
+            } else {
+                // Pointer address as id_source is stable for lifetime
+                // of the dialog. Maybe will have small issues with ones that
+                // get deleted and readded sometimes using same address?
+                egui::CollapsingHeader::new(name)
+                    .id_source(*dialog as usize)
+                    .show(ui, |ui| {
+                        for ctrl in dialog.children() {
+                            let rect = ctrl.dialog_coords();
+                            let name = format!(
+                                "{} {}: '{}' {},{},{},{}",
+                                control_type_name(ctrl.control_type()),
+                                ctrl.id(),
+                                ctrl.string(),
+                                rect.left,
+                                rect.top,
+                                rect.right,
+                                rect.bottom,
+                            );
+                            let mut hidden = ctrl.is_hidden();
+                            ui.toggle_value(&mut hidden, name);
+                            if hidden != ctrl.is_hidden() {
+                                self.out_state.show_hide_control = Some((ctrl, !hidden));
+                            }
+                        }
+                    });
+            }
+        }
     }
 
     fn add_replay_ui(&mut self, bw: &BwVars, apm: Option<&ApmStats>, ctx: &egui::Context) {
+        let frame = bw.game.frame_count();
+        if frame == 0 {
+            // Explicit init at start of the game to handle replay restarts /
+            // if we eventually support keeping client over multiple games.
+            self.replay_start_handled = false;
+        }
+        if frame >= 1 && !self.replay_start_handled {
+            // Replay start;
+            // Disable vision for any players that don't own units (Assuming they're observers)
+            self.replay_start_handled = true;
+            self.player_vision_was_auto_disabled = [false; 8];
+            for i in 0..8 {
+                if !player_has_units(bw, i) && !bw.is_team_game {
+                    let mask = 1 << i;
+                    self.out_state.replay_visions &= !mask;
+                    self.player_vision_was_auto_disabled[i as usize] = true;
+                }
+            }
+        } else if self.replay_start_handled {
+            // If we had disabled the vision but a player has suddenly gained units,
+            // enable the vision.
+            for i in 0..8 {
+                if self.player_vision_was_auto_disabled[i as usize] && player_has_units(bw, i) {
+                    let mask = 1 << i;
+                    self.out_state.replay_visions |= mask;
+                    self.player_vision_was_auto_disabled[i as usize] = false;
+                }
+            }
+        }
+        if self.replay_panels.show_statistics {
+            self.add_replay_statistics(bw, apm, ctx);
+        }
+        self.update_replay_production(bw);
+        if self.replay_panels.show_production {
+            self.add_production_ui(bw, ctx);
+        }
+    }
+
+    fn add_replay_statistics(&mut self, bw: &BwVars, apm: Option<&ApmStats>, ctx: &egui::Context) {
         let res = egui::Window::new("Replay_Resources")
             .anchor(Align2::RIGHT_TOP, Vec2 { x: -10.0, y: 10.0 })
             .movable(false)
@@ -350,7 +597,23 @@ impl OverlayState {
                 let mut players_shown = 0;
                 let mut team_players_shown = 0;
                 let mut prev_team = 0;
+                #[allow(clippy::explicit_counter_loop)]
                 for (team, player_id) in replay_players_by_team(bw) {
+                    // Skip players with no units -- assuming they're UMS map observers.
+                    // UMS map with triggers can have players sometimes be
+                    // without units until triggers let them play, but probably this
+                    // won't be too relevant.
+                    // But show all players in team games even though units are owned by one
+                    // of them.
+                    if !player_has_units(bw, player_id) && !bw.is_team_game {
+                        // But if we have player's vision enabled (Can be done through
+                        // vision button above minimap / player having had units before),
+                        // show player's name so that the user (hopefully) realizes that
+                        // they provide vision.
+                        if !has_player_vision(bw, player_id) {
+                            continue;
+                        }
+                    }
                     if team != prev_team {
                         prev_team = team;
                         team_players_shown = 0;
@@ -363,11 +626,8 @@ impl OverlayState {
                         ui.scope(|ui| {
                             // Separators seem hard to see with 1.0 default
                             // stroke width.
-                            let stroke = &mut ui.style_mut()
-                                .visuals
-                                .widgets
-                                .noninteractive
-                                .bg_stroke;
+                            let stroke =
+                                &mut ui.style_mut().visuals.widgets.noninteractive.bg_stroke;
                             stroke.width = 2.0;
                             ui.separator();
                         });
@@ -386,14 +646,18 @@ impl OverlayState {
                         } else {
                             self.out_state.replay_visions |= mask;
                         }
+                        if let Some(val) = self
+                            .player_vision_was_auto_disabled
+                            .get_mut(player_id as usize)
+                        {
+                            *val = false;
+                        }
                     }
                     players_shown += 1;
                     team_players_shown += 1;
                 }
             });
         self.add_ui_rect(&res);
-        self.update_replay_production(bw);
-        self.add_production_ui(bw, ctx);
     }
 
     fn add_player_info(&self, ui: &mut egui::Ui, id: Id, info: &PlayerInfo) -> Response {
@@ -425,7 +689,7 @@ impl OverlayState {
             let worker_icon = Texture::CmdIcon(match info.race {
                 0 => bw_dat::unit::DRONE.0,
                 1 => bw_dat::unit::SCV.0,
-                2 | _ => bw_dat::unit::PROBE.0,
+                _ => bw_dat::unit::PROBE.0,
             });
             info.add_icon_text_color(
                 ui,
@@ -438,22 +702,33 @@ impl OverlayState {
             // TODO Could add other races if player has supply for them?
             // But then each PlayerInfo render should agree on how many race supplies are drawn
             // to keep things on a grid.
-            let (current, max) = info.supplies.get(info.race as usize)
+            let (current, max) = info
+                .supplies
+                .get(info.race as usize)
                 .copied()
                 .unwrap_or((0, 0));
             let supply_text = format!("{} / {}", current, max);
             let supply_icon = Texture::StatRes(4 + info.race.min(2u8) as u16);
             info.add_icon_text(ui, supply_icon, &supply_text, supply_width);
 
-            let label = egui::Label::new(egui::RichText::new("APM ").strong());
+            let label = Label::new(egui::RichText::new("APM "));
             ui.add(label);
-            let label = egui::Label::new(info.apm.to_string());
+            let label = Label::new(egui::RichText::new(info.apm.to_string()).strong());
             ui.add_fixed_width(label, apm_width);
             ui.interact(ui.min_rect(), id, Sense::click())
-        }).inner
+        })
+        .inner
     }
 
+    /// Adds UI rect (Making the area interactable by user) if it was decided that
+    /// no higher-priority BW menus are active.
     fn add_ui_rect<T>(&mut self, response: &Option<egui::InnerResponse<T>>) {
+        if self.ui_active {
+            self.force_add_ui_rect(response);
+        }
+    }
+
+    fn force_add_ui_rect<T>(&mut self, response: &Option<egui::InnerResponse<T>>) {
         if let Some(res) = response {
             self.ui_rects.push(res.response.rect);
         }
@@ -470,9 +745,10 @@ impl OverlayState {
             return None;
         }
         // Otherwise if the cursor is on the overlays, return 0 for regular pointer.
-        let mouse_on_ui = self.ui_rects.iter().any(|rect| {
-            rect.contains(self.last_mouse_pos.1)
-        });
+        let mouse_on_ui = self
+            .ui_rects
+            .iter()
+            .any(|rect| rect.contains(self.last_mouse_pos.1));
         if mouse_on_ui {
             return Some(0);
         }
@@ -539,7 +815,7 @@ impl OverlayState {
                         shift: wparam & MK_SHIFT != 0,
                         mac_cmd: false,
                         command: wparam & MK_CONTROL != 0,
-                    }
+                    },
                 });
                 Some(0)
             }
@@ -561,24 +837,29 @@ impl OverlayState {
                 self.events.push(Event::Scroll(Vec2 { x: 0.0, y: amount }));
                 Some(0)
             }
-            WM_KEYDOWN | WM_KEYUP => {
-                if !self.ctx.wants_keyboard_input() {
-                    return None;
-                }
+            WM_KEYDOWN | WM_KEYUP | WM_SYSKEYDOWN | WM_SYSKEYUP => {
+                let mut modifiers = current_egui_modifiers();
+                let is_syskey = matches!(msg, WM_SYSKEYDOWN | WM_SYSKEYUP);
+                let pressed = matches!(msg, WM_KEYDOWN | WM_SYSKEYDOWN);
+                modifiers.alt |= is_syskey;
                 let vkey = wparam as i32;
                 if let Some(key) = vkey_to_egui_key(vkey) {
-                    let modifiers = current_egui_modifiers();
-                    let pressed = msg == WM_KEYDOWN;
-                    self.events.push(Event::Key {
-                        key,
-                        pressed,
-                        // Could get repeat count from param, but egui docs say that
-                        // it will be automatically done anyway by egui.
-                        repeat: false,
-                        modifiers,
-                    });
+                    if !is_syskey && self.ctx.wants_keyboard_input() {
+                        self.events.push(Event::Key {
+                            key,
+                            pressed,
+                            // Could get repeat count from param, but egui docs say that
+                            // it will be automatically done anyway by egui.
+                            repeat: false,
+                            modifiers,
+                        });
+                        return Some(0);
+                    }
+                    if pressed && self.check_replay_hotkey(&modifiers, key) {
+                        return Some(0);
+                    }
                 }
-                Some(0)
+                None
             }
             WM_CHAR => {
                 if !self.ctx.wants_keyboard_input() {
@@ -598,6 +879,37 @@ impl OverlayState {
             }
             _ => None,
         }
+    }
+
+    fn check_replay_hotkey(&mut self, _modifiers: &egui::Modifiers, key: Key) -> bool {
+        let panels = &mut self.replay_panels;
+        if panels.hotkeys_active {
+            match key {
+                Key::A => {
+                    // Show if any were hidden, else hide
+                    let show =
+                        !panels.show_statistics || !panels.show_production || !panels.show_console;
+                    panels.show_statistics = show;
+                    panels.show_production = show;
+                    panels.show_console = show;
+                    return true;
+                }
+                Key::F => {
+                    panels.show_production = !panels.show_production;
+                    return true;
+                }
+                Key::W => {
+                    panels.show_console = !panels.show_console;
+                    return true;
+                }
+                Key::E => {
+                    panels.show_statistics = !panels.show_statistics;
+                    return true;
+                }
+                _ => (),
+            }
+        }
+        false
     }
 
     fn window_pos_to_egui(&self, x: i32, y: i32) -> Pos2 {
@@ -629,7 +941,7 @@ impl OverlayState {
             }
         } else {
             let ratio = screen_window_ratio.recip();
-            let y_offset = window_h as f32 * (1.0 - ratio) * 0.5;
+            let y_offset = window_h * (1.0 - ratio) * 0.5;
             let y_div = window_h * ratio;
             Pos2 {
                 x: x as f32 / window_w * screen_w,
@@ -639,27 +951,73 @@ impl OverlayState {
     }
 }
 
+impl NetworkDebugInfo {
+    pub fn new() -> NetworkDebugInfo {
+        NetworkDebugInfo {
+            current_request: None,
+            previous: None,
+            previous_time: Instant::now(),
+        }
+    }
+
+    pub fn get(&mut self) -> Option<(&network_manager::DebugInfo, Duration)> {
+        match self.current_request {
+            Some(ref cur) => {
+                if cur.get().is_some() {
+                    self.previous = self.current_request.take();
+                    self.previous_time = Instant::now();
+                    self.start_request();
+                }
+            }
+            None => {
+                self.start_request();
+            }
+        }
+        let result = self.previous.as_ref()?;
+        let result = result.get()?;
+        Some((result, self.previous_time.elapsed()))
+    }
+
+    fn start_request(&mut self) {
+        let arc = Arc::new(OnceLock::new());
+        self.current_request = Some(arc.clone());
+        game_thread::send_game_msg_to_async(GameThreadMessage::DebugInfoRequest(
+            game_thread::DebugInfoRequest::Network(arc),
+        ));
+    }
+}
+
 /// Yields active players `(team, player_id)`, ordered by team.
 fn replay_players_by_team(bw: &BwVars) -> impl Iterator<Item = (u8, u8)> {
     // Teams are 1-based, but team 0 is used on games without teams.
     let players = bw.players;
-    (0u8..5)
-        .flat_map(move |team| {
-            (0..8).filter_map(move |player_id| {
-                unsafe {
-                    let player = players.add(player_id as usize);
-                    if (*player).team != team {
-                        return None;
-                    }
-                    // Show only human / computer player types
-                    let is_active = matches!((*player).player_type, 1 | 2);
-                    if !is_active {
-                        return None;
-                    }
-                    Some((team, player_id))
+    (0u8..5).flat_map(move |team| {
+        (0..8).filter_map(move |player_id| {
+            unsafe {
+                let player = players.add(player_id as usize);
+                if (*player).team != team {
+                    return None;
                 }
-            })
+                // Show only human / computer player types
+                let is_active = matches!((*player).player_type, 1 | 2);
+                if !is_active {
+                    return None;
+                }
+                Some((team, player_id))
+            }
         })
+    })
+}
+
+fn player_has_units(bw: &BwVars, player_id: u8) -> bool {
+    unsafe { !(*bw.first_player_unit.add(player_id as usize)).is_null() }
+}
+
+fn has_player_vision(bw: &BwVars, player_id: u8) -> bool {
+    match 1u8.checked_shl(player_id as u32) {
+        Some(bit) => bw.replay_visions & bit != 0,
+        None => true,
+    }
 }
 
 struct PlayerInfo {
@@ -675,13 +1033,7 @@ struct PlayerInfo {
 }
 
 impl PlayerInfo {
-    fn add_icon_text(
-        &self,
-        ui: &mut egui::Ui,
-        icon: Texture,
-        text: &str,
-        width: f32,
-    ) {
+    fn add_icon_text(&self, ui: &mut egui::Ui, icon: Texture, text: &str, width: f32) {
         self.add_icon_text_color(ui, icon, text, width, Color32::WHITE)
     }
 
@@ -693,10 +1045,13 @@ impl PlayerInfo {
         width: f32,
         color: Color32,
     ) {
-        let image = egui::Image::new(TextureId::User(icon.to_egui_id()), (24.0, 24.0))
-            .tint(color);
+        let image = egui::Image::new(SizedTexture::new(
+            TextureId::User(icon.to_egui_id()),
+            (24.0, 24.0),
+        ))
+        .tint(color);
         ui.add(image);
-        let label = egui::Label::new(text);
+        let label = Label::new(egui::RichText::new(text).strong());
         ui.add_fixed_width(label, width);
     }
 }
@@ -710,15 +1065,21 @@ unsafe fn player_resources_info(
     let game = bw.game;
     let get_supplies = |race| {
         let used = game.supply_used(player_id, race);
-        let available = game.supply_provided(player_id, race)
+        let available = game
+            .supply_provided(player_id, race)
             .min(game.supply_max(player_id, race));
         // Supply is internally twice the shown value (as zergling / scourge
         // takes 0.5 supply per unit), used supply has to be rounded up
         // when displayed.
         (used.wrapping_add(1) / 2, available / 2)
     };
-    let color =
-        bw::player_color(game, bw.main_palette, bw.use_rgb_colors, bw.rgb_colors, player_id);
+    let color = bw::player_color(
+        game,
+        bw.main_palette,
+        bw.use_rgb_colors,
+        bw.rgb_colors,
+        player_id,
+    );
     let supplies = [
         get_supplies(Race::Zerg),
         get_supplies(Race::Terran),
@@ -736,10 +1097,7 @@ unsafe fn player_resources_info(
     if race > 2 {
         race = 0;
     }
-    let vision = match 1u8.checked_shl(player_id as u32) {
-        Some(bit) => bw.replay_visions & bit != 0,
-        None => true,
-    };
+    let vision = has_player_vision(bw, player_id);
     PlayerInfo {
         name,
         color: Color32::from_rgb(color[0], color[1], color[2]),
@@ -765,13 +1123,34 @@ unsafe fn team_vision_mask(bw: &BwVars, player_id: u8) -> u8 {
     let default_value = 1u8 << player_id;
     let mask = (**bw.game).visions[player_id as usize] as u8;
     for i in 0..8 {
-        if mask & (1 << i) != 0 {
-            if (**bw.game).visions[i] != mask as u32 {
-                return default_value;
-            }
+        if mask & (1 << i) != 0 && (**bw.game).visions[i] != mask as u32 {
+            return default_value;
         }
     }
     mask
+}
+
+fn control_type_name(ty: u16) -> Cow<'static, str> {
+    match ty {
+        0x0 => "Dialog",
+        0x1 => "Default button",
+        0x2 => "Button",
+        0x3 => "Option",
+        0x4 => "Checkbox",
+        0x5 => "Image",
+        0x6 => "Slider",
+        0x7 => "Scroll bar",
+        0x8 => "Textbox",
+        0x9 => "Label (Left)",
+        0xa => "Label (Center)",
+        0xb => "Label (Right)",
+        0xc => "Listbox",
+        0xd => "Dropdown",
+        0xe => "Video",
+        0xf => "Webui",
+        _ => return format!("Type_{ty:02x}").into(),
+    }
+    .into()
 }
 
 fn current_egui_modifiers() -> egui::Modifiers {

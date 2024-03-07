@@ -112,39 +112,7 @@ fn panic_hook(info: &std::panic::PanicInfo) {
     static ALREADY_PANICKING: AtomicBool = AtomicBool::new(false);
 
     fn backtrace() -> String {
-        let mut backtrace = String::new();
-        backtrace::trace(|frame| {
-            let ip = frame.ip();
-            let symbol_address = frame.symbol_address();
-
-            backtrace::resolve(ip, |symbol| {
-                let mut line = format!("    {:p}", symbol_address);
-                if symbol_address != ip {
-                    write!(line, " ({:p})", symbol_address).unwrap();
-                }
-                let module = windows::module_from_address(symbol_address as *mut _);
-                if let Some((name, base)) = module {
-                    if let Some(fname) = Path::new(&name).file_name() {
-                        write!(line, " {:?} {:p}", fname, base).unwrap();
-                    } else {
-                        write!(line, " {:?} {:p}", name, base).unwrap();
-                    }
-                }
-                if let Some(name) = symbol.name() {
-                    write!(line, " -- {}", name).unwrap();
-                }
-                if let Some(filename) = symbol.filename() {
-                    if let Some(lineno) = symbol.lineno() {
-                        write!(line, " -- {}:{}", filename.display(), lineno).unwrap();
-                    } else {
-                        write!(line, " -- {}:???", filename.display()).unwrap();
-                    }
-                }
-                writeln!(backtrace, "{}", line).unwrap();
-            });
-            true // keep going to the next frame
-        });
-        backtrace
+        std::backtrace::Backtrace::force_capture().to_string()
     }
 
     let already_panicking = ALREADY_PANICKING.swap(true, Ordering::Relaxed);
@@ -274,7 +242,7 @@ unsafe extern "C" fn scr_init(image: *mut u8) {
 static SELF_HANDLE: AtomicUsize = AtomicUsize::new(0);
 
 #[no_mangle]
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe extern "system" fn DllMain(
     instance: usize,
     ul_reason_for_call: u32,
@@ -300,7 +268,7 @@ unsafe fn load_init_helper() -> Result<InitHelperFn, io::Error> {
                 .map(|path| path.join("sb_init.dll"))
         })
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Unable to get DLL path"))?;
-    let dll = windows::load_library(&dll_path)?;
+    let dll = windows::load_library(dll_path)?;
     let address = dll.proc_address("sb_init")?;
     // Leak the DLL as it should be kept alive for entire process
     mem::forget(dll);

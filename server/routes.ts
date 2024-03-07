@@ -16,6 +16,7 @@ import { FileStoreType, PublicAssetsConfig } from './lib/file-upload/public-asse
 import { applyApiRoutes, resolveAllHttpApis } from './lib/http/http-api'
 import logger from './lib/logging/logger'
 import { getCspNonce } from './lib/security/csp'
+import { getJwt } from './lib/session/jwt-session-middleware'
 import { monotonicNow } from './lib/time/monotonic-now'
 import { WebsocketServer } from './websockets'
 
@@ -25,12 +26,20 @@ function send404() {
   throw new httpErrors.NotFound()
 }
 
+function sendDisabledRobotsTxt(ctx: RouterContext) {
+  ctx.body = 'User-agent: *\nDisallow: /\n'
+}
+
 interface LatestYaml {
   path: string
   releaseDate: string
 }
 
-export default function applyRoutes(app: Koa, websocketServer: WebsocketServer) {
+export default function applyRoutes(
+  app: Koa,
+  websocketServer: WebsocketServer,
+  graphqlOrigin: string,
+) {
   const router = new KoaRouter()
   app.use(router.routes()).use(router.allowedMethods())
 
@@ -56,12 +65,15 @@ export default function applyRoutes(app: Koa, websocketServer: WebsocketServer) 
   router.all('/api/:param*', send404)
 
   // common requests that we don't want to return the regular page for
-  // TODO(tec27): we should probably do something based on expected content type as well
-  router.get('/robots.txt', send404).get('/favicon.ico', send404)
+  const crawlersDisabled = (process.env.SB_DISABLE_CRAWLERS ?? '').toLowerCase() === 'true'
+  router
+    .get('/robots.txt', crawlersDisabled ? sendDisabledRobotsTxt : send404)
+    .get('/favicon.ico', send404)
 
   const publicAssetsConfig = container.resolve(PublicAssetsConfig)
   const serverConfig: ServerConfig = {
     publicAssetsUrl: publicAssetsConfig.publicAssetsUrl,
+    graphqlOrigin,
   }
 
   router.get('/config', async ctx => {
@@ -115,23 +127,8 @@ export default function applyRoutes(app: Koa, websocketServer: WebsocketServer) 
     async (ctx: RouterContext) => {
       const initData: { serverConfig: ServerConfig; session?: ClientSessionInfo } = {
         serverConfig,
-      }
-      if (ctx.session?.userId) {
-        initData.session = {
-          sessionId: ctx.sessionId!,
-          user: {
-            id: ctx.session.userId,
-            name: ctx.session.userName,
-            email: ctx.session.email,
-            emailVerified: ctx.session.emailVerified,
-            acceptedPrivacyVersion: ctx.session.acceptedPrivacyVersion,
-            acceptedTermsVersion: ctx.session.acceptedTermsVersion,
-            acceptedUsePolicyVersion: ctx.session.acceptedUsePolicyVersion,
-            locale: ctx.session.locale,
-          },
-          permissions: ctx.session.permissions,
-          lastQueuedMatchmakingType: ctx.session.lastQueuedMatchmakingType,
-        }
+        session:
+          ctx.session && ctx.state.jwtData ? { ...ctx.session, jwt: await getJwt(ctx) } : undefined,
       }
       await ctx.render('index', {
         initData,

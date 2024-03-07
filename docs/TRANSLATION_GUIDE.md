@@ -1,12 +1,56 @@
 # Translation Guide
 
-Helping with translation in ShieldBattery is easy! First, go to our Weblate portal at https://translation.shieldbattery.net/projects/shieldbattery/app/
+Translation in ShieldBattery is driven by volunteers! We recommend joining our [Discord](https://discord.gg/g5mmNVfZzm) so that you can stay up-to-date with translation changes and easily ask questions.
 
-You'll see a list of supported languages, along with their respective translation status. It looks like this:
+## Basic Process
 
-![Main Weblate Screen](images/weblate-main-screen.png)
+We've tried to make this process as easy as possible so that you can contribute even if you don't have technical expertise. There is some initial setup (instructions below), followed by an easier process to help out.
+
+After you've gotten things set up, the basic process is:
+
+1) Find unfinished strings or strings needing editing in a language of your choice
+2) Figure out a good translation for the provided string and submit it as a suggestion
+3) A ShieldBattery developer will accept or decline your suggestion. If there are issues with it, the developer will try to reach out over Discord to fix them.
+4) The new translation will be pulled into the application, and make it into the next update. Congratulations, you've saved Brood War!
+
+If that sounds good to you, please follow the steps below to get started:
+
+## Dashboard Setup
+
+First, go to our Weblate portal at https://translation.shieldbattery.net/projects/shieldbattery/app/
+
+Create an account by clicking "Register" in the upper right corner. Once your account is created, log in. Then, enter your Settings menu, found here:
+
+![Dashboard View](https://github.com/ShieldBattery/ShieldBattery/assets/93808824/b6cf3b66-f9d3-4d0b-b7db-732e5fac585e)
+
+The first tab is the "Languages" tab, seen here: 
+
+![Weblate Settings Languages Tab](https://github.com/ShieldBattery/ShieldBattery/assets/93808824/3b757bcb-5ab2-4e44-a5ca-37af9f57f4e9)
+
+This tab is split into three sections:
+- "Interface Language" changes the entire Weblate UI. If you want to read the entire website in a particular language, this is what you modify.
+- "Translated Languages" contains all of the languages ShieldBattery is translated into. Click the ones you would like to help translate, which will move them from the "Available" column to the "Chosen" column.
+- Any choices in "Secondary Languages" will show you translations of a given string in those languages during the translation process, which may be helpful for understanding context if you are able to translate for multiple languages.
+
+Click "Save" when finished.
+
+Next, switch to the "Notifications" tab, seen here:
+
+![Weblate Settings Notifs Tab](https://github.com/ShieldBattery/ShieldBattery/assets/93808824/d684c26a-164a-4321-b2dc-da37396d1b5f)
+
+Under "Watched Projects", select "ShieldBattery" to move it from the "Available" column to the "Chosen" column.
+
+Click "Save" when finished.
+
+Upon returning to the Dashboard, you should now see a full list of chosen languages (from "Translated Languages") in the "Watched Translations" tab. The more orange a bar is, the more translations are needed!
+
+![Weblate Populated Dashboard](https://github.com/ShieldBattery/ShieldBattery/assets/93808824/d3715564-1c80-453f-958e-385018ca6bd1)
 
 ## Starting Out
+
+At https://translation.shieldbattery.net/projects/shieldbattery/app/ you'll see a list of supported languages, along with their respective translation status. It looks like this:
+
+![Main Weblate Screen](images/weblate-main-screen.png)
 
 To begin, click on the pencil icon next to the language you want to translate (in the image above, a red background has been added for emphasis).
 
@@ -35,3 +79,11 @@ Note that this only changes the filtered results at the top (the number on the l
 ![Suggestion Preview](images/weblate-suggestion-preview.png)
 
 Editors can choose to Accept ( ✅), Accept and Edit (📝), or Dismiss (🗑️) suggestions. Although anyone can submit suggestions for translation, only logged-in Weblate accounts flagged as Editors by ShieldBattery administrators can directly update strings.
+
+## Special Characters
+
+Some strings will contain special characters, as seen here:
+
+![Special Characters](https://github.com/ShieldBattery/ShieldBattery/assets/93808824/0979723a-06bc-446a-b3d6-9a1a8f73f964)
+
+Text within `{{braces}}` should `never` be translated, as these contain code references which the app looks for. Text within `numeric tags` such as "<0><1>text</1></0>" `should` be translated, and can even be moved around within the string, but the ordering of the numeric tags must be preserved.

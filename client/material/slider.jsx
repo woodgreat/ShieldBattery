@@ -222,7 +222,10 @@ const Balloon = styled.div`
   pointer-events: none;
   text-align: center;
   transform-origin: 50% 150%;
-  transition: transform 150ms ${fastOutSlowIn}, background-color 200ms linear, color 200ms linear;
+  transition:
+    transform 150ms ${fastOutSlowIn},
+    background-color 200ms linear,
+    color 200ms linear;
   will-change: transform, background-color, color;
 
   &::before {
@@ -301,6 +304,7 @@ class Slider extends React.Component {
   }
   rootRef = React.createRef()
   trackAreaRef = React.createRef()
+  balloonRef = React.createRef()
   _sliderDimensions = null
   _hasWindowListeners = false
 
@@ -328,8 +332,8 @@ class Slider extends React.Component {
     if (!(this.state.isFocused || this.state.isClicked)) return null
 
     return (
-      <CSSTransition classNames={transitionNames} timeout={300}>
-        <Balloon>
+      <CSSTransition classNames={transitionNames} timeout={300} nodeRef={this.balloonRef}>
+        <Balloon ref={this.balloonRef}>
           <BalloonText>{this.props.value}</BalloonText>
         </Balloon>
       </CSSTransition>

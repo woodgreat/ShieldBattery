@@ -4,7 +4,6 @@ import { container, singleton } from 'tsyringe'
 import CancelToken, { MultiCancelToken } from '../../../common/async/cancel-token'
 import createDeferred, { Deferred } from '../../../common/async/deferred'
 import rejectOnTimeout from '../../../common/async/reject-on-timeout'
-import { USE_STATIC_TURNRATE } from '../../../common/flags'
 import { GameRoute } from '../../../common/game-launch-config'
 import { GameConfig, GameSource } from '../../../common/games/configuration'
 import { GameRouteDebugInfo } from '../../../common/games/games'
@@ -57,11 +56,7 @@ interface GameLoadErrorTypeToData {
 export class GameLoaderError<T extends GameLoadErrorType> extends CodedError<
   T,
   GameLoadErrorTypeToData[T]
-> {
-  constructor(code: T, message: string, data: GameLoadErrorTypeToData[T]) {
-    super(code, message, data)
-  }
-}
+> {}
 
 function generateSeed() {
   // BWChart and some other replay sites/libraries utilize the random seed as the date the game was
@@ -85,10 +80,13 @@ function createRoutes(players: Set<Slot>): Promise<RouteResult[]> {
       matchGen.push([first, rest])
     }
   }
-  const needRoutes = matchGen.reduce((result, [p1, players]) => {
-    players.forEach(p2 => result.push([p1, p2]))
-    return result
-  }, [] as Array<[Slot, Slot]>)
+  const needRoutes = matchGen.reduce(
+    (result, [p1, players]) => {
+      players.forEach(p2 => result.push([p1, p2]))
+      return result
+    },
+    [] as Array<[Slot, Slot]>,
+  )
 
   const rallyPointService = container.resolve(RallyPointService)
   const activityRegistry = container.resolve(GameplayActivityRegistry)
@@ -122,10 +120,16 @@ const LoadingDatas = {
 }
 
 export type OnGameSetupFunc = (
-  gameInfo: { gameId: string; seed: number; turnRate?: BwTurnRate; userLatency?: BwUserLatency },
+  gameInfo: {
+    gameId: string
+    seed: number
+    turnRate?: BwTurnRate | 0
+    userLatency?: BwUserLatency
+    useLegacyLimits?: boolean
+  },
   /** Map of user ID -> code for submitting the game results */
   resultCodes: Map<SbUserId, string>,
-) => void
+) => void | Promise<void>
 
 export type OnRoutesSetFunc = (playerName: string, routes: GameRoute[], gameId: string) => void
 
@@ -211,7 +215,7 @@ export class GameLoader {
             deferred: gameLoaded,
           }),
         )
-        this.doGameLoad(gameId, resultCodes, onGameSetup, onRoutesSet).catch(err => {
+        this.doGameLoad(gameId, gameConfig, resultCodes, onGameSetup, onRoutesSet).catch(err => {
           this.maybeCancelLoadingFromSystem(gameId, err)
         })
 
@@ -279,7 +283,7 @@ export class GameLoader {
     return this.maybeCancelLoadingFromSystem(
       gameId,
       new GameLoaderError(GameLoadErrorType.PlayerFailed, `${playerName} failed to load`, {
-        userId: loadingPlayer.userId,
+        data: { userId: loadingPlayer.userId },
       }),
     )
   }
@@ -307,6 +311,7 @@ export class GameLoader {
 
   private async doGameLoad(
     gameId: string,
+    gameConfig: GameConfig,
     resultCodes: Map<SbUserId, string>,
     onGameSetup?: OnGameSetupFunc,
     onRoutesSet?: OnRoutesSetFunc,
@@ -336,16 +341,24 @@ export class GameLoader {
     const routes = hasMultipleHumans ? await createRoutes(players) : []
     cancelToken.throwIfCancelling()
 
-    let chosenTurnRate: BwTurnRate | undefined
+    let chosenTurnRate: BwTurnRate | 0 | undefined
     let chosenUserLatency: BwUserLatency | undefined
-    let maxEstimatedLatency = 0
-    for (const route of routes) {
-      if (route.estimatedLatency > maxEstimatedLatency) {
-        maxEstimatedLatency = route.estimatedLatency
-      }
-    }
 
-    if (USE_STATIC_TURNRATE) {
+    if (
+      gameConfig.gameSource === GameSource.Matchmaking ||
+      gameConfig.gameSourceExtra?.turnRate === undefined
+    ) {
+      let maxEstimatedLatency = 0
+      for (const route of routes) {
+        if (route.estimatedLatency > maxEstimatedLatency) {
+          maxEstimatedLatency = route.estimatedLatency
+        }
+      }
+
+      this.maxEstimatedLatencyMetric
+        .labels(loadingData.gameSource)
+        .observe(maxEstimatedLatency / 1000)
+
       let availableTurnRates = MAX_LATENCIES_LOW.filter(
         ([_, latency]) => latency > maxEstimatedLatency,
       )
@@ -364,16 +377,16 @@ export class GameLoader {
       }
     }
 
-    this.maxEstimatedLatencyMetric
-      .labels(loadingData.gameSource)
-      .observe(maxEstimatedLatency / 1000)
-
     const onGameSetupResult = onGameSetup
       ? onGameSetup(
           {
             gameId,
             seed: generateSeed(),
             turnRate: chosenTurnRate,
+            useLegacyLimits:
+              gameConfig.gameSource === GameSource.Lobby
+                ? gameConfig.gameSourceExtra?.useLegacyLimits
+                : undefined,
             userLatency: chosenUserLatency,
           },
           resultCodes,

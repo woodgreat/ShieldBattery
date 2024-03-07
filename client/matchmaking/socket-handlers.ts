@@ -1,4 +1,5 @@
 import { NydusClient, RouteHandler, RouteInfo } from 'nydus-client'
+import swallowNonBuiltins from '../../common/async/swallow-non-builtins'
 import { GameLaunchConfig, PlayerInfo } from '../../common/game-launch-config'
 import { GameType } from '../../common/games/configuration'
 import { MatchmakingResultsEvent } from '../../common/games/games'
@@ -175,7 +176,7 @@ const eventToAction: EventToActionMap = {
     push('/matchmaking/countdown')
 
     const {
-      auth: { user },
+      auth: { self },
     } = getState()
 
     const {
@@ -212,8 +213,8 @@ const eventToAction: EventToActionMap = {
 
     const config: GameLaunchConfig = {
       localUser: {
-        id: user.id,
-        name: user.name,
+        id: self!.user.id,
+        name: self!.user.name,
       },
       setup: {
         gameId: event.setup.gameId,
@@ -244,7 +245,7 @@ const eventToAction: EventToActionMap = {
   setRoutes: (matchmakingType, event) => () => {
     const { routes, gameId } = event
 
-    ipcRenderer.invoke('activeGameSetRoutes', gameId, routes)
+    ipcRenderer.invoke('activeGameSetRoutes', gameId, routes)?.catch(swallowNonBuiltins)
   },
 
   // TODO(2Pac): Try to pull this out into a common place and reuse with lobbies
@@ -280,7 +281,7 @@ const eventToAction: EventToActionMap = {
     }
     dispatch({ type: '@matchmaking/gameStarting' })
 
-    ipcRenderer.invoke('activeGameStartWhenReady', gameId)
+    ipcRenderer.invoke('activeGameStartWhenReady', gameId)?.catch(swallowNonBuiltins)
   },
 
   cancelLoading: (matchmakingType, event) => (dispatch, getState) => {

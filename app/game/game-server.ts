@@ -34,7 +34,10 @@ export class GameServer {
   private idToSocket = Map<string, WebSocket>()
   private activeGameManager = container.resolve(ActiveGameManager)
 
-  constructor(private server: WebSocketServer, private localSettings: LocalSettingsManager) {
+  constructor(
+    private server: WebSocketServer,
+    private localSettings: LocalSettingsManager,
+  ) {
     this.activeGameManager.on('gameCommand', (id, command, payload) => {
       log.verbose(`Sending game command to ${id}: ${command}`)
       const socket = this.idToSocket.get(id)
@@ -62,7 +65,7 @@ export class GameServer {
           this.onMessage(gameId, data.toString())
         })
         socket.on('error', e => {
-          log.error(`Game socket error ${e}`)
+          log.error(`Game socket error ${String(e.stack ?? e)}`)
         })
         this.idToSocket = this.idToSocket.set(gameId, socket)
         this.activeGameManager.handleGameConnected(gameId).catch(err => {
@@ -71,7 +74,7 @@ export class GameServer {
       }
     })
     this.server.on('error', e => {
-      log.error(`Game server error ${e}`)
+      log.error(`Game server error ${String(e.stack ?? e)}`)
     })
   }
 
@@ -106,17 +109,21 @@ export class GameServer {
         this.activeGameManager.handleReplaySaved(gameId, payload.path)
         break
       case '/game/windowMove':
-        const { x, y, w, h } = payload
+        {
+          const { x, y, w, h } = payload
 
-        const toMerge: Partial<LocalSettings> = { gameWinX: x, gameWinY: y }
-        if (w !== -1) {
-          toMerge.gameWinWidth = w
-        }
-        if (h !== -1) {
-          toMerge.gameWinHeight = h
-        }
+          const toMerge: Partial<LocalSettings> = { gameWinX: x, gameWinY: y }
+          if (w !== -1) {
+            toMerge.gameWinWidth = w
+          }
+          if (h !== -1) {
+            toMerge.gameWinHeight = h
+          }
 
-        this.localSettings.merge(toMerge)
+          this.localSettings.merge(toMerge).catch(err => {
+            log.error(`Error saving game window position: ${err.stack ?? err}`)
+          })
+        }
         break
       default:
         log.error(`Received an unknown command '${command}' from ${gameId}`)

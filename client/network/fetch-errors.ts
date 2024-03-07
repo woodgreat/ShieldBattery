@@ -5,14 +5,17 @@ export class FetchError extends Error {
 
   private _parsedBody: unknown
 
-  constructor(res: Response, private bodyText: string) {
+  constructor(
+    res: Response,
+    private bodyText: string,
+  ) {
     super(res.statusText)
     this.status = res.status
     this.statusText = res.statusText
     this.url = res.url
   }
 
-  get body(): unknown | undefined {
+  get body(): unknown {
     if (this._parsedBody) {
       return this._parsedBody
     }

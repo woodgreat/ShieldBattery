@@ -111,13 +111,12 @@ export function TopLinks({ className }: { className?: string }) {
   const [languageMenuOpen, openLanguageMenu, closeLanguageMenu] = usePopoverController()
   const [anchor, anchorX, anchorY] = useAnchorPosition('left', 'bottom')
 
-  const onChangeLanguage = useStableCallback(async (language: TranslationLanguage) => {
+  const onChangeLanguage = useStableCallback((language: TranslationLanguage) => {
     closeLanguageMenu()
     detectedLocale.setValue(language)
 
-    try {
-      await i18n.changeLanguage(language)
-    } catch (error) {
+    i18n.changeLanguage(language).catch(error => {
+      logger.error(`There was an error changing the language: ${(error as any)?.stack ?? error}`)
       dispatch(
         openSnackbar({
           message: t(
@@ -126,8 +125,7 @@ export function TopLinks({ className }: { className?: string }) {
           ),
         }),
       )
-      logger.error(`There was an error changing the language: ${(error as any)?.stack ?? error}`)
-    }
+    })
   })
 
   return (
@@ -159,10 +157,10 @@ export function TopLinks({ className }: { className?: string }) {
             <Link href='/faq'>{t('landing.topLinks.faq', 'FAQ')}</Link>
           </li>
           <li>
-            <Link href='/ladder'>{t('landing.topLinks.ladder', 'Ladder')}</Link>
+            <Link href='/ladder'>{t('ladder.activity.title', 'Ladder')}</Link>
           </li>
           <li>
-            <Link href='/leagues'>{t('landing.topLinks.leagues', 'Leagues')}</Link>
+            <Link href='/leagues'>{t('leagues.activity.title', 'Leagues')}</Link>
           </li>
           <Spacer />
           <li>

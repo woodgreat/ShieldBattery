@@ -5,7 +5,7 @@ import {
   AddRallyPointServerRequest,
   AddRallyPointServerResponse,
   GetRallyPointServersResponse,
-  UpdateRallyPointClientPingRequest,
+  UpdateRallyPointClientPingBatchRequest,
   UpdateRallyPointServerRequest,
   UpdateRallyPointServerResponse,
 } from '../../../common/rally-point'
@@ -19,10 +19,9 @@ import { ClientSocketsManager } from '../websockets/socket-groups'
 import { retrieveRallyPointServers } from './models'
 import { RallyPointService } from './rally-point-service'
 
-interface UpdateClientPingParams {
+interface UpdateClientPingBatchParams {
   userId: SbUserId
   clientId: string
-  serverId: number
 }
 
 @httpApi('/rally-point/')
@@ -33,17 +32,22 @@ export class RallyPointPingApi {
     private clientSocketsManager: ClientSocketsManager,
   ) {}
 
-  @httpPut('/pings/:userId/:clientId/:serverId')
-  async updateClientPing(ctx: RouterContext): Promise<void> {
+  @httpPut('/pings/:userId/:clientId/batch')
+  async updateClientPingBatch(ctx: RouterContext): Promise<void> {
     const { params, body } = validateRequest(ctx, {
-      params: Joi.object<UpdateClientPingParams>({
-        userId: Joi.allow(ctx.session!.userId),
+      params: Joi.object<UpdateClientPingBatchParams>({
+        userId: Joi.allow(ctx.session!.user!.id).required(),
         clientId: Joi.string().required(),
-        serverId: Joi.number().integer().min(0).required(),
       }),
 
-      body: Joi.object<UpdateRallyPointClientPingRequest>({
-        ping: Joi.number().min(0).unsafe().required(),
+      body: Joi.object<UpdateRallyPointClientPingBatchRequest>({
+        pings: Joi.array()
+          .items(
+            Joi.array()
+              .ordered(Joi.number().integer().min(0).required(), Joi.number().min(0).required())
+              .required(),
+          )
+          .required(),
       }),
     })
 
@@ -53,7 +57,9 @@ export class RallyPointPingApi {
       throw new NotFound(`could not find a client with id ${params.clientId}`)
     }
 
-    this.rallyPointService.updatePing(client, params.serverId, body.ping)
+    for (const [serverId, ping] of body.pings) {
+      this.rallyPointService.updatePing(client, serverId, ping)
+    }
 
     ctx.status = 204
   }

@@ -1,14 +1,17 @@
 import { RouterContext } from '@koa/router'
 import 'abort-controller/polyfill' // TODO(tec27): Remove when min node version is >= 15.x
 import 'core-js/proposals/reflect-metadata'
+import { promises as fsPromises } from 'fs'
 import http from 'http'
 import Koa from 'koa'
 import koaBody from 'koa-body'
 import koaCompress from 'koa-compress'
 import koaConvert from 'koa-convert'
+import koaJwt from 'koa-jwt'
 import views from 'koa-views'
 import path from 'path'
 import { container } from 'tsyringe'
+import { DISCORD_WEBHOOK_URL_TOKEN } from './lib/discord/webhook-notifier'
 import isDev from './lib/env/is-dev'
 import { errorPayloadMiddleware } from './lib/errors/error-payload-middleware'
 import { addMiddleware as fileStoreMiddleware, setStore } from './lib/file-upload'
@@ -16,22 +19,27 @@ import AwsStore from './lib/file-upload/aws'
 import LocalFileStore from './lib/file-upload/local-filesystem'
 import logMiddleware from './lib/logging/log-middleware'
 import log from './lib/logging/logger'
+import { updateEmailTemplates } from './lib/mail/update-templates'
 import { prometheusHttpMetrics, prometheusMiddleware } from './lib/monitoring/prometheus-middleware'
 import { redirectToCanonical } from './lib/network/redirect-to-canonical'
 import userIpsMiddleware from './lib/network/user-ips-middleware'
 import { RallyPointService } from './lib/rally-point/rally-point-service'
-import { Redis } from './lib/redis'
+import { Redis } from './lib/redis/redis'
 import checkOrigin from './lib/security/check-origin'
 import { cors } from './lib/security/cors'
 import secureHeaders from './lib/security/headers'
-import sessionMiddleware from './lib/session/middleware'
-import { migrateSessions } from './lib/session/migrate-sessions'
-import userSessionsMiddleware from './lib/session/user-sessions-middleware'
+import { MIGRATION_COOKIE, StateWithJwt, jwtSessions } from './lib/session/jwt-session-middleware'
 import createRoutes from './routes'
 import { WebsocketServer } from './websockets'
 
+if (!process.env.SB_GQL_ORIGIN) {
+  throw new Error('SB_GQL_ORIGIN must be specified')
+}
 if (!process.env.SB_CANONICAL_HOST) {
   throw new Error('SB_CANONICAL_HOST must be specified')
+}
+if (!process.env.SB_JWT_SECRET) {
+  throw new Error('SB_JWT_SECRET must be specified')
 }
 if (!process.env.SB_RALLY_POINT_SECRET) {
   throw new Error('SB_RALLY_POINT_SECRET must be specified')
@@ -65,6 +73,10 @@ if (fileStoreSettings.filesystem) {
 } else {
   throw new Error('no valid key could be found in SB_FILE_STORE')
 }
+
+container.register(DISCORD_WEBHOOK_URL_TOKEN, {
+  useValue: process.env.SB_DISCORD_WEBHOOK_URL ?? '',
+})
 
 const app = new Koa()
 const port = process.env.SB_HTTP_PORT
@@ -102,9 +114,17 @@ app.on('error', (err: PossibleHttpError & PossibleNodeError, ctx?: RouterContext
     // case they start happening for things we don't expect
     log.warn({ err, req: ctx?.req }, 'server error (non-severe)')
   } else {
-    log.error({ err, req: ctx?.req }, 'server error')
+    log.error({ err, req: ctx?.req, cause: (err as any)?.cause }, 'server error')
   }
 })
+
+const jwtMiddleware = koaJwt({
+  secret: process.env.SB_JWT_SECRET,
+  passthrough: true,
+  key: 'jwtData',
+  cookie: MIGRATION_COOKIE,
+})
+const jwtSessionMiddleware = jwtSessions()
 
 const unhandledRejections = new Set<Promise<any>>()
 process
@@ -144,15 +164,27 @@ app
   .use(redirectToCanonical(process.env.SB_CANONICAL_HOST))
   .use(checkOrigin(process.env.SB_CANONICAL_HOST))
   .use(koaBody())
-  .use(sessionMiddleware)
-  .use(migrateSessions())
+  // TODO(tec27): 1 month after JWT sessions are deployed, the cookie setting here can be removed
+  .use(jwtMiddleware)
+  .use(jwtSessionMiddleware)
   .use(cors())
   .use(secureHeaders())
   .use(userIpsMiddleware())
-  .use(userSessionsMiddleware())
 
-const mainServer = http.createServer(app.callback())
-container.register<Koa.Middleware>('sessionMiddleware', { useValue: sessionMiddleware })
+const serverCallback = app.callback()
+const mainServer = http.createServer((req, res) => {
+  // We want our unhandledRejection handler to be useful, so we don't want to deal with promises
+  // at this root level. If a rejection were caught here, it'd indicate a problem at a deeper level
+  // anyway.
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  serverCallback(req, res)
+})
+container.register<Koa.Middleware>('jwtMiddleware', {
+  useValue: jwtMiddleware,
+})
+container.register<Koa.Middleware<StateWithJwt>>('sessionMiddleware', {
+  useValue: jwtSessionMiddleware,
+})
 container.register<http.Server>(http.Server, { useValue: mainServer })
 
 const websocketServer = container.resolve(WebsocketServer)
@@ -171,6 +203,21 @@ const rallyPointInitPromise = rallyPointService.initialize(
 // Wrapping this in IIFE so we can use top-level `await` (until we move to ESM and can use it
 // natively)
 ;(async () => {
+  if (!isDev) {
+    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      throw new Error('GOOGLE_APPLICATION_CREDENTIALS must be specified')
+    } else {
+      try {
+        await fsPromises.access(process.env.GOOGLE_APPLICATION_CREDENTIALS)
+      } catch (err) {
+        throw new Error(
+          'GOOGLE_APPLICATION_CREDENTIALS points to an invalid file: ' +
+            process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        )
+      }
+    }
+  }
+
   if (isDev) {
     const { webpackMiddleware } = require('./lib/webpack/middleware')
     const koaWebpackHot = require('koa-webpack-hot-middleware')
@@ -202,9 +249,25 @@ const rallyPointInitPromise = rallyPointService.initialize(
     log.error({ err }, 'redis error')
   })
 
+  try {
+    await updateEmailTemplates()
+  } catch (err: any) {
+    log.error(
+      {
+        err,
+        request: err.request
+          ? { url: err.request.options.url, method: err.request.options.method }
+          : undefined,
+        body: err.response?.body,
+      },
+      'Error updating email templates',
+    )
+    process.exit(1)
+  }
+
   fileStoreMiddleware(app)
 
-  createRoutes(app, websocketServer)
+  createRoutes(app, websocketServer, process.env.SB_GQL_ORIGIN!)
 
   const needToBuild = !(isDev || process.env.SB_PREBUILT_ASSETS)
   const compilePromise = needToBuild
@@ -219,7 +282,7 @@ const rallyPointInitPromise = rallyPointService.initialize(
   try {
     await rallyPointInitPromise
 
-    const stats: any | undefined = await compilePromise
+    const stats: any = await compilePromise
 
     if (stats) {
       if ((stats.errors && stats.errors.length) || (stats.warnings && stats.warnings.length)) {

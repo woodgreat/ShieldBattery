@@ -30,7 +30,10 @@ import {
 } from './whisper-models'
 
 export class WhisperServiceError extends Error {
-  constructor(readonly code: WhisperServiceErrorCode, message: string) {
+  constructor(
+    readonly code: WhisperServiceErrorCode,
+    message: string,
+  ) {
     super(message)
   }
 }
@@ -52,16 +55,16 @@ export default class WhisperService {
     private userSocketsManager: UserSocketsManager,
   ) {
     userSocketsManager
-      .on('newUser', userSockets =>
+      .on('newUser', userSockets => {
         this.handleNewUser(userSockets).catch(err =>
           logger.error({ err }, 'Error handling new user in whisper service'),
-        ),
-      )
-      .on('userQuit', userId =>
+        )
+      })
+      .on('userQuit', userId => {
         this.handleUserQuit(userId).catch(err =>
           logger.error({ err }, 'Error handling user disconnect in whisper service'),
-        ),
-      )
+        )
+      })
   }
 
   async startWhisperSession(userId: SbUserId, targetUser: SbUserId) {

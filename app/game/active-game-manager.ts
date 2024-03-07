@@ -128,7 +128,9 @@ export class ActiveGameManager extends TypedEventEmitter<ActiveGameManagerEvents
         this.setStatus(GameStatus.Error)
         this.activeGame = null
 
-        log.error(`Slots and routes don't match:\nslots: ${slotIds}\nroutes: ${routesIds}`)
+        log.error(
+          `Slots and routes don't match:\nslots: ${String(slotIds)}\nroutes: ${String(routesIds)}`,
+        )
         throw new Error("Slots and routes don't match")
       }
     }
@@ -332,7 +334,17 @@ export class ActiveGameManager extends TypedEventEmitter<ActiveGameManagerEvents
     let status = this.activeGame.status?.state ?? GameStatus.Unknown
     if (status < GameStatus.Finished) {
       if (status >= GameStatus.Playing) {
-        // TODO(tec27): report a disc to the server
+        if (!this.activeGame?.resultSent && this.activeGame.config) {
+          // The game didn't send a result, so we will send a blank one
+          const config = this.activeGame.config
+          const submission: SubmitGameResultsRequest = {
+            userId: config.localUser.id,
+            resultCode: config.setup.resultCode!,
+            time: 0,
+            playerResults: [],
+          }
+          this.emit('resendResults', this.activeGame.id, submission)
+        }
         this.setStatus(GameStatus.Unknown)
       } else {
         this.setStatus(
@@ -343,8 +355,6 @@ export class ActiveGameManager extends TypedEventEmitter<ActiveGameManagerEvents
     }
 
     status = this.activeGame.status?.state ?? GameStatus.Unknown
-    // TODO(#541): Convert a game config to a "blank" result if one was not delivered by the
-    // game before exit
     if (
       status >= GameStatus.Playing &&
       this.activeGame.config?.setup.resultCode &&
@@ -369,7 +379,7 @@ export class ActiveGameManager extends TypedEventEmitter<ActiveGameManagerEvents
   }
 
   handleGameExitWaitError(id: string, err: Error) {
-    log.error(`Error while waiting for game ${id} to exit: ${err}`)
+    log.error(`Error while waiting for game ${id} to exit: ${String(err.stack ?? err)}`)
   }
 
   private setStatus(state: GameStatus, extra: any = null) {

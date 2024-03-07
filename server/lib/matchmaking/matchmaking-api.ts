@@ -17,14 +17,15 @@ import { makeErrorConverterMiddleware } from '../errors/coded-error'
 import { asHttpError } from '../errors/error-with-payload'
 import { httpApi, httpBeforeAll } from '../http/http-api'
 import { httpBefore, httpDelete, httpGet, httpPost } from '../http/route-decorators'
+import { getCurrentMapPool } from '../models/matchmaking-map-pools'
 import { checkAllPermissions } from '../permissions/check-permissions'
 import ensureLoggedIn from '../session/ensure-logged-in'
-import { updateAllSessionsForCurrentUser } from '../session/update-all-sessions'
 import createThrottle from '../throttle/create-throttle'
 import throttleMiddleware from '../throttle/middleware'
 import { joiClientIdentifiers } from '../users/client-ids'
 import { UserIdentifierManager } from '../users/user-identifier-manager'
 import { validateRequest } from '../validation/joi-validator'
+import { filterVetoedMaps } from './map-vetoes'
 import { MatchmakingSeasonsService, MatchmakingSeasonsServiceError } from './matchmaking-seasons'
 import { MatchmakingService } from './matchmaking-service'
 import { MatchmakingServiceError } from './matchmaking-service-error'
@@ -92,13 +93,13 @@ export class MatchmakingApi {
   ) {}
 
   @httpPost('/find')
-  @httpBefore(throttleMiddleware(matchmakingThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(matchmakingThrottle, ctx => String(ctx.session!.user!.id)))
   async findMatch(ctx: RouterContext): Promise<void> {
     const { body } = validateRequest(ctx, {
       body: Joi.object<FindMatchRequest>({
         clientId: Joi.string().required(),
         preferences: matchmakingPreferencesValidator(
-          ctx.session!.userId,
+          ctx.session!.user!.id,
           false /* allowPartial */,
         ).required(),
         identifiers: joiClientIdentifiers().required(),
@@ -106,30 +107,36 @@ export class MatchmakingApi {
     })
     const { clientId, preferences, identifiers } = body
 
-    await this.userIdManager.upsert(ctx.session!.userId, identifiers)
+    const currentMapPool = await getCurrentMapPool(preferences.matchmakingType)
+    if (!currentMapPool) {
+      throw new MatchmakingServiceError(
+        MatchmakingServiceErrorCode.InvalidMapPool,
+        "Map pool doesn't exist",
+      )
+    }
 
-    if (await this.userIdManager.banUserIfNeeded(ctx.session!.userId)) {
+    await this.userIdManager.upsert(ctx.session!.user!.id, identifiers)
+
+    if (await this.userIdManager.banUserIfNeeded(ctx.session!.user!.id)) {
       throw new httpErrors.Unauthorized('This account is banned')
     }
 
-    await this.matchmakingService.find(ctx.session!.userId, clientId, identifiers, preferences)
-
-    // Save the last queued matchmaking type on the user's session
-    await updateAllSessionsForCurrentUser(ctx, {
-      lastQueuedMatchmakingType: preferences.matchmakingType,
+    await this.matchmakingService.find(ctx.session!.user!.id, clientId, identifiers, {
+      ...preferences,
+      mapSelections: filterVetoedMaps(currentMapPool, preferences.mapSelections),
     })
   }
 
   @httpDelete('/find')
-  @httpBefore(throttleMiddleware(matchmakingThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(matchmakingThrottle, ctx => String(ctx.session!.user!.id)))
   async cancelSearch(ctx: RouterContext): Promise<void> {
-    await this.matchmakingService.cancel(ctx.session!.userId)
+    await this.matchmakingService.cancel(ctx.session!.user!.id)
   }
 
   @httpPost('/accept')
-  @httpBefore(throttleMiddleware(matchmakingThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(matchmakingThrottle, ctx => String(ctx.session!.user!.id)))
   async acceptMatch(ctx: RouterContext): Promise<void> {
-    await this.matchmakingService.accept(ctx.session!.userId)
+    await this.matchmakingService.accept(ctx.session!.user!.id)
   }
 
   @httpGet('/seasons')

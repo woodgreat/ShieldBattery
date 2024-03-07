@@ -95,6 +95,27 @@ GROUP BY user_name
 ORDER BY games_played DESC;
 ```
 
+## Count the number of matchmaking games in a given time period
+
+By default, the query shows the number of 1v1 matchmaking games in the past 30 days. Includes the
+dates with 0 games played (so the output can be easily fed into a line chart).
+
+```sql
+WITH g AS (
+  SELECT date_trunc('day', start_time)::date AS date, COUNT(*) AS games_count
+  FROM games
+  WHERE
+    config->>'gameSource' = 'MATCHMAKING' AND
+    config->'gameSourceExtra'->>'type' = '1v1'
+  GROUP BY date
+)
+SELECT date_trunc('day', days)::date AS date, COALESCE(g.games_count, 0) AS games_count
+FROM generate_series(NOW() - INTERVAL '30 day', NOW(), INTERVAL '1 day') days
+LEFT JOIN g ON date_trunc('day', days)::date = g.date
+GROUP BY days, games_count
+ORDER BY days;
+```
+
 ## Calculate the matchup stats for each map in a given league
 
 This query assumes a 1v1 league. Calculating stats for 2v2 leagues is left as an exercise to the
@@ -132,17 +153,17 @@ SELECT
   map_name,
   total_games,
   pvz_wins || '-' || pvz_losses AS pvz_stats,
-  ROUND(pvz_wins::decimal / (pvz_wins + pvz_losses) * 100, 2) || '%' AS pvz_rate,
+  ROUND(pvz_wins::decimal / GREATEST(pvz_wins + pvz_losses, 1) * 100, 2) || '%' AS pvz_rate,
   pvt_wins || '-' || pvt_losses AS pvt_stats,
-  ROUND(pvt_wins::decimal / (pvt_wins + pvt_losses) * 100, 2) || '%' AS pvt_rate,
+  ROUND(pvt_wins::decimal / GREATEST(pvt_wins + pvt_losses, 1) * 100, 2) || '%' AS pvt_rate,
   tvz_wins || '-' || tvz_losses AS tvz_stats,
-  ROUND(tvz_wins::decimal / (tvz_wins + tvz_losses) * 100, 2) || '%' AS tvz_rate,
+  ROUND(tvz_wins::decimal / GREATEST(tvz_wins + tvz_losses, 1) * 100, 2) || '%' AS tvz_rate,
   tvp_wins || '-' || tvp_losses AS tvp_stats,
-  ROUND(tvp_wins::decimal / (tvp_wins + tvp_losses) * 100, 2) || '%' AS tvp_rate,
+  ROUND(tvp_wins::decimal / GREATEST(tvp_wins + tvp_losses, 1) * 100, 2) || '%' AS tvp_rate,
   zvp_wins || '-' || zvp_losses AS zvp_stats,
-  ROUND(zvp_wins::decimal / (zvp_wins + zvp_losses) * 100, 2) || '%' AS zvp_rate,
+  ROUND(zvp_wins::decimal / GREATEST(zvp_wins + zvp_losses, 1) * 100, 2) || '%' AS zvp_rate,
   zvt_wins || '-' || zvt_losses AS zvt_stats,
-  ROUND(zvt_wins::decimal / (zvt_wins + zvt_losses) * 100, 2) || '%' AS zvt_rate
+  ROUND(zvt_wins::decimal / GREATEST(zvt_wins + zvt_losses, 1) * 100, 2) || '%' AS zvt_rate
 FROM stats;
 ```
 

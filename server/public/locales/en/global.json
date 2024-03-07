@@ -1,15 +1,5 @@
 {
   "auth": {
-    "editAccount": {
-      "changePassword": "Change password?",
-      "confirmNewPassword": "Confirm new password",
-      "currentPassword": "Current password",
-      "dialogTitle": "Edit account",
-      "email": "Email",
-      "errorUpdatingAccount": "There was an issue updating your account. Please try again later.",
-      "incorrectPassword": "Incorrect current password.",
-      "newPassword": "New password"
-    },
     "emailValidator": {
       "pattern": "Enter a valid email address",
       "required": "Enter an email address"
@@ -78,14 +68,11 @@
     },
     "passwordValidator": {
       "confirm": "Confirm your password",
-      "current": "Enter your current password",
       "matching": "Enter a matching password",
-      "matchingPassword": "Enter a matching password",
       "required": "Enter a password",
       "resetCode": "Enter your password reset code"
     },
     "signup": {
-      "acceptableUseLink": "Acceptable Use",
       "ageConfirmation": "I certify that I am 13 years of age or older",
       "alreadyHaveAccount": "Already have an account?",
       "confirmPassword": "Confirm password",
@@ -93,9 +80,7 @@
       "emailAddress": "Email address",
       "logIn": "Log in",
       "password": "Password",
-      "privacyLink": "Privacy",
-      "readAndAgree": "I have read and agree to the",
-      "termsOfServiceLink": "Terms of Service",
+      "readAndAgree": "I have read and agree to the <2>Terms of Service</2>, <4>Acceptable Use</4>, and <6>Privacy</6> policies",
       "title": "Create account",
       "username": "Username"
     },
@@ -112,10 +97,19 @@
       "usernameTaken": "A user with that name already exists"
     },
     "usernameValidator": {
+      "notAvailable": "Username is not available",
       "pattern": "Username contains invalid characters",
-      "required": "Enter a username",
-      "taken": "Username is already taken"
+      "required": "Enter a username"
     }
+  },
+  "bugReport": {
+    "details": "Details",
+    "detailsDescription": "Please describe the bug and provide as much detail as possible about what you were doing when the bug occurred.",
+    "detailsRequired": "Bug reports must include details.",
+    "error": "Error: {{errorMessage}}",
+    "logUploadDescription": "Your bug report will include ShieldBattery logs from your machine to help diagnose the issue. Logs may be kept for up to 30 days and are viewable only by ShieldBattery staff.",
+    "reportSubmitted": "Bug report submitted.",
+    "title": "Report a bug"
   },
   "chat": {
     "banUser": {
@@ -131,6 +125,17 @@
       "moderateChannelOwner": "You cannot ban the channel owner",
       "noPermissions": "You don't have enough permissions to ban this user",
       "notInChannel": "The user you're trying to ban is not in this channel"
+    },
+    "channelHeader": {
+      "actionItems": {
+        "channelSettings": "Channel settings",
+        "hideBanner": "Hide banner",
+        "leaveChannel": "Leave channel"
+      },
+      "errors": {
+        "toggleBannerVisibility": "Something went wrong toggling the banner visibility"
+      },
+      "moreActions": "More actions"
     },
     "channelInfo": {
       "defaultError": "An error occurred: {{statusText}}",
@@ -160,6 +165,14 @@
     },
     "channelName": {
       "deletedChannel": "deleted-channel"
+    },
+    "channelSettings": {
+      "general": {
+        "descriptionLabel": "Description",
+        "inappropriateImageErrorMessage": "The selected image is inappropriate. Please select a different image.",
+        "saveErrorMessage": "Something went wrong while saving the settings",
+        "topicLabel": "Topic"
+      }
     },
     "channelValidator": {
       "pattern": "Channel name contains invalid characters",
@@ -219,6 +232,7 @@
       "newUpdateDownloading": "A new update is being downloaded. Please wait for the download to complete in order to continue.",
       "newUpdateReady": "A new update has been downloaded and is ready to install. Please restart the application to continue.",
       "noErrorTitle": "Update available",
+      "progress": "{{transferred}} / {{total}} at {{perSecond}}/s",
       "restartNow": "Restart now"
     }
   },
@@ -228,12 +242,16 @@
   },
   "common": {
     "actions": {
+      "accept": "Accept",
       "apply": "Apply",
       "back": "Back",
+      "block": "Block",
       "cancel": "Cancel",
       "clear": "Clear",
       "continue": "Continue",
+      "decline": "Decline",
       "download": "Download",
+      "edit": "Edit",
       "hide": "Hide",
       "join": "Join",
       "next": "Next",
@@ -241,26 +259,35 @@
       "previous": "Previous",
       "refresh": "Refresh",
       "remove": "Remove",
+      "reveal": "Reveal",
       "save": "Save",
       "search": "Search",
       "show": "Show",
       "start": "Start",
+      "stop": "Stop",
+      "submit": "Submit",
+      "test": "Test",
+      "unblock": "Unblock",
       "view": "View"
     },
+    "lists": {
+      "empty": "Nothing to see here"
+    },
     "validators": {
-      "maxLength": "Enter at most {{maxLength}} characters",
-      "minLength": "Enter at least {{minLength}} characters",
+      "maxLength_one": "Enter at most {{count}} character",
+      "maxLength_other": "Enter at most {{count}} characters",
+      "minLength_one": "Enter at least {{count}} character",
+      "minLength_other": "Enter at least {{count}} characters",
       "required": "Required"
     }
   },
   "fileBrowser": {
-    "noFiles": "Nothing to see here",
     "rootFolder": "Root folder",
     "upOneDirectory": "Up one directory"
   },
   "forms": {
     "fileInput": {
-      "clearFiles": "Clear files"
+      "chooseFile": "Choose file"
     }
   },
   "game": {
@@ -299,8 +326,10 @@
     "results": {
       "draw": "Draw",
       "loss": "Loss",
+      "lossShort": "L",
       "unknown": "Unknown",
-      "win": "Win"
+      "win": "Win",
+      "winShort": "W"
     },
     "teamName": {
       "bottom": "Bottom",
@@ -333,6 +362,9 @@
     "tabSummary": "Summary"
   },
   "ladder": {
+    "activity": {
+      "title": "Ladder"
+    },
     "division": "Division",
     "divisionGroup": {
       "all": "All",
@@ -453,13 +485,24 @@
       "changeLanguage": "Change language",
       "faq": "FAQ",
       "home": "Home",
-      "ladder": "Ladder",
-      "leagues": "Leagues",
       "login": "Log in"
     }
   },
-  "league": {
-    "details": {
+  "leagues": {
+    "activity": {
+      "title": "Leagues"
+    },
+    "explainer": {
+      "description": "Leagues are a new way to compete for prizes, qualify for tournament entries, and more!",
+      "howLeaguesWork": "How leagues work",
+      "joinDescription": "Find a league that is currently running or accepting signups in the format you'd like to play. Some leagues may have different requirements, rules, or qualifications, so make sure to read the information before joining!",
+      "joinTitle": "Join.",
+      "playDescription": "Once a league has started, all ladder games you play will reward points towards the league standings alongside your normal ladder standings. Check the leaderboard on the league page to see how you're doing!",
+      "playTitle": "Play.",
+      "winDescription": "After a league finishes, the leaderboard will be available for organizers to distribute prizes and rewards. Check out the league information page for more details.",
+      "winTitle": "Win!"
+    },
+    "leagueDetails": {
       "about": "About",
       "copyLink": "Copy link to league",
       "dateText": "{{startDate}} to {{endDate}}",
@@ -483,16 +526,6 @@
       "retrieveError": "There was an error retrieving this league: {{errorMessage}}",
       "rulesAndInfo": "Rules and info"
     },
-    "explainer": {
-      "description": "Leagues are a new way to compete for prizes, qualify for tournament entries, and more!",
-      "howLeaguesWork": "How leagues work",
-      "joinDescription": "Find a league that is currently running or accepting signups in the format you'd like to play. Some leagues may have different requirements, rules, or qualifications, so make sure to read the information before joining!",
-      "joinTitle": "Join.",
-      "playDescription": "Once a league has started, all ladder games you play will reward points towards the league standings alongside your normal ladder standings. Check the leaderboard on the league page to see how you're doing!",
-      "playTitle": "Play.",
-      "winDescription": "After a league finishes, the leaderboard will be available for organizers to distribute prizes and rewards. Check out the league information page for more details.",
-      "winTitle": "Win!"
-    },
     "list": {
       "acceptingSignups": "Accepting signups",
       "currentlyRunning": "Currently running",
@@ -508,7 +541,95 @@
       "viewInfo": "View info"
     }
   },
+  "lobbies": {
+    "activity": {
+      "title": "Lobbies"
+    },
+    "createLobby": {
+      "advancedSettings": "Advanced settings",
+      "backToList": "Back to list",
+      "disabledInPartyText": "Creating a lobby as a party is currently under development. Leave your party to continue.",
+      "disabledInPartyTitle": "Disabled while in party",
+      "gameSubTypeHeader": "Teams",
+      "gameSubTypeOption": "{{numTeams}} teams",
+      "gameSubTypeOptionTvB": "{{topSlots}} vs {{bottomSlots}}",
+      "gameTypeHeader": "Game type",
+      "lobbyName": "Lobby name",
+      "lobbyNameRequired": "Enter a lobby name",
+      "mapRequired": "Select a map to play",
+      "selectMap": "Select map",
+      "title": "Create lobby",
+      "turnRate": "Turn rate",
+      "turnRateAuto": "Auto",
+      "turnRateDynamic": "DTR (Not recommended)",
+      "useLegacyLimits": "Use legacy unit limit"
+    },
+    "errors": {
+      "alreadyInLobby": "You're already in another lobby.",
+      "load": "There was a problem loading this lobby"
+    },
+    "events": {
+      "banned": "You have been banned from the lobby.",
+      "kicked": "You have been kicked from the lobby."
+    },
+    "joinLobby": {
+      "action": "Join lobby",
+      "disabledInPartyText": "Joining a lobby as a party is currently under development. Leave your party to continue.",
+      "disabledInPartyTitle": "Disabled while in party",
+      "noActiveLobbies": "There are no active lobbies",
+      "noOpenLobbies": "There are no open lobbies",
+      "openSlotCount_one": "{{count}} slot open",
+      "openSlotCount_other": "{{count}} slots open",
+      "title": "Join Lobby"
+    },
+    "loading": {
+      "content": "<0>{{gameType}}</0><1> on </1><2>{{mapName}}</2>"
+    },
+    "lobby": {
+      "gameType": "Game type",
+      "leaveLobby": "Leave lobby",
+      "startGame": "Start game",
+      "turnRate": "Turn rate",
+      "turnRateAuto": "Auto",
+      "turnRateDynamic": "DTR",
+      "unitLimit": "Unit limit",
+      "unitLimitExtended": "Extended",
+      "unitLimitLegacy": "Legacy"
+    },
+    "messageLayout": {
+      "banPlayer": "<0><0></0></0> has been banned from the lobby",
+      "countdownCanceled": "The game countdown has been canceled",
+      "countdownStarted": "The game countdown has begun",
+      "gameInitializationCanceled": "Game initialization has been canceled",
+      "hostChange": "<0><0></0></0> is now the host",
+      "joinLobby": "<0><0></0></0> has joined the lobby",
+      "kickPlayer": "<0><0></0></0> has been kicked from the lobby",
+      "leaveLobby": "<0><0></0></0> has left the lobby",
+      "selfJoin": "You have joined <1>{{lobby}}</1>. The host is <4><0></0></4>."
+    },
+    "slots": {
+      "addComputer": "Add computer",
+      "banPlayer": "Ban player",
+      "closeSlot": "Close slot",
+      "kickPlayer": "Kick player",
+      "makeObserver": "Make observer",
+      "makePlayer": "Make player",
+      "name": "Closed",
+      "open": "Open",
+      "openSlot": "Open slot",
+      "removeComputer": "Remove computer",
+      "slotActions": "Slot actions"
+    },
+    "state": {
+      "exists": "You're not currently in this lobby. Would you like to join it?",
+      "nonexistent": "Lobby not found. Would you like to create it?",
+      "started": "This lobby has already started and cannot be joined."
+    }
+  },
   "maps": {
+    "activity": {
+      "title": "Maps"
+    },
     "details": {
       "editDescription": "Edit description",
       "editName": "Edit name",
@@ -529,35 +650,71 @@
       "uploadError": "There was a problem uploading the map",
       "uploadMapError": "An error occurred while uploading the map"
     },
+    "mapSelect": {
+      "browseMaps": "Browse maps"
+    },
     "server": {
+      "allMaps": "All maps",
       "browseLocal": "Browse local maps",
+      "error": "Something went wrong: {{errorMessage}}",
       "favorites": {
         "added": "Added to favorites",
         "addedError": "An error occurred while adding to favorites",
         "removed": "Removed from favorites",
         "removedError": "An error occurred while removing from favorites"
       },
-      "filterOptions": "Filter options",
+      "filterOptions": {
+        "section": {
+          "numberOfPlayers": "Number of players",
+          "tileset": "Tileset"
+        },
+        "title": "Filter options"
+      },
       "noCommunityMaps": "No maps by the community have been made public yet.",
       "noOfficialMaps": "No official maps have been uploaded yet.",
       "noResults": "No results.",
       "noUploadedMaps": "You haven't uploaded any maps. You can upload a map by clicking on the browse button below.",
       "regenerateError": "An error occurred while regenerating images",
-      "sortMaps": "Sort maps",
+      "sortMaps": {
+        "option": {
+          "dateUploaded": "Date uploaded",
+          "name": "Name",
+          "numberOfPlayers": "Number of players"
+        },
+        "title": "Sort maps"
+      },
       "tab": {
         "community": "Community",
         "myMaps": "My maps",
         "official": "Official"
       },
-      "thumbnailSize": "Thumbnail size"
+      "thumbnailSize": {
+        "option": {
+          "large": "Large",
+          "medium": "Medium",
+          "small": "Small"
+        },
+        "title": "Thumbnail size"
+      }
     },
     "thumbnail": {
       "addToFavorites": "Add to favorites",
       "mapActions": "Map actions",
+      "noMapPreview": "Map preview not available",
       "regenerateImage": "Regenerate image",
       "removeFromFavorites": "Remove from favorites",
       "showMapPreview": "Show map preview",
       "viewMapDetails": "View map details"
+    },
+    "tileset": {
+      "ashworld": "Ashworld",
+      "badlands": "Badlands",
+      "desert": "Desert",
+      "ice": "Ice",
+      "installation": "Installation",
+      "jungleWorld": "Jungle world",
+      "spacePlatform": "Space platform",
+      "twilight": "Twilight"
     }
   },
   "matchmaking": {
@@ -569,12 +726,17 @@
       "removedFromQueue": "You didn't ready up in time and have been removed from the queue.",
       "returningToQueue": "Some players didn't ready up in time or failed to load. Returning to the matchmaking queue…"
     },
+    "activity": {
+      "finding": "Finding…",
+      "findMatch": "Find match"
+    },
     "disabledCard": {
       "days": "Days",
       "description": "Matchmaking is sometimes shut down for maintenance and development, and is currently disabled. The next matchmaking period is:",
       "hours": "Hours",
       "inParty": "Disabled while in party",
       "minutes": "Minutes",
+      "nextDateRange": "<0>{{nextStartDate}}</0><1>to</1><2>{{nextEndDate}}</2>",
       "notPartyLeader": "Only the party leader can queue for matches.",
       "partyTooLargeText": "Your current party is too large to queue for this matchmaking type.",
       "partyTooLargeTitle": "Party too large",
@@ -613,8 +775,10 @@
       "title": "Find match",
       "updated": "Updated",
       "useAlternateRace": "Use alternate race to avoid mirror matchups",
-      "veto1v1": "Veto up to 3 maps. Vetoed maps will never be selected for play.",
-      "veto2v2": "Veto up to 3 maps. Vetoed maps will be chosen significantly less often than other maps.",
+      "vetoDescriptionNoOverlap_one": "Veto up to {{count}} map. Vetoed maps will never be selected for play.",
+      "vetoDescriptionNoOverlap_other": "Veto up to {{count}} maps. Vetoed maps will never be selected for play.",
+      "vetoDescriptionWithOverlap_one": "Veto up to {{count}} map. Vetoed maps will be chosen significantly less often than other maps.",
+      "vetoDescriptionWithOverlap_other": "Veto up to {{count}} maps. Vetoed maps will be chosen significantly less often than other maps.",
       "vetoesLeft": "<0>Vetoes left: </0><1>{{vetoesLeft}}</1>"
     },
     "match": {
@@ -677,8 +841,8 @@
     "leftNav": {
       "chatChannels": "Chat channels",
       "customGame": "Custom game",
-      "editAccount": "Edit account",
       "gameInProgress": "Game in progress…",
+      "home": "Home",
       "joinChannel": "Join a channel (Alt + H)",
       "loadingChannel": "Loading…",
       "loadingGame": "Loading…",
@@ -686,6 +850,7 @@
       "logIn": "Log in",
       "logOut": "Log out",
       "rankedGame": "Ranked {{matchmakingType}}",
+      "reportBug": "Report a bug",
       "startWhisper": "Start a whisper (Alt + W)",
       "viewChangelog": "View changelog",
       "viewProfile": "View profile",
@@ -705,20 +870,117 @@
       "markRead": "An error occurred while marking a notification read"
     },
     "list": {
-      "empty": "Nothing to see here",
       "title": "Notifications"
     },
     "popup": {
       "markAsRead": "Mark as read"
     }
   },
+  "parties": {
+    "errors": {
+      "acceptPartyInvite": {
+        "general": "An error occurred while accepting an invite",
+        "notFoundOrNotInvited": "Party doesn't exist anymore",
+        "partyFull": "Party is full"
+      },
+      "alreadySearching": "Some party members are already playing a game, searching for a match, or in a custom lobby:",
+      "cancelQueue": "Error canceling matchmaking: {{errorMessage}}",
+      "changeLeader": {
+        "general": "An error occurred while changing the leader"
+      },
+      "declinePartyInvite": {
+        "general": "An error occurred while declining an invite"
+      },
+      "findMatchAsParty": {
+        "alreadyInGameplayActivity": "The party is already searching for a different matchmaking type",
+        "general": "Something went wrong :(",
+        "insufficientPermissions": "Only party leaders can queue for matchmaking",
+        "invalidAction": "The party is too large for that matchmaking type",
+        "notFoundOrNotInParty": "Party not found or you're not in it",
+        "title": "Error searching for a match"
+      },
+      "inviteToParty": {
+        "alreadyMember": "{{user}} is already in your party",
+        "blocked": "Failed to send invite, you have been blocked by this user",
+        "general": "An error occurred while sending an invite",
+        "invalidSelfAction": "Can't invite yourself to the party",
+        "notificationFailure": "Failed to send an invite. Please try again"
+      },
+      "kickPlayer": {
+        "general": "An error occurred while kicking the player"
+      },
+      "leaveParty": {
+        "general": "An error occurred while leaving the party"
+      },
+      "removePartyInvite": {
+        "general": "An error occurred while removing an invite"
+      },
+      "unknownError": "unknown error occurred"
+    },
+    "events": {
+      "kickFromParty": "You have been kicked from the party."
+    },
+    "inviteDialog": {
+      "findPlayers": "Find players",
+      "sendInvites": "Send invites",
+      "title": "Invite players to the party"
+    },
+    "messageLayout": {
+      "inviteToParty": "<0><0></0></0> has been invited to the party",
+      "joinParty": "<0><0></0></0> has joined the party",
+      "kickFromParty": "<0><0></0></0> has been kicked from the party",
+      "leaderChange": "<0><0></0></0> is now the leader",
+      "leaveParty": "<0><0></0></0> has left the party",
+      "queueCancel": {
+        "error": "Matchmaking has been canceled due to an error",
+        "matchmakingDisabled": "Matchmaking was canceled because it is currently disabled",
+        "rejected": "<0><0></0></0> canceled matchmaking",
+        "userLeft": "Matchmaking was canceled because <2><0></0></2> left the party"
+      },
+      "queueReady": "The party is now searching for a match",
+      "queueStart": "<0><0></0></0> is starting a search for a <4>{{matchmakingLabel}}</4> match",
+      "selfJoin": "You have joined the party. The leader is <2><0></0></2>."
+    },
+    "navEntry": {
+      "invitePlayers": "Invite players",
+      "leaveParty": "Leave party",
+      "title": "Party"
+    },
+    "notificationUi": "<0>{{user}}</0> sent you a party invitation.",
+    "queueAcceptDialog": {
+      "contents": "Your party is searching for a <2>{{matchmakingLabel}}</2> match.",
+      "error": "Error: {{error}}",
+      "title": "Choose your race"
+    },
+    "view": {
+      "cancelSearch": "Cancel search",
+      "invitePlayers": "Invite players",
+      "kickFromParty": "Kick from party",
+      "leaveParty": "Leave party",
+      "makeLeader": "Make leader",
+      "openSlot": "Empty"
+    }
+  },
   "policy": {
     "acceptableUse": "Acceptable use",
+    "acceptableUseAllCaps": "Acceptable Use Policy",
     "policyUpdateNotification": "ShieldBattery's <2>{{label}}</2> has been updated.",
     "privacyPolicy": "Privacy policy",
-    "termsOfService": "Terms of service"
+    "privacyPolicyAllCaps": "Privacy Policy",
+    "termsOfService": "Terms of service",
+    "termsOfServiceAllCaps": "Terms of Service"
   },
   "replays": {
+    "activity": {
+      "title": "Replays"
+    },
+    "fileDropText": "Drop replays here to watch them with ShieldBattery.",
+    "loading": {
+      "dialogTitle": "Loading replay…",
+      "errorGeneric": "Something went wrong while loading the replay.",
+      "initFailureBody": "The selected replay could not be loaded. It may either be corrupt, or was created by a version of StarCraft newer than is currently supported.",
+      "initFailureTitle": "Error loading replay"
+    },
     "local": {
       "duration": "Duration: {{durationStr}}",
       "gameType": "Game type: {{gameTypeLabel}}",
@@ -726,42 +988,189 @@
       "rootFolderName": "Replays",
       "title": "Local Replays",
       "watchReplay": "Watch replay"
+    },
+    "replayInfoDialog": {
+      "title": "Replay info",
+      "watch": "Watch"
     }
   },
+  "rootErrorBoundary": {
+    "contents": "Please report this issue to us in our <2>Discord</2>.",
+    "reloadApp": "Reload app",
+    "title": "Something went wrong :("
+  },
   "settings": {
+    "activity": {
+      "title": "Settings (Alt + S)"
+    },
     "app": {
-      "label": "App",
       "sound": {
-        "label": "Sound"
+        "masterVolume": "Master volume",
+        "title": "Sound"
       },
       "system": {
-        "label": "System"
-      }
+        "filesOverline": "Files",
+        "replayQuickOpen": "Launch replays opened with ShieldBattery immediately without previewing",
+        "runOnStartup": "Run ShieldBattery on system startup",
+        "startMinimized": "Start minimized",
+        "startupOverline": "Startup",
+        "title": "System"
+      },
+      "title": "App"
     },
     "close": "Close settings",
+    "errors": {
+      "save": "There was an issue saving the settings."
+    },
     "game": {
       "gameplay": {
-        "label": "Gameplay"
+        "apmAlert": "Alert when APM falls below",
+        "apmColorText": "Color text",
+        "apmDisplay": "APM display",
+        "apmSound": "Play sound",
+        "apmValue": "APM value",
+        "apmValueValidation": "Enter a value between 1 and 999",
+        "colorCycling": "Enable color cycling",
+        "consoleSkins": {
+          "20thAnniversary": "StarCraft 20th Anniversary",
+          "blizzcon2017": "BlizzCon 2017",
+          "blizzcon2018": "BlizzCon 2018",
+          "default": "Default",
+          "krcGold": "KRC Gold",
+          "krcSilver": "KRC Silver",
+          "title": "Console skin",
+          "warcraft3": "WarCraft 3 Spoils"
+        },
+        "devOnlySettings": "Dev-only settings",
+        "gameTimer": "Game timer",
+        "ingameSkins": {
+          "carbot": "Carbot",
+          "none": "None",
+          "preorder": "Preorder",
+          "title": "Ingame skin"
+        },
+        "latency": "Show latency",
+        "minimapPosition": {
+          "bottomLeft": "Bottom-left corner",
+          "standard": "Standard",
+          "title": "Minimap position"
+        },
+        "showBonusSkins": "Show bonus skins",
+        "skinsInfo": "Skins (must be purchased from Blizzard)",
+        "title": "Gameplay",
+        "unitPortraits": {
+          "animated": "Animated",
+          "disabled": "Disabled",
+          "still": "Still",
+          "title": "Portraits"
+        },
+        "visualizeNetworkStalls": "Visualize network stalls"
       },
       "input": {
-        "label": "Input"
+        "customMouseSensitivity": "Custom mouse sensitivity",
+        "hardwareCursor": "Hardware cursor",
+        "keyboardScrollSpeed": "Keyboard scroll speed",
+        "lockCursor": "Lock cursor to window",
+        "mouseScaling": "Use mouse scaling",
+        "mouseScrollSpeed": "Mouse scroll speed",
+        "mouseSensitivity": "Mouse sensitivity",
+        "title": "Input"
       },
-      "label": "Game",
       "sound": {
-        "label": "Sound"
+        "announcer": {
+          "default": "Default",
+          "heyJini": "Hey Jini",
+          "info": "Packs (must be purchased from Blizzard)",
+          "jeonYongJun": "Jeon Yong Jun",
+          "kimJungmin": "Kim Jungmin",
+          "title": "Announcer",
+          "umJaeKyung": "Um Jae Kyung",
+          "umJeonKim": "Um, Jeon, Kim Trio"
+        },
+        "backgroundSounds": "Sound plays while in background",
+        "buildingSounds": "Building sounds",
+        "cinematicSubtitles": "Cinematic subtitles",
+        "gameSounds": "Game sounds",
+        "gameSubtitles": "Game subtitles",
+        "music": "Music",
+        "musicVolume": "Music volume",
+        "originalVoiceOvers": "Original unit voice overs",
+        "soundVolume": "Sound volume",
+        "title": "Sound",
+        "unitAcknowledgements": "Unit acknowledgements",
+        "unitSpeech": "Unit speech"
       },
       "starcraft": {
-        "label": "StarCraft"
+        "browseManually": "Browse manually",
+        "currentPathLabel": "Current game path:",
+        "detectionFailed": "Detecting your installation path failed. Please ensure you have StarCraft: Remastered installed and try again, or set the path manually.",
+        "detectPath": "Detect installation",
+        "instructions": {
+          "advanced": "If detection fails, you can set the path manually. Click the button below and select the directory that contains your StarCraft: Remastered installation.",
+          "description": "ShieldBattery requires a valid, up-to-date installation of StarCraft: Remastered. Click the button below to automatically detect the installation folder."
+        },
+        "pathInvalid": "This path does not point to a valid StarCraft: Remastered installation. Please ensure your installation is up to date or try a different path.",
+        "pathValid": "This game path appears to be a valid installation.",
+        "title": "StarCraft"
       },
+      "title": "Game",
       "video": {
-        "label": "Video"
+        "displayMode": {
+          "fullscreen": "Fullscreen",
+          "title": "Display mode",
+          "windowed": "Windowed",
+          "windowedFullscreen": "Windowed (Fullscreen)"
+        },
+        "enableFpsLimit": "Enable FPS limit",
+        "enableVerticalSync": "Enable vertical sync",
+        "environmentEffects": "Environment effects",
+        "fpsLimit": "FPS limit",
+        "hdGraphics": "HD graphics",
+        "pillarbox": "Pillarbox (4:3 aspect ratio)",
+        "realTimeLighting": "Real-time lighting",
+        "sdGraphicsFilter": "SD graphics filter",
+        "shadowStacking": "Shadow stacking",
+        "showFps": "Show FPS",
+        "smoothUnitTurning": "Smooth unit turning",
+        "title": "Video"
       }
     },
     "user": {
-      "label": "User",
+      "account": {
+        "authenticationHeader": "Authentication",
+        "changeEmail": {
+          "dialogTitle": "Change email",
+          "patternError": "Enter a valid email address",
+          "requiredError": "Enter an email address",
+          "success": "Email changed successfully."
+        },
+        "changePassword": {
+          "dialogTitle": "Change password",
+          "success": "Password changed successfully."
+        },
+        "changePasswordButton": "Change password",
+        "confirmNewPassword": "Confirm new password",
+        "currentPassword": "Current password",
+        "displayName": "Display name",
+        "email": "Email",
+        "error": "There was a problem retrieving your user information.",
+        "invalidCurrentPassword": "Current password is incorrect",
+        "label": "Account",
+        "loginName": "Login name",
+        "networkError": "Network error: {{errorMessage}}",
+        "newPassword": "New password",
+        "passwordValidator": {
+          "confirm": "Enter a matching password",
+          "current": "Enter your current password",
+          "new": "Enter a new password"
+        },
+        "unknownError": "Something went wrong, please try again later."
+      },
       "language": {
-        "label": "Language"
-      }
+        "selectLanguage": "Select a language",
+        "title": "Language"
+      },
+      "title": "User"
     }
   },
   "starcraft": {
@@ -782,10 +1191,97 @@
     }
   },
   "user": {
+    "matchHistory": {
+      "noMatchingGames": "No matching games.",
+      "retrievingError": "There was an error retrieving the match history."
+    },
     "miniMatchHistory": {
-      "noGames": "Nothing to see here",
       "noGameSelected": "No game selected",
       "viewDetails": "View details"
+    }
+  },
+  "users": {
+    "contextMenu": {
+      "addFriend": "Add friend",
+      "friendRemoved": "Friend removed",
+      "friendRequestAccepted": "Friend request accepted",
+      "friendRequestRemoved": "Friend request removed",
+      "friendRequestSent": "Friend request sent",
+      "inviteToParty": "Invite to party",
+      "kickFromParty": "Kick from party",
+      "loadingUsers": "Loading user…",
+      "removeFriend": "Remove friend",
+      "removeFriendRequest": "Remove friend request",
+      "uninviteFromParty": "Uninvite from party",
+      "userBlocked": "User blocked",
+      "userUnblocked": "User unblocked",
+      "viewProfile": "View profile",
+      "whisper": "Whisper"
+    },
+    "errors": {
+      "friendsList": {
+        "blockedByUser": "you have been blocked by this user",
+        "errorAcceptingFriendRequest": "Error accepting friend request",
+        "errorBlockingUser": "Error blocking user",
+        "errorDecliningFriendRequest": "Error declining friend request",
+        "errorRemovingFriend": "Error removing friend",
+        "errorRemovingFriendRequest": "Error removing friend request",
+        "errorSendingFriendRequest": "Error sending friend request",
+        "errorUnblockingUser": "Error unblocking user",
+        "invalidSelfAction": "you cannot perform this action on yourself`",
+        "limitReached": "you have reached the maximum amount of friends or blocks, please remove some to add more",
+        "load": "Failed to load friends list",
+        "noMatchingEntry": "no matching entry found"
+      },
+      "profile": {
+        "loadUser": "There was a problem loading this user."
+      }
+    },
+    "friendsList": {
+      "friendStart": "You are now friends with <2>{{user}}</2>.",
+      "header": {
+        "incoming": "Incoming",
+        "offline": "Offline",
+        "online": "Online",
+        "outgoing": "Outgoing"
+      },
+      "receivedFriendRequest": "<0>{{user}}</0> sent you a friend request.",
+      "tabs": {
+        "addFriends": "Add friends",
+        "friendsList": "Friends list",
+        "socialSettings": "Social settings"
+      },
+      "title": {
+        "addFriends": "Add friends",
+        "friends": "Friends"
+      },
+      "tooltip": "Friends (Alt + E)"
+    },
+    "profile": {
+      "achievements": "Achievements",
+      "latestGames": "Latest games",
+      "points": "Points",
+      "rank": "Rank",
+      "rating": "Rating",
+      "record": "Record",
+      "tabs": {
+        "admin": "Admin",
+        "matchHistory": "Match history",
+        "season": "Seasons",
+        "stats": "Stats",
+        "summary": "Summary"
+      },
+      "totalGames": "Total games"
+    },
+    "profileOverlay": {
+      "info": "Info",
+      "joined": "Joined {{date}}",
+      "ranked": "Ranked",
+      "rightClick": "Right-click user for more actions",
+      "viewProfile": "View profile"
+    },
+    "titles": {
+      "novice": "Novice"
     }
   },
   "whispers": {

@@ -60,10 +60,7 @@ pub unsafe fn prepare_issue_order(
         (*new_order).order_id = order.0;
         (*new_order).unit_id = fow_unit_id;
         (*new_order).target = bw::PointAndUnit {
-            pos: bw::Point {
-                x,
-                y,
-            },
+            pos: bw::Point { x, y },
             unit: target.map(|x| *x).unwrap_or(null_mut()),
         };
         alloc.append_to(&queue);
@@ -165,13 +162,14 @@ fn is_low_order_supply(allocated: u32, limit: u32) -> bool {
 }
 
 #[test]
+#[allow(clippy::bool_assert_comparison)]
 fn test_is_low_order_supply() {
     // Verified that the original exe considers these values
     // to be false-true boundary for these limits.
-    assert!(is_low_order_supply(1799, 2000) == false);
-    assert!(is_low_order_supply(1800, 2000) == true);
-    assert!(is_low_order_supply(3599, 4000) == false);
-    assert!(is_low_order_supply(3600, 4000) == true);
-    assert!(is_low_order_supply(8999, 10000) == false);
-    assert!(is_low_order_supply(9000, 10000) == true);
+    assert_eq!(is_low_order_supply(1799, 2000), false);
+    assert_eq!(is_low_order_supply(1800, 2000), true);
+    assert_eq!(is_low_order_supply(3599, 4000), false);
+    assert_eq!(is_low_order_supply(3600, 4000), true);
+    assert_eq!(is_low_order_supply(8999, 10000), false);
+    assert_eq!(is_low_order_supply(9000, 10000), true);
 }

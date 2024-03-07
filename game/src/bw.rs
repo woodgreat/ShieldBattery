@@ -7,8 +7,9 @@ pub use bw_dat::structs::*;
 use bw_dat::UnitId;
 use libc::{c_void, sockaddr};
 use once_cell::sync::OnceCell;
+use players::StormPlayerId;
 use quick_error::quick_error;
-use winapi::shared::windef::{HWND};
+use winapi::shared::windef::HWND;
 
 use crate::app_messages::{MapInfo, Settings};
 use crate::bw_scr::BwScr;
@@ -16,20 +17,38 @@ use crate::bw_scr::BwScr;
 pub mod apm_stats;
 pub mod commands;
 pub mod list;
+pub mod players;
 pub mod unit;
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct StormPlayerId(pub u8);
 
 static BW_IMPL: OnceCell<&'static BwScr> = OnceCell::new();
 
 /// Gets access to the object that is used for actually manipulating Broodwar state.
 pub fn get_bw() -> &'static BwScr {
-    *BW_IMPL.get().unwrap()
+    BW_IMPL.get().unwrap()
 }
 
 pub fn set_bw_impl(bw: &'static BwScr) {
     let _ = BW_IMPL.set(bw);
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct LobbyOptions {
+    pub game_type: GameType,
+    pub turn_rate: u32,
+    pub use_legacy_limits: bool,
+}
+
+impl Default for LobbyOptions {
+    fn default() -> Self {
+        Self {
+            game_type: GameType {
+                primary: 0x2,
+                subtype: 0x1,
+            },
+            turn_rate: 0,
+            use_legacy_limits: false,
+        }
+    }
 }
 
 /// The interface to Broodwar.
@@ -57,15 +76,13 @@ pub trait Bw: Sync + Send {
         map_path: &Path,
         map_info: &MapInfo,
         lobby_name: &str,
-        game_type: GameType,
-        turn_rate: u32,
+        options: LobbyOptions,
     ) -> Result<(), LobbyCreateError>;
-    /// `address` is only used by SCR. 1161 sets address by snp::spoof_game.
     unsafe fn join_lobby(
         &self,
         game_info: &mut BwGameData,
         is_eud_map: bool,
-        turn_rate: u32,
+        options: LobbyOptions,
         map_path: &CStr,
         address: std::net::Ipv4Addr,
     ) -> Result<(), u32>;
@@ -141,6 +158,55 @@ pub struct GameType {
 }
 
 impl GameType {
+    pub const fn melee() -> Self {
+        Self {
+            primary: 0x2,
+            subtype: 0x1,
+        }
+    }
+
+    pub const fn ffa() -> Self {
+        Self {
+            primary: 0x3,
+            subtype: 0x1,
+        }
+    }
+
+    pub const fn one_v_one() -> Self {
+        Self {
+            primary: 0x4,
+            subtype: 0x1,
+        }
+    }
+
+    pub const fn ums() -> Self {
+        Self {
+            primary: 0xa,
+            subtype: 0x1,
+        }
+    }
+
+    pub const fn team_melee(team_count: u8) -> Self {
+        Self {
+            primary: 0xb,
+            subtype: team_count - 1,
+        }
+    }
+
+    pub const fn team_ffa(team_count: u8) -> Self {
+        Self {
+            primary: 0xc,
+            subtype: team_count - 1,
+        }
+    }
+
+    pub const fn top_v_bottom(players_on_top: u8) -> Self {
+        Self {
+            primary: 0xf,
+            subtype: players_on_top,
+        }
+    }
+
     pub fn as_u32(self) -> u32 {
         self.primary as u32 | ((self.subtype as u32) << 16)
     }
@@ -149,6 +215,8 @@ impl GameType {
         self.primary == 0xa
     }
 
+    /// Whether the game type has shared control among one or more users, like Team Melee.
+    #[allow(clippy::manual_range_patterns)]
     pub fn is_team_game(&self) -> bool {
         matches!(self.primary, 0xb | 0xc | 0xd)
     }
@@ -353,6 +421,15 @@ pub struct BwGameData {
     pub game_template: GameTemplate,
 }
 
+impl BwGameData {
+    pub fn game_type(&self) -> GameType {
+        GameType {
+            primary: self.game_type as u8,
+            subtype: self.game_subtype as u8,
+        }
+    }
+}
+
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
 pub struct GameTemplate {
@@ -408,6 +485,16 @@ pub struct UnitStatusFunc {
     pub update_status: unsafe extern "C" fn(*mut Dialog),
 }
 
+#[repr(C)]
+pub struct GraphicLayer {
+    pub draw: u8,
+    pub flags: u8,
+    pub rect: Rect,
+    pub func_param: *mut c_void,
+    // unk_0, unk_0, func_param, rect, is_drawing_other_asset_mode
+    pub draw_func: Option<unsafe extern "C" fn(usize, usize, *mut c_void, *const Rect, u32)>,
+}
+
 unsafe impl Send for SnpFunctions {}
 unsafe impl Sync for SnpFunctions {}
 unsafe impl Send for ClientInfo {}
@@ -432,6 +519,7 @@ fn struct_sizes() {
     assert_eq!(size_of::<ReplayData>(), size(0x20, 0x30));
     assert_eq!(size_of::<ReplayHeader>(), 0x279);
     assert_eq!(size_of::<UnitStatusFunc>(), size(0xc, 0x18));
+    assert_eq!(size_of::<GraphicLayer>(), size(0x14, 0x20));
 }
 
 pub struct FowSpriteIterator(*mut FowSprite);
@@ -457,7 +545,11 @@ impl Iterator for FowSpriteIterator {
 }
 
 pub unsafe fn player_name(player: *mut Player) -> Cow<'static, str> {
-    let name_length = (*player).name.iter().position(|&x| x == 0).unwrap_or((*player).name.len());
+    let name_length = (*player)
+        .name
+        .iter()
+        .position(|&x| x == 0)
+        .unwrap_or((*player).name.len());
     let name = &(*player).name[..name_length];
     String::from_utf8_lossy(name)
 }
@@ -470,14 +562,33 @@ pub unsafe fn player_color(
     player_id: u8,
 ) -> [u8; 3] {
     let color = if use_rgb_colors == 0 {
-        (**game).player_minimap_color.get(player_id as usize)
+        (**game)
+            .player_minimap_color
+            .get(player_id as usize)
             .map(|&s| {
                 let color = main_palette.add(4 * s as usize);
                 [*color, *color.add(1), *color.add(2)]
             })
     } else {
-        (*rgb_colors).get(player_id as usize)
-            .map(|x| [(x[0] * 255.0) as u8, (x[1] * 255.0) as u8, (x[2] * 255.0) as u8])
+        (*rgb_colors).get(player_id as usize).map(|x| {
+            [
+                (x[0] * 255.0) as u8,
+                (x[1] * 255.0) as u8,
+                (x[2] * 255.0) as u8,
+            ]
+        })
     };
     color.unwrap_or([0xff, 0xff, 0xff])
+}
+
+pub fn iter_dialogs(
+    first: Option<bw_dat::dialog::Dialog>,
+) -> impl Iterator<Item = bw_dat::dialog::Dialog> {
+    std::iter::successors(first, |&x| unsafe {
+        let ctrl = std::ptr::addr_of_mut!((**x).control) as *mut scr::Control;
+        match (*ctrl).next.is_null() {
+            false => Some(bw_dat::dialog::Dialog::new((*ctrl).next as *mut _)),
+            true => None,
+        }
+    })
 }

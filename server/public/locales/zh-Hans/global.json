@@ -1,241 +1,1308 @@
 {
     "common": {
         "validators": {
-            "maxLength": "最多输入 {{maxLength}} 个字符",
-            "minLength": "至少输入 {{minLength}} 个字符",
-            "required": "必需的"
+            "required": "必填",
+            "maxLength_other": "不能输入超过{{count}}个字符",
+            "minLength_other": "不能输入少于 {{count}} 个字符"
         },
         "actions": {
             "back": "后退",
             "cancel": "取消",
             "continue": "继续",
             "okay": "好的",
-            "save": "节省"
+            "save": "保存",
+            "clear": "清除",
+            "download": "下载",
+            "hide": "隐藏",
+            "join": "加入",
+            "next": "下一个",
+            "refresh": "刷新",
+            "remove": "删除",
+            "search": "搜索",
+            "show": "展示",
+            "start": "开始",
+            "stop": "停止",
+            "test": "测试",
+            "unblock": "解除屏蔽",
+            "view": "查看",
+            "accept": "接受",
+            "decline": "拒绝",
+            "previous": "上一个",
+            "apply": "应用",
+            "block": "屏蔽",
+            "edit": "编辑",
+            "reveal": "显示",
+            "submit": "提交"
+        },
+        "lists": {
+            "empty": "这里什么都没有"
         }
     },
     "settings": {
-        "app": {
-            "sound": {
-                "label": "声音"
-            },
-            "system": {
-                "label": "系统"
-            },
-            "label": "应用程序"
+        "close": "关闭设置",
+        "activity": {
+            "title": "设置（Alt + S）"
         },
         "game": {
             "gameplay": {
-                "label": "玩法"
+                "consoleSkins": {
+                    "default": "默认",
+                    "krcGold": "KRC黄金",
+                    "krcSilver": "KRC白银",
+                    "title": "控制台皮肤",
+                    "warcraft3": "魔兽争霸3战利品",
+                    "20thAnniversary": "星际争霸20周年",
+                    "blizzcon2017": "2017暴雪嘉年华",
+                    "blizzcon2018": "2018暴雪嘉年华"
+                },
+                "devOnlySettings": "开发者选项",
+                "gameTimer": "游戏计时器",
+                "ingameSkins": {
+                    "carbot": "爆笑星际",
+                    "none": "无",
+                    "preorder": "预购",
+                    "title": "游戏内皮肤"
+                },
+                "latency": "显示网络延迟",
+                "minimapPosition": {
+                    "bottomLeft": "左下角",
+                    "standard": "标准",
+                    "title": "小地图位置"
+                },
+                "showBonusSkins": "显示奖励皮肤",
+                "skinsInfo": "皮肤（必须从暴雪官方渠道购买）",
+                "title": "游戏性选项",
+                "unitPortraits": {
+                    "animated": "动画",
+                    "disabled": "禁用",
+                    "still": "静止",
+                    "title": "单位头像"
+                },
+                "visualizeNetworkStalls": "可视化网络卡顿",
+                "apmAlert": "当APM低于该数值时发出警报",
+                "apmColorText": "彩色文字",
+                "apmDisplay": "显示APM",
+                "apmSound": "播放声音",
+                "apmValue": "APM值",
+                "apmValueValidation": "输入一个1到999之间的数值",
+                "colorCycling": "启用颜色循环"
             },
             "input": {
-                "label": "输入"
+                "customMouseSensitivity": "自定义鼠标灵敏度",
+                "hardwareCursor": "硬件指针",
+                "keyboardScrollSpeed": "按键滚屏速度",
+                "lockCursor": "将鼠标锁定在窗口内",
+                "mouseScaling": "使用鼠标缩放",
+                "mouseScrollSpeed": "鼠标滚屏速度",
+                "mouseSensitivity": "鼠标灵敏度",
+                "title": "输入"
             },
             "sound": {
-                "label": "声音"
-            },
-            "starcraft": {
-                "label": "星际争霸"
+                "announcer": {
+                    "default": "默认",
+                    "heyJini": "Hey Jini",
+                    "info": "语音包（必须从暴雪官方渠道购买）",
+                    "jeonYongJun": "Jeon Yong Jun",
+                    "kimJungmin": "Kim Jungmin",
+                    "title": "播报员",
+                    "umJaeKyung": "Um Jae Kyung",
+                    "umJeonKim": "Um, Jeon, Kim三人组"
+                },
+                "backgroundSounds": "在后台时继续播放声音",
+                "buildingSounds": "建筑音效",
+                "cinematicSubtitles": "影片字幕",
+                "gameSounds": "游戏声音",
+                "gameSubtitles": "游戏字幕",
+                "music": "音乐",
+                "musicVolume": "音乐音量",
+                "originalVoiceOvers": "原版单位语音",
+                "soundVolume": "音量",
+                "unitAcknowledgements": "单位确认",
+                "unitSpeech": "单位台词",
+                "title": "声音"
             },
             "video": {
-                "label": "视频"
+                "hdGraphics": "高清版图像",
+                "pillarbox": "黑边模式（4:3纵横比）",
+                "realTimeLighting": "实时光照",
+                "sdGraphicsFilter": "旧版图像滤镜",
+                "shadowStacking": "阴影重叠",
+                "showFps": "显示帧数",
+                "displayMode": {
+                    "fullscreen": "全屏",
+                    "title": "显示模式",
+                    "windowed": "窗口化",
+                    "windowedFullscreen": "全屏窗口"
+                },
+                "enableFpsLimit": "启用帧数限制",
+                "enableVerticalSync": "启用垂直同步",
+                "environmentEffects": "环境特效",
+                "fpsLimit": "帧数限制",
+                "smoothUnitTurning": "单位转身更平滑",
+                "title": "图像"
             },
-            "label": "游戏"
+            "starcraft": {
+                "title": "星际争霸",
+                "browseManually": "手动浏览",
+                "currentPathLabel": "当前游戏路径：",
+                "detectionFailed": "检测您的安装路径失败。请确保您已安装《星际争霸：重制版》并重试，或手动设置路径。",
+                "detectPath": "检测安装",
+                "instructions": {
+                    "advanced": "如果检测失败，可以手动设置路径。单击下面的按钮并选择包含《星际争霸：重制版》安装的目录。",
+                    "description": "ShieldBattery 需要有效且最新的《星际争霸：重制版》安装。单击下面的按钮将自动检测安装文件夹。"
+                },
+                "pathInvalid": "此路径不指向有效的《星际争霸：重制版》安装。请确保您的安装是最新的或尝试不同的路径。",
+                "pathValid": "该游戏路径似乎是有效的安装。"
+            },
+            "title": "游戏"
         },
-        "close": "关闭设置",
+        "app": {
+            "sound": {
+                "masterVolume": "全局音量",
+                "title": "声音"
+            },
+            "system": {
+                "runOnStartup": "开机时自动启动ShieldBattery",
+                "startMinimized": "启动时自动最小化",
+                "title": "系统",
+                "startupOverline": "启动",
+                "filesOverline": "文件",
+                "replayQuickOpen": "使用ShieldBattery打开录像时直接开始播放录像，跳过录像预览"
+            },
+            "title": "应用程序"
+        },
+        "errors": {
+            "save": "保存设置时遇到问题。"
+        },
         "user": {
-            "label": "用户",
             "language": {
-                "label": "语言"
+                "selectLanguage": "选择语言",
+                "title": "语言"
+            },
+            "title": "用户",
+            "account": {
+                "authenticationHeader": "身份认证",
+                "changeEmail": {
+                    "dialogTitle": "更改邮箱",
+                    "patternError": "请输入真实有效的电子邮箱",
+                    "requiredError": "输入电子邮箱地址",
+                    "success": "邮箱更改成功。"
+                },
+                "changePassword": {
+                    "dialogTitle": "更改密码",
+                    "success": "密码更改成功。"
+                },
+                "changePasswordButton": "更改密码",
+                "confirmNewPassword": "确认新密码",
+                "currentPassword": "当前密码",
+                "displayName": "显示名称",
+                "email": "电子邮箱",
+                "error": "查询您的用户信息时遇到问题。",
+                "invalidCurrentPassword": "当前密码输入错误",
+                "label": "账号",
+                "loginName": "登录名",
+                "networkError": "网络错误：{{errorMessage}}",
+                "newPassword": "新密码",
+                "passwordValidator": {
+                    "confirm": "两次输入的密码必须一致",
+                    "current": "输入您当前的密码",
+                    "new": "输入新的密码"
+                },
+                "unknownError": "遇到错误。请稍后再试。"
             }
         }
     },
     "landing": {
         "topLinks": {
-            "home": "家",
-            "ladder": "梯子",
-            "leagues": "联赛",
-            "changeLanguage": "改变语言",
+            "home": "返回首页",
+            "changeLanguage": "更改语言",
             "login": "登录",
-            "faq": "常问问题"
+            "faq": "常见问题"
+        },
+        "faq": {
+            "linuxSupportAnswer": "<0>目前我们尚未对此提供官方支持，</0><1>但有社区用户提供了ShieldBattery与Wine的整合包。请访问我们的<2>Discord</2>，了解如何在Wine上运行ShieldBattery。</1>",
+            "officialSupportAnswer": "不，ShieldBattery由社区爱好者进行开发，没有得到暴雪的官方支持或认可。",
+            "header": "常见问题",
+            "openSourceAnswer": "<0>是的。您可以在我们的 <2>GitHub 页面</2>上访问我们的主存储库以及我们编写并分离到各自存储库中的各种其他项目。</0><1>我们欢迎更多贡献者加入，因此如果您认为您可以提供帮助，不妨看一看！</1>",
+            "openSourceQuestion": "该项目是否开源？",
+            "reportIssuesAnswer": "报告错误最简单的渠道是通过我们的<2>Discord</2>。但如果您愿意，您也可以在我们的 <5>GitHub</5>上提交问题报告。",
+            "reportIssuesQuestion": "我遇到了bug或错误，如何告知你们？",
+            "supportedStarcraftVersionAnswer": "ShieldBattery支持最新版本的《星际争霸：重制版》。您可以从<2>暴雪官方网站</2>下载《星际争霸：重制版》的免费版本，或通过暴雪启动器安装。您通过官方渠道购买的任何增值服务（例如高清画面）在ShieldBattery上依然有效。",
+            "supportedStarcraftVersionQuestion": "ShieldBattery支持哪些版本的星际争霸？",
+            "systemRequirementsAnswer": "<0>我们的系统要求主要由<2>星际争霸：重制版</2>驱动，但简而言之：</0><1><0>运行 Windows 10 或更高版本的计算机</0><1 >2GB RAM</1><2>NVIDIA GeForce 6800 (256MB) 或 ATI Radeon X1600 Pro (256MB) 或更高</2><3>必须有安装好的最新版本星际争霸：重制版</3></ 1>",
+            "systemRequirementsQuestion": "ShieldBattery有哪些硬件要求？",
+            "title": "常见问题",
+            "hotkeyCustomizationAnswer": "是的，我们支持自定义热键，但您目前无法在ShieldBattery内编辑热键设置。如果您想使用自定义热键，请先通过暴雪启动器启动《星际争霸：重制版》并进行热键设置，之后通过ShieldBattery启动游戏时便会使用您调整后的热键设置。",
+            "hotkeyCustomizationQuestion": "可否使用自定义热键？",
+            "isShieldBatteryFreeQuestion": "ShieldBattery收费吗？我能赞助该项目吗？",
+            "linuxSupportQuestion": "ShieldBattery可以在Linux或OS X上运行吗？",
+            "officialSupportQuestion": "ShieldBattery是在暴雪的支持下开发的吗？",
+            "isShieldBatteryFreeAnswer": "<0>ShieldBattery完全免费！</0><1>但软件开发、服务器维护都需要费用，如果您愿意帮助我们支付这些费用，我们将不胜感激。您可以通过下列方式为我们赞助：</1>"
+        },
+        "bottomLinks": {
+            "acceptableUsePolicy": "可接受的使用政策",
+            "privacyPolicy": "隐私政策",
+            "termsOfService": "服务条款"
+        },
+        "splash": {
+            "benefits": {
+                "tacticallyFaithfulText": "本项目开发组在《星际争霸》中摸爬滚打数十年，我们知道游戏的魅力所在。我们在关键之处保留了原汁原味的体验，同时用全新的功能和改进让您的游戏体验更上一层。",
+                "communityFirstText": "ShieldBattery是属于所有《星际争霸》玩家与观众的活动中心。聊天界面显眼易用，轻松就可开始游玩，您的游戏体验是我们的第一事项。无论您是1998年还是这周刚刚开始玩星际，这里都是您的家。",
+                "communityFirstTitle": "社区第一",
+                "fullPotentialText": "《星际争霸》作为电子竞技拥有辉煌的历史，而ShieldBattery将为您提供配得上这款伟大游戏的竞技与观战体验。ShieldBattery是社区驱动的开源项目，旨在为玩家提供最新最尖端的功能和游戏乐趣。这是《星际争霸》玩家社区掀起的一场革命。",
+                "fullPotentialTitle": "释放全部潜力",
+                "tacticallyFaithfulTitle": "忠于原作"
+            },
+            "comingSoon": {
+                "builtInMapmakingTitle": "地图制作新功能",
+                "3v3Title": "3v3匹配",
+                "playerProfilesDescription": "了解您在不同对抗和地图上的水平，找到改进的方法，并直观地看出您的水平和其他人的对比。",
+                "playerProfilesTitle": "玩家档案和统计数据",
+                "replayAnalysisDescription": "内置类似BWChart的录像分析功能，还有更高级的统计和图表。",
+                "replayAnalysisTitle": "录像分析",
+                "sandboxModeDescription": "测试新的开局，练习分农民和微操技巧。",
+                "3v3Description": "轻松匹配3v3，无论是固定队伍还是随机队伍。",
+                "automatedTournamentsDescription": "锦标赛和联赛自动运行，总有一款适合您的技术水平。",
+                "automatedTournamentsTitle": "自动化锦标赛与联赛",
+                "builtInMapmakingDescription": "可破坏的岩石、农民起始位置优化、菌毯布置优化，还有更多！",
+                "cloudReplaysDescription": "游戏录像自动上传，随时随地观看、分享！",
+                "cloudReplaysTitle": "云端录像",
+                "expandedChatDescription": "使用表情、嵌入地图、比赛和录像尽情表达自己！",
+                "expandedChatTitle": "聊天功能强化",
+                "fpReplaysDescription": "所有玩家鼠标和屏幕的移动都会被记录，可以进行回放。",
+                "fpReplaysTitle": "第一视角录像",
+                "liveStreamingDescription": "随时加入正在进行的比赛实时观战，享受游戏内观战的所有功能。",
+                "liveStreamingTitle": "比赛直播",
+                "pixelScalingDescription": "使用自定义缩放算法，改善现代显示屏上旧版图像的显示",
+                "pixelScalingTitle": "可设置的像素缩放",
+                "sandboxModeTitle": "训练/沙盒模式",
+                "umsPortalDescription": "轻松查找和探索RPG地图，然后快速聚集玩家并开始游戏。",
+                "umsPortalTitle": "RPG门户"
+            },
+            "features": {
+                "cloudHostingTitle": "基于云的地图分发和托管",
+                "rankedLadderTitle": "天梯排位",
+                "remasteredSupportDescription": "支持所有《重制版》中新增的功能，包括高清图像（需要从暴雪官方渠道购买）和自定义热键。",
+                "cloudHostingDescription": "游玩官方地图库中的任何地图，或上传您自己的地图。您可以上传您喜爱的地图，与您的朋友分享，在其他电脑上也可以随时用它们建立游戏。",
+                "fixesBugsExploitsDescription": "跟官方服务器上的外挂和恶性bug说再见吧。复制农民、刷钱外挂和永久叠农民在这里统统不存在。",
+                "fixesBugsExploitsTitle": "修复错误和恶性bug",
+                "friendsListDescription": "跟踪您好友的在线状况，轻松向他们发送消息并邀请他们参加游戏。",
+                "friendsListTitle": "好友列表",
+                "improvedNetcodeDescription": "延迟、掉线、丢包问题均有大幅改善！",
+                "improvedNetcodeTitle": "网络代码改进",
+                "leaguesDescription": "在社区组织的限时联赛中大展身手，自动匹配功能则使举办赛事更加便利。",
+                "leaguesTitle": "公开联赛",
+                "matchmakingDescription": "无论是自己单排还是和好友组队，都可以轻松而迅速地找到对手。",
+                "matchmakingTitle": "1v1与2v2自动匹配",
+                "partiesDescription": "与好友们一起举办私人比赛、观看录像或组队匹配。",
+                "partiesTitle": "组队",
+                "rankedladderDescription": "我们在所有匹配模式中都应用了基于Glicko排名系统，让您直观地看出自己的进步。",
+                "remasteredSupportTitle": "支持重制版",
+                "teamMeleeReplaysDescription": "队伍对战模式下的录像在ShieldBattery上能够正常播放！",
+                "teamMeleeReplaysTitle": "队伍对战录像",
+                "webClientDescription": "无需安装任何程序即可与您的朋友（和敌人）保持联系。",
+                "webClientTitle": "网页版聊天客户端"
+            },
+            "blurb": "ShieldBattery是全球首个支持<2>星际争霸：重制版</2>的社区服务器。我们使用自定义启动器对游戏客户端进行增强，保留核心玩法不变的同时让您享受更好的星际争霸1体验。下载我们的启动器，只需点击几下即可开始畅玩！",
+            "comingSoonTitle": "尚未问世<1>（即将推出）</1>",
+            "disclaimerText": "《星际争霸》是Blizzard Entertainment, Inc. 的注册商标。ShieldBattery仅由社区成员开发，与Blizzard无关，并且未得到Blizzard的正式认可或支持。",
+            "featuresTitle": "我们的优势",
+            "gameCount": "已进行<0></0> 场游戏",
+            "linksHeader": "链接",
+            "signUp": "注册",
+            "tagline": "在最先进的社区运营平台上畅玩《星际争霸1》"
         }
     },
     "auth": {
-        "editAccount": {
-            "changePassword": "更改密码？",
-            "confirmNewPassword": "确认新密码",
-            "currentPassword": "当前密码",
-            "dialogTitle": "编辑帐户",
-            "errorUpdatingAccount": "更新您的帐户时出现问题。请稍后再试。",
-            "incorrectPassword": "当前密码不正确。",
-            "newPassword": "新密码",
-            "email": "电子邮件"
-        },
         "emailValidator": {
-            "pattern": "输入一个有效的电子邮件地址",
-            "required": "输入电子邮件地址"
+            "pattern": "请输入真实有效的电子邮件地址",
+            "required": "请输入电子邮箱地址"
         },
         "emailVerification": {
-            "defaultError": "出了大问题。请再试一次。",
+            "defaultError": "出错了。请再试一次。",
             "emailSent": "验证邮件已成功发送。",
-            "invalidCodeError": "错误：提供的电子邮件或验证码无效。如果验证码与您通过电子邮件收到的验证码相符，则它可能已过期。请申请新的验证电子邮件，然后重试。",
+            "invalidCodeError": "错误：您提供的电子邮箱或验证码无效。如果输入的验证码与您通过电子邮件收到的验证码相符，则该验证码可能已过期。请重新发送验证邮件并重试。",
             "resendVerificationEmail": "重新发送验证邮件",
-            "emailUnverifiedMessage": "您的邮箱未验证！查看来自 ShieldBattery 的电子邮件。如果您没有看到，我们可以<2>发送另一个</2>。",
+            "emailUnverifiedMessage": "您的电子邮箱尚未验证！请查阅ShieldBattery发给您的电子邮件。如果您没有收到，我们可以<2>再发送一份</2>。",
             "generalError": "错误：{{error}}",
-            "loggedOutError": "错误：您需要登录才能验证您的电子邮件。请点击下方按钮登录并重试。",
+            "loggedOutError": "错误：您需要登录才能验证您的电子邮箱。请点击下面的按钮登录并重试。",
             "resendError": "重新发送电子邮件时出错：{{error}}",
-            "resendSuccess": "新的验证码已发送到您帐户的电子邮件地址。",
-            "sendError": "发送验证邮件时出错，请稍后重试。",
-            "switchUser": "切换用户",
-            "title": "验证邮件",
-            "verifySuccess": "您的电子邮件已成功验证。",
-            "wrongUserError": "错误：您必须登录到要验证其电子邮件的帐户。请单击下面的按钮切换用户，然后重试。",
+            "resendSuccess": "新的验证码已发送至您的电子邮箱。",
+            "sendError": "发送验证邮件时出现问题，请稍后重试。",
+            "switchUser": "切换账号",
+            "title": "验证邮箱",
+            "verifySuccess": "您的电子邮箱已成功验证。",
+            "wrongUserError": "错误：您必须先登录账号才能验证绑定该账号的电子邮箱。请点击下面的按钮切换账号，然后重试。",
             "logIn": "登录"
         },
         "login": {
-            "forgotPassword": "忘记密码？",
-            "forgotUsername": "忘了用户名了吗？",
-            "rememberMe": "记住账号",
+            "forgotPassword": "忘了密码？",
+            "forgotUsername": "忘了用户名？",
+            "rememberMe": "自动登录",
             "signUp": "注册新账号",
             "title": "登录",
-            "whatIsShieldBattery": "什么是ShieldBattery？",
+            "whatIsShieldBattery": "关于ShieldBattery",
             "logIn": "登录",
             "password": "密码",
             "username": "用户名"
         },
         "noPermissionsPage": {
-            "body": "您没有足够的权限访问此页面。"
+            "body": "您没有权限访问此页面。"
         },
         "passwordValidator": {
-            "confirm": "确认你的密码",
-            "current": "输入当前密码",
-            "matching": "输入匹配的密码",
+            "confirm": "确认密码",
+            "matching": "两次输入的密码必须相同",
             "required": "输入密码",
-            "resetCode": "输入您的密码重置代码"
+            "resetCode": "输入您的密码重置验证码"
         },
         "signup": {
-            "readAndAgree": "我已经阅读并且同意",
-            "termsOfServiceLink": "服务条款",
-            "title": "创建账户",
-            "privacyLink": "隐私",
-            "acceptableUseLink": "可接受的使用",
-            "ageConfirmation": "我证明我已年满 13 岁",
-            "alreadyHaveAccount": "已有帐户？",
+            "title": "创建账号",
+            "ageConfirmation": "我证明我已年满13岁",
+            "alreadyHaveAccount": "已有账号？",
             "confirmPassword": "确认密码",
-            "createAccount": "创建账户",
-            "emailAddress": "电子邮件地址",
+            "createAccount": "创建账号",
+            "emailAddress": "电子邮箱地址",
             "logIn": "登录",
             "password": "密码",
-            "username": "用户名"
+            "username": "用户名",
+            "readAndAgree": "我已阅读并接受<2>服务条款</2>、<4>可接受的使用</4>和<6>隐私</6>政策"
         },
         "userErrorDisplay": {
-            "accountBanned": "此帐户已被封禁。<1><0>原因：</0><1>{{banReason}}</1></1><2>封禁将于 {{expireTime}} 到期。</2>",
-            "banWithoutReason": "未指定原因",
+            "accountBanned": "此账号已被封禁。<1><0>原因：</0><1>{{banReason}}</1></1><2>账号将于{{expireTime}}解封。</2>",
+            "banWithoutReason": "未说明原因",
             "defaultError": "发生错误：{{status}} {{statusText}}",
-            "genericError": "发生错误：{{errorMessage}}",
+            "genericError": "出现错误：{{errorMessage}}",
             "invalidCredentials": "用户名或密码错误",
-            "machineBanned": "这台机器被禁止创建新帐户。",
-            "noConnectionErrorMessage": "无法连接到服务器。请检查您的互联网连接并重试。",
-            "sessionExpired": "会话过期",
-            "suspiciousActivity": "由于在此网络上检测到可疑活动，目前已禁用在网络上创建帐户。请下载独立客户端以创建新帐户。",
-            "usernameTaken": "已存在具有该名称的用户"
+            "machineBanned": "您的机器被禁止注册新帐号。",
+            "noConnectionErrorMessage": "无法连接到服务器。请检查您的网络连接，然后重试。",
+            "sessionExpired": "会话已过期",
+            "suspiciousActivity": "由于在此网络上检测到可疑活动，您不能在网页端创建帐号。请下载独立客户端以创建新帐号。",
+            "usernameTaken": "该用户名已被注册"
         },
         "forgot": {
-            "backToLogin": "回到登入",
+            "backToLogin": "返回登录界面",
             "generalError": "错误：{{error}}",
             "password": {
-                "sendResetEmail": "发送重置邮件",
-                "successMessage": "如果该电子邮件地址和用户名与注册帐户相匹配，您应该会在接下来的几分钟内收到一封电子邮件，其中包含有关如何重置密码的说明。",
-                "title": "重设密码",
-                "emailAddress": "电子邮件地址",
+                "sendResetEmail": "发送邮件以重置密码",
+                "successMessage": "如果您输入的电子邮箱地址和用户名与注册帐户匹配，您应该会在几分钟内收到一封电子邮件，它会指引您重置您的密码。",
+                "title": "重置密码",
+                "emailAddress": "电子邮箱",
                 "username": "用户名"
             },
             "reset": {
                 "confirmPassword": "确认新密码",
-                "newPassword": "新密码",
-                "passwordCode": "密码重置代码",
+                "newPassword": "新的密码",
+                "passwordCode": "密码重置验证码",
                 "setNewPassword": "设置新密码",
-                "successMessage": "您的密码已重置。",
-                "title": "重设密码",
+                "successMessage": "您的密码已经重置。",
+                "title": "重置密码",
                 "username": "用户名"
             },
             "user": {
-                "enterEmail": "请输入您注册时使用的电子邮件地址。",
-                "recoverUsername": "恢复用户名",
-                "successMessage": "如果有任何用户注册到该电子邮件地址，您应该会在接下来的几分钟内收到一封包含相关用户名的电子邮件。",
-                "title": "恢复您的用户名",
-                "emailAddress": "电子邮件地址"
+                "enterEmail": "请输入您注册时使用的电子邮箱。",
+                "recoverUsername": "找回用户名",
+                "successMessage": "如果有任何用户使用该电子邮箱注册，您应该会在几分钟内收到一封电子邮件，其中包含绑定该邮箱的用户名。",
+                "title": "找回您的用户名",
+                "emailAddress": "电子邮箱"
             }
         },
         "language": {
             "changeErrorHeader": "更改语言时出错",
-            "changeErrorMessage": "更改语言时出了点问题"
+            "changeErrorMessage": "更改语言时出现问题"
         },
         "usernameValidator": {
-            "pattern": "用户名包含无效字符",
+            "pattern": "此用户名包含不可用的字符",
             "required": "输入用户名",
-            "taken": "用户名已被占用"
+            "notAvailable": "此用户名不可用"
         }
     },
     "clientDownload": {
-        "andMore": "和更多！",
-        "blurb": "将 ShieldBattery 客户端下载到：",
+        "andMore": "还有更多！",
+        "blurb": "将ShieldBattery客户端下载到：",
         "downloadClient": "下载客户端",
         "exploreMaps": "探索地图",
-        "playGames": "玩游戏",
-        "supportProjectText": "想要支持该项目？",
-        "watchReplays": "观看重播"
+        "playGames": "畅玩游戏",
+        "supportProjectText": "愿意支持我们的项目吗？",
+        "watchReplays": "观看录像"
     },
     "clientUpdate": {
         "overlay": {
-            "errorBody": "下载更新时出错。请重新启动并重试，或访问<2>我们的网站</2>下载最新版本。",
-            "errorTitle": "下载更新时出错",
-            "newUpdateDownloading": "正在下载新的更新。请等待下载完成以便继续。",
-            "newUpdateReady": "已下载新更新并准备安装。请重新启动应用程序以继续。",
-            "noErrorTitle": "可用更新",
-            "restartNow": "现在重启"
+            "errorBody": "下载更新时遇到错误。请重启程序并重试，或访问<2>我们的网站</2>下载最新版本。",
+            "errorTitle": "下载更新时遇到错误",
+            "newUpdateDownloading": "正在下载新版本。请等待下载完成后再继续。",
+            "newUpdateReady": "新版本已下载完成并准备安装。请重新启动程序以继续。",
+            "noErrorTitle": "有新版本可用",
+            "restartNow": "立即重启",
+            "progress": "{{transferred}} / {{total}} 速度{{perSecond}}/秒"
         }
     },
     "comingSoon": {
-        "headline": "此功能即将推出！",
-        "subtitle": "帮助资助 ShieldBattery 的开发"
+        "headline": "此功能将在不久后推出！",
+        "subtitle": "赞助ShieldBattery开发组"
     },
     "ladder": {
-        "division": "分配",
+        "division": "分级",
         "divisionGroup": {
             "all": "全部",
             "bronze": "青铜",
             "champion": "冠军",
             "diamond": "钻石",
-            "gold": "金子",
-            "platinum": "铂",
-            "silver": "银",
-            "unrated": "未评级"
+            "gold": "黄金",
+            "platinum": "白金",
+            "silver": "白银",
+            "unrated": "未定级"
         },
-        "errorRetrievingRankings": "检索当前排名时出错。",
-        "lastPlayedHeader": "最后播放",
-        "mmrHeader": "麻疹死亡率",
+        "errorRetrievingRankings": "查询排行榜时出错。",
+        "lastPlayedHeader": "上次游玩",
+        "mmrHeader": "MMR",
         "noMatchingPlayers": "没有匹配的玩家。",
-        "pageHeadline": "梯子",
-        "playerHeader": "播放器",
-        "pointsHeader": "积分",
-        "rankHeader": "秩",
-        "updatedText": "更新：{{timestamp}}",
-        "winLossHeader": "赢/输"
+        "pageHeadline": "天梯",
+        "playerHeader": "玩家",
+        "pointsHeader": "分数",
+        "rankHeader": "排位",
+        "updatedText": "更新时间：{{timestamp}}",
+        "winLossHeader": "胜/败",
+        "activity": {
+            "title": "天梯"
+        }
     },
     "matchmaking": {
         "division": {
-            "bronze": "青铜【X7X】",
+            "bronze": "青铜{{level}}",
             "champion": "冠军",
-            "diamond": "钻石【X8X】",
+            "diamond": "钻石{{level}}",
             "gold": "黄金 {{level}}",
-            "platinum": "铂金【X9X】",
-            "silver": "银色【X7X】",
-            "unrated": "未评级"
+            "platinum": "白金{{level}}",
+            "silver": "白银{{level}}",
+            "unrated": "未定级"
+        },
+        "acceptMatch": {
+            "body": "所有玩家准备完成后游戏才会开始。",
+            "failedToAccept": "未能成功接受比赛",
+            "matchFound": "已找到对手",
+            "readyUp": "我准备好了",
+            "removedFromQueue": "您没有及时点击“我准备好了”，因此已被移除匹配队列。",
+            "returningToQueue": "部分玩家没有及时准备好或加载失败。正在返回匹配队列……"
+        },
+        "activity": {
+            "finding": "正在寻找对手…",
+            "findMatch": "寻找对手"
+        },
+        "disabledCard": {
+            "description": "因维护和开发的需要，匹配功能有时会关闭。匹配功能目前已禁用。下一次匹配时段是：",
+            "hours": "小时",
+            "inParty": "组队时不可用",
+            "minutes": "分钟",
+            "nextDateRange": "<0>{{nextStartDate}}</0><1>至</1><2>{{nextEndDate}}</2>",
+            "notPartyLeader": "只有队长能够参加匹配队列。",
+            "partyTooLargeTitle": "队伍人数太多",
+            "title": "匹配已被禁用",
+            "days": "天",
+            "partyTooLargeText": "您当前的队伍人数太多，无法参加此类型的匹配。",
+            "seconds": "秒",
+            "soon": "Soon™"
+        },
+        "findMatch": {
+            "action": "开始匹配",
+            "alternateRace": "备用种族",
+            "bonusPoints": "{{bonusAvailable}}分",
+            "bonusPool": "加分池",
+            "description": "选择你的备用种族。如果您和对手的主族相同，则您会使用备用种族进行游戏。",
+            "errors": {
+                "alreadyInGame": "您已经在游戏中、正在搜索比赛或在自定义房间中",
+                "inParty": "您正在组队中，无法作为单人玩家匹配",
+                "loadingRank": "加载您的当前排名时遇到问题。",
+                "matchmakingDisabled": "目前已禁用匹配功能",
+                "somethingWentWrong": "出错了 :(",
+                "dialogTitle": "匹配时遇到错误"
+            },
+            "race": "种族",
+            "rating": "评分",
+            "remainingPlacements": "剩余{{lifetimeGames}} / {{numPlacementMatches}}场定级赛",
+            "title": "开始匹配",
+            "updated": "更新",
+            "useAlternateRace": "使用第二种族以避免镜像对抗",
+            "mapPool": "地图池",
+            "points": "积分",
+            "vetoesLeft": "<0>剩余否决权：</0><1>{{vetoesLeft}}</1>",
+            "vetoDescriptionNoOverlap_other": "您可以否决最多{{count}}张地图。被否决的地图将永远不会用于进行游戏。",
+            "vetoDescriptionWithOverlap_other": "您可以否决最多{{count}}张地图。被否决的地图被选择的几率将会大大降低。"
+        },
+        "postMatchDialog": {
+            "rating": "评分",
+            "searchAgain": "重新匹配",
+            "title": "比赛结果",
+            "watchReplay": "观看录像",
+            "leagues": "联赛",
+            "matchmaking": "匹配",
+            "points": "积分"
+        },
+        "type": {
+            "1v1": "1v1",
+            "3v3": "3v3",
+            "2v2": "2v2"
+        },
+        "match": {
+            "gameFailedToLoad": "游戏加载失败。",
+            "gameInProgress": "游戏正在进行中……",
+            "gameLoading": "游戏正在启动…",
+            "gameStarting": "游戏正在开始……",
+            "playerVsPlayer": "对"
+        },
+        "navEntry": {
+            "cancelSearch": "取消匹配",
+            "elapsedTime": "时间： ",
+            "matchFound": "匹配成功！",
+            "searchingForMatch": "正在搜索{{matchmakingType}}"
+        },
+        "searchingOverlay": {
+            "cancelSearch": "取消匹配"
         }
+    },
+    "game": {
+        "gameType": {
+            "captureTheFlag": "夺旗战",
+            "freeForAll": "混战",
+            "melee": "对战",
+            "oneOnOne": "1v1",
+            "slaughter": "屠杀",
+            "suddenDeath": "突然死亡",
+            "teamCaptureTheFlag": "队伍夺旗战",
+            "teamFreeForAll": "队伍混战",
+            "teamMelee": "队伍对战",
+            "topVsBottom": "上对下",
+            "unknown": "未知",
+            "useMapSettings": "使用地图设置",
+            "greed": "资源战"
+        },
+        "mapName": {
+            "unknown": "未知地图"
+        },
+        "playerName": {
+            "computer": "电脑",
+            "unknown": "未知玩家"
+        },
+        "results": {
+            "lossShort": "败",
+            "winShort": "胜",
+            "draw": "平局",
+            "loss": "失败",
+            "unknown": "不明",
+            "win": "胜利"
+        },
+        "teamName": {
+            "bottom": "客队",
+            "number": "{{teamNumber}}队",
+            "top": "主队"
+        },
+        "race": {
+            "protoss": "星灵",
+            "random": "随机",
+            "terran": "人类",
+            "zerg": "异虫"
+        },
+        "gameSource": {
+            "custom": "自定义游戏",
+            "ranked": "{{matchmakingType}}排位"
+        }
+    },
+    "chat": {
+        "banUser": {
+            "successMessage": "{{user}} 已被封禁",
+            "banAction": "封禁 {{user}}",
+            "banReason": "封禁原因（非必填）",
+            "dialogTitle": "封禁{{user}}？"
+        },
+        "banUserErrorDisplay": {
+            "genericError": "封禁 {{user}} 时遇到错误：{{errorMessage}}",
+            "moderateChannelModerator": "您不能封禁其他版主",
+            "moderateChannelOwner": "您不能封禁频道所有者",
+            "noPermissions": "您的权限不足以封禁该用户",
+            "notInChannel": "您要封禁的用户不在该频道中",
+            "defaultError": "发生错误：{{statusText}}"
+        },
+        "channelInfo": {
+            "genericError": "获取#{{channelName}} 频道信息时出错：{{errorMessage}}",
+            "notFound": "找不到该频道。该频道可能不存在，也可能已被其他人重新创建。",
+            "defaultError": "发生错误：{{statusText}}"
+        },
+        "channelInfoCard": {
+            "adminView": "管理者界面",
+            "joined": "已加入",
+            "moreActions": "更多操作",
+            "noDescription": "该频道没有简介。",
+            "private": "此频道是私人频道，需要得到邀请才能加入。",
+            "userCount_other": "{{count}} 成员"
+        },
+        "messageLayout": {
+            "kickUser": "<0><0></0></0> 已被踢出频道",
+            "leaveChannel": "<0><0></0></0> 已离开频道",
+            "newChannelOwner": "<0><0></0></0> 已成为新的频道主",
+            "selfJoinChannel": "您加入了 <2><0></0></2>",
+            "banUser": "<0><0></0></0> 已被频道封禁",
+            "joinChannel": "<0><0></0></0> 已加入频道"
+        },
+        "messageMenu": {
+            "deleteError": "删除消息时遇到错误",
+            "messageDeleted": "消息已删除"
+        },
+        "navEntry": {
+            "leaveChannel": "离开频道"
+        },
+        "userList": {
+            "active": "活跃用户",
+            "idle": "空闲用户",
+            "offline": "离线用户"
+        },
+        "joinChannel": {
+            "maximumChannelsError": "您已达到加入频道的限制。您必须先离开一个频道，然后才能加入其他频道。",
+            "bannedError": "您被 #{{channelName}} 封禁",
+            "genericError": "加入 #{{channelName}} 时遇到错误"
+        },
+        "channelList": {
+            "createChannel": "创建频道",
+            "noMatchingChannels": "未找到匹配的聊天频道。",
+            "pageHeadline": "聊天频道",
+            "retrievingError": "检索聊天频道时发生了错误。"
+        },
+        "channelMenu": {
+            "banAction": "封禁 {{user}}",
+            "kickAction": "踢出 {{user}}",
+            "kickingError": "踢出 {{user.name}} 时遇到错误",
+            "userKicked": "{{user}} 已被踢出"
+        },
+        "channelName": {
+            "deletedChannel": "被删除的频道"
+        },
+        "channelValidator": {
+            "pattern": "频道名称含有不可用字符",
+            "required": "请输入频道名称"
+        },
+        "createChannel": {
+            "bannedError": "您被禁止访问此频道。",
+            "channelName": "频道名称",
+            "createAction": "创建频道",
+            "defaultError": "创建频道时遇到错误。",
+            "maximumOwnedError": "您已达到创建频道的限制。您必须先离开您创建的一个频道，然后才能创建新的频道。",
+            "title": "创建频道"
+        },
+        "events": {
+            "ban": "您已被 {{channelName}} 封禁。",
+            "kick": "您已被踢出 {{channelName}}。"
+        },
+        "channelHeader": {
+            "actionItems": {
+                "leaveChannel": "离开频道",
+                "channelSettings": "频道设置",
+                "hideBanner": "隐藏横幅"
+            },
+            "moreActions": "更多操作",
+            "errors": {
+                "toggleBannerVisibility": "切换横幅可见性时出现问题"
+            }
+        },
+        "channelSettings": {
+            "general": {
+                "descriptionLabel": "描述",
+                "topicLabel": "话题",
+                "saveErrorMessage": "保存设置时出错",
+                "inappropriateImageErrorMessage": "所选图像不合适。请选择不同的图像。"
+            }
+        }
+    },
+    "lobbies": {
+        "joinLobby": {
+            "openSlotCount_other": "有{{count}}个空位",
+            "disabledInPartyText": "组队加入房间功能目前仍在开发中。您必须退出队伍才能继续。",
+            "disabledInPartyTitle": "组队时不可加入房间",
+            "noActiveLobbies": "目前没有活跃的房间",
+            "noOpenLobbies": "目前没有开放的房间",
+            "title": "加入房间",
+            "action": "加入房间"
+        },
+        "messageLayout": {
+            "kickPlayer": "<0><0></0></0>已被踢出房间",
+            "leaveLobby": "<0><0></0></0>已离开房间",
+            "selfJoin": "您已加入<1>{{lobby}}</1>。主机是<4><0></0></4>。",
+            "banPlayer": "<0><0></0></0>已被房间封禁",
+            "countdownCanceled": "游戏倒计时已取消",
+            "countdownStarted": "游戏倒计时已经开始",
+            "gameInitializationCanceled": "游戏初始化已取消",
+            "hostChange": "<0><0></0></0>已成为主机",
+            "joinLobby": "<0><0></0></0>已加入房间"
+        },
+        "slots": {
+            "addComputer": "添加电脑玩家",
+            "makeObserver": "设为观战者",
+            "makePlayer": "设为玩家",
+            "open": "开放",
+            "removeComputer": "删除电脑玩家",
+            "slotActions": "空位动作",
+            "openSlot": "开放空位",
+            "banPlayer": "封禁玩家",
+            "closeSlot": "关闭空位",
+            "kickPlayer": "踢出玩家",
+            "name": "关闭"
+        },
+        "errors": {
+            "alreadyInLobby": "您已经在另一个房间了。",
+            "load": "加载该房间时遇到问题"
+        },
+        "loading": {
+            "content": "<0>{{gameType}}</0><1>于</1><2>{{mapName}}</2>"
+        },
+        "lobby": {
+            "gameType": "游戏类型",
+            "leaveLobby": "离开房间",
+            "startGame": "开始游戏",
+            "turnRateAuto": "自动设置",
+            "turnRateDynamic": "动态转换率",
+            "unitLimit": "单位数量限制",
+            "unitLimitExtended": "扩展",
+            "unitLimitLegacy": "原版",
+            "turnRate": "转换率"
+        },
+        "state": {
+            "exists": "该房间已经存在。是否要加入该房间？",
+            "nonexistent": "该房间不存在。是否要创建该房间？",
+            "started": "房间已经开始游戏。"
+        },
+        "activity": {
+            "title": "房间"
+        },
+        "createLobby": {
+            "backToList": "返回列表",
+            "disabledInPartyText": "组队创建房间功能目前仍在开发中。您必须退出队伍才能继续。",
+            "disabledInPartyTitle": "组队时不可创建房间",
+            "gameSubTypeHeader": "队伍",
+            "gameSubTypeOption": "{{numTeams}}支队伍",
+            "gameSubTypeOptionTvB": "{{topSlots}}对{{bottomSlots}}",
+            "gameTypeHeader": "游戏类型",
+            "lobbyName": "房间名称",
+            "lobbyNameRequired": "输入房间名称",
+            "mapRequired": "选择要玩的地图",
+            "selectMap": "选择地图",
+            "title": "创建房间",
+            "advancedSettings": "高级设置",
+            "turnRate": "转换率",
+            "turnRateAuto": "自动设置",
+            "turnRateDynamic": "动态转换率（不推荐使用）",
+            "useLegacyLimits": "使用旧版单位数量限制"
+        },
+        "events": {
+            "banned": "您已被该房间封禁。",
+            "kicked": "您已被踢出房间。"
+        }
+    },
+    "maps": {
+        "details": {
+            "retrieveError": "查询该地图的详细信息时遇到问题。错误信息：",
+            "tileset": "地形类型：{{tilesetName}}",
+            "title": "地图详情",
+            "editDescription": "编辑地图描述",
+            "editName": "编辑地图名称",
+            "mapDescription": "地图描述",
+            "mapDescriptionRequired": "输入地图描述",
+            "mapName": "地图名称",
+            "mapNameRequired": "输入地图名称",
+            "players": "玩家数：{{playerSize}}",
+            "size": "大小：{{width}}x{{height}}"
+        },
+        "local": {
+            "documentsFolder": "文档文件夹",
+            "programFolder": "程序文件夹",
+            "title": "本地地图",
+            "uploadError": "上传地图时遇到问题",
+            "uploadMapError": "上传地图时遇到了错误"
+        },
+        "mapSelect": {
+            "browseMaps": "浏览地图"
+        },
+        "server": {
+            "allMaps": "所有地图",
+            "browseLocal": "浏览本地地图",
+            "error": "出错了：{{errorMessage}}",
+            "favorites": {
+                "added": "已添加至收藏夹",
+                "addedError": "添加到收藏夹时遇到错误",
+                "removed": "已从收藏夹中删除",
+                "removedError": "从收藏夹中删除地图时遇到错误"
+            },
+            "filterOptions": {
+                "section": {
+                    "numberOfPlayers": "玩家人数",
+                    "tileset": "地形类型"
+                },
+                "title": "筛选选项"
+            },
+            "noCommunityMaps": "社区尚未公开任何地图。",
+            "noOfficialMaps": "尚未上传任何官方地图。",
+            "noResults": "没有找到。",
+            "noUploadedMaps": "您尚未上传任何地图。您可以单击下面的浏览按钮上传地图。",
+            "regenerateError": "重新生成图像时遇到错误",
+            "sortMaps": {
+                "option": {
+                    "dateUploaded": "上传日期",
+                    "name": "名称",
+                    "numberOfPlayers": "玩家人数"
+                },
+                "title": "地图排序"
+            },
+            "tab": {
+                "community": "社区地图",
+                "myMaps": "我的地图",
+                "official": "官方地图"
+            },
+            "thumbnailSize": {
+                "option": {
+                    "large": "大",
+                    "medium": "中等",
+                    "small": "小"
+                },
+                "title": "缩略图尺寸"
+            }
+        },
+        "thumbnail": {
+            "addToFavorites": "添加到收藏夹",
+            "mapActions": "地图动作",
+            "noMapPreview": "地图预览不可用",
+            "regenerateImage": "重新生成图像",
+            "removeFromFavorites": "从收藏夹中删除",
+            "showMapPreview": "显示地图预览",
+            "viewMapDetails": "查看地图详情"
+        },
+        "tileset": {
+            "ashworld": "灰烬",
+            "badlands": "荒原",
+            "desert": "沙漠",
+            "ice": "冰原",
+            "spacePlatform": "太空",
+            "twilight": "暮光",
+            "installation": "基地",
+            "jungleWorld": "丛林"
+        },
+        "activity": {
+            "title": "地图"
+        }
+    },
+    "navigation": {
+        "leftNav": {
+            "customGame": "自定义游戏",
+            "gameInProgress": "游戏进行中……",
+            "whispers": "私聊",
+            "chatChannels": "聊天频道",
+            "joinChannel": "加入频道（Alt + H）",
+            "loadingChannel": "加载中…",
+            "loadingGame": "加载中…",
+            "lobby": "房间",
+            "logIn": "登录",
+            "logOut": "登出",
+            "rankedGame": "{{matchmakingType}}排位",
+            "startWhisper": "开始私聊 (Alt + W)",
+            "viewChangelog": "查看更新日志",
+            "viewProfile": "查看资料",
+            "whisperCloseError": "关闭私聊会话时遇到错误：{{errorMessage}}",
+            "home": "首页",
+            "reportBug": "报告错误"
+        },
+        "copyLink": {
+            "copiedText": "已复制！",
+            "defaultText": "复制链接"
+        },
+        "externalLink": {
+            "alwaysTrust": "始终信任该域名",
+            "dialogText": "<0>此链接指向ShieldBattery之外的网站：</0><1>{{link}}</1><2>您确定要访问该网站吗？</2>",
+            "openLink": "打开链接",
+            "title": "外部链接"
+        }
+    },
+    "network": {
+        "connecting": "正在连接…"
+    },
+    "notifications": {
+        "popup": {
+            "markAsRead": "标记为已读"
+        },
+        "activityButton": {
+            "read": "通知（Alt + N）",
+            "unread": "未读通知 (Alt + N)"
+        },
+        "errors": {
+            "markRead": "将通知标记为已读时遇到错误"
+        },
+        "list": {
+            "title": "通知"
+        }
+    },
+    "parties": {
+        "errors": {
+            "acceptPartyInvite": {
+                "general": "接受邀请时遇到错误",
+                "notFoundOrNotInvited": "队伍已不存在",
+                "partyFull": "队伍已满"
+            },
+            "findMatchAsParty": {
+                "title": "搜索比赛时遇到错误",
+                "alreadyInGameplayActivity": "队伍已经在其他比赛类型中进行匹配",
+                "general": "出错了:(",
+                "insufficientPermissions": "只有队长才能发起匹配",
+                "invalidAction": "队伍人数太多，无法参加该类型的匹配",
+                "notFoundOrNotInParty": "未找到队伍或您不在该队伍中"
+            },
+            "alreadySearching": "一些队伍成员已经在游戏中、正在匹配或在自定义房间中：",
+            "cancelQueue": "取消匹配时遇到错误：{{errorMessage}}",
+            "changeLeader": {
+                "general": "更改队长时遇到错误"
+            },
+            "declinePartyInvite": {
+                "general": "拒绝邀请时遇到错误"
+            },
+            "unknownError": "发生未知错误",
+            "inviteToParty": {
+                "blocked": "发送邀请失败，您已被该用户屏蔽",
+                "general": "发送邀请时遇到错误",
+                "invalidSelfAction": "不能邀请自己参加队伍",
+                "notificationFailure": "发送邀请失败。请再试一次",
+                "alreadyMember": "{{user}}已在您的队伍中"
+            },
+            "kickPlayer": {
+                "general": "踢出玩家时遇到错误"
+            },
+            "leaveParty": {
+                "general": "离开队伍时遇到错误"
+            },
+            "removePartyInvite": {
+                "general": "删除邀请时遇到错误"
+            }
+        },
+        "messageLayout": {
+            "leaveParty": "<0><0></0></0>已离开队伍",
+            "queueCancel": {
+                "error": "发生错误，匹配已被取消",
+                "matchmakingDisabled": "匹配功能当前已被禁用，匹配已被取消",
+                "rejected": "<0><0></0></0>取消了匹配",
+                "userLeft": "由于<2><0></0></2>离开队伍，匹配已被取消"
+            },
+            "queueReady": "队伍现在正在搜索比赛",
+            "queueStart": "<0><0></0></0> 开始搜索 <4>{{matchmakingLabel}}</4>比赛",
+            "selfJoin": "您已加入队伍。队长是<2><0></0></2>。",
+            "joinParty": "<0><0></0></0>已加入队伍",
+            "kickFromParty": "<0><0></0></0>已被踢出队伍",
+            "leaderChange": "<0><0></0></0> 已成为队长",
+            "inviteToParty": "<0><0></0></0>已受邀参加队伍"
+        },
+        "navEntry": {
+            "invitePlayers": "邀请玩家",
+            "leaveParty": "离开队伍",
+            "title": "队伍"
+        },
+        "notificationUi": "<0>{{user}}</0>向您发送了组队邀请。",
+        "queueAcceptDialog": {
+            "contents": "您的队伍正在搜索 <2>{{matchmakingLabel}}</2> 比赛。",
+            "error": "错误：{{error}}",
+            "title": "选择您的种族"
+        },
+        "view": {
+            "cancelSearch": "取消搜索",
+            "invitePlayers": "邀请玩家",
+            "kickFromParty": "踢出队伍",
+            "leaveParty": "离开队伍",
+            "makeLeader": "将该玩家设为队长",
+            "openSlot": "空的"
+        },
+        "events": {
+            "kickFromParty": "您已被踢出队伍。"
+        },
+        "inviteDialog": {
+            "findPlayers": "搜索玩家",
+            "sendInvites": "发送邀请",
+            "title": "邀请玩家参加队伍"
+        }
+    },
+    "policy": {
+        "acceptableUse": "可接受的使用",
+        "acceptableUseAllCaps": "可接受的使用政策",
+        "policyUpdateNotification": "ShieldBattery的<2>{{label}}</2>已更新。",
+        "privacyPolicy": "隐私政策",
+        "privacyPolicyAllCaps": "隐私政策",
+        "termsOfService": "服务条款",
+        "termsOfServiceAllCaps": "服务条款"
+    },
+    "replays": {
+        "activity": {
+            "title": "录像"
+        },
+        "local": {
+            "duration": "时长：{{durationStr}}",
+            "gameType": "游戏类型：{{gameTypeLabel}}",
+            "loadingError": "加载录像时遇到问题",
+            "rootFolderName": "录像",
+            "title": "本地录像",
+            "watchReplay": "观看录像"
+        },
+        "fileDropText": "将录像拖到这里即可使用ShieldBattery观看录像。",
+        "loading": {
+            "dialogTitle": "正在加载录像…",
+            "errorGeneric": "加载录像时遇到问题。",
+            "initFailureBody": "无法加载您选择的录像。录像可能已损坏，或者是游戏版本太新，当前尚不支持。",
+            "initFailureTitle": "加载录像时出错"
+        },
+        "replayInfoDialog": {
+            "title": "录像信息",
+            "watch": "观看"
+        }
+    },
+    "rootErrorBoundary": {
+        "contents": "请在我们的 <2>Discord</2> 服务器上向我们报告此问题。",
+        "reloadApp": "重新加载程序",
+        "title": "出错了:("
+    },
+    "starcraft": {
+        "shieldbatteryHealth": {
+            "bottomContents": "如果可以的话，向您的杀毒软件供应商报告这些误报可以避免其他用户遭遇同样的问题！",
+            "middleContents": "这通常是由于杀毒软件误报导致的。您可能需要将这些文件添加到信任区，或者让软件将它们移出隔离区。您也可以尝试重新安装ShieldBattery。",
+            "noProblems": "您的本地安装现在没有问题了。",
+            "rescanFiles": "重新扫描文件",
+            "title": "检测到安装问题",
+            "topContents": "我们检测到以下ShieldBattery文件缺失或被篡改："
+        },
+        "starcraftHealth": {
+            "header": "在使用ShieldBattery进行游戏之前，您需要解决以下问题：",
+            "installPathContents": "您的《星际争霸》路径设置未指向有效的安装目录。请前往<2>设置</2>中纠正路径设置。如果您尚未安装《星际争霸》，可以从<5><0>暴雪官网</0></5>轻松下载。安装游戏后您可能需要重新启动ShieldBattery。",
+            "noProblems": "您的本地安装现在没有问题了。",
+            "starcraftVersionContents": "您安装的《星际争霸》版本过旧。ShieldBattery仅支持1.16.1或最新的重制版版本。请安装<2><0>最新版本</0></2>并重新启动ShieldBattery。",
+            "title": "检测到安装问题"
+        }
+    },
+    "gameDetails": {
+        "statusLive": "直播中",
+        "summary": {
+            "mmr": "MMR",
+            "rp": "RP",
+            "pointsBase": "基础",
+            "pointsBonus": "奖励分"
+        },
+        "buttonSearchAgain": "再次搜索",
+        "buttonCopyLink": "复制游戏链接",
+        "errorLoading": "加载该游戏时遇到了问题。",
+        "headlineDefault": "结果",
+        "headlineDefeat": "战败！",
+        "headlineDraw": "平局！",
+        "headlineInProgress": "进行中…",
+        "headlineVictory": "胜利！",
+        "infoDate": "日期",
+        "infoDuration": "时长",
+        "infoGameType": "游戏类型",
+        "statusFinal": "最终",
+        "tabBuildOrders": "开局建造顺序",
+        "tabStats": "统计数据",
+        "tabSummary": "概要"
+    },
+    "user": {
+        "miniMatchHistory": {
+            "noGameSelected": "没有选择游戏",
+            "viewDetails": "查看详情"
+        },
+        "matchHistory": {
+            "noMatchingGames": "没有匹配的游戏。",
+            "retrievingError": "检索比赛历史记录时出错。"
+        }
+    },
+    "users": {
+        "contextMenu": {
+            "addFriend": "添加好友",
+            "friendRemoved": "已删除好友",
+            "friendRequestAccepted": "已接受好友请求",
+            "removeFriend": "删除好友",
+            "removeFriendRequest": "删除好友请求",
+            "uninviteFromParty": "撤回组队邀请",
+            "userBlocked": "用户已被屏蔽",
+            "userUnblocked": "用户已被解除屏蔽",
+            "viewProfile": "查看资料",
+            "whisper": "私聊",
+            "friendRequestRemoved": "已删除好友请求",
+            "friendRequestSent": "已发送好友请求",
+            "inviteToParty": "发出组队邀请",
+            "kickFromParty": "踢出队伍",
+            "loadingUsers": "正在加载用户…"
+        },
+        "errors": {
+            "friendsList": {
+                "errorUnblockingUser": "解除屏蔽时出错",
+                "invalidSelfAction": "您无法对自己执行此操作`",
+                "limitReached": "您的好友数或屏蔽数已达到上限，需要删除一些才能添加更多",
+                "noMatchingEntry": "没有找到",
+                "blockedByUser": "您已被该用户屏蔽",
+                "errorAcceptingFriendRequest": "接受好友请求时出错",
+                "errorBlockingUser": "屏蔽用户时出错",
+                "errorDecliningFriendRequest": "拒绝好友请求时出错",
+                "errorRemovingFriend": "删除好友时出错",
+                "errorRemovingFriendRequest": "删除好友请求时出错",
+                "errorSendingFriendRequest": "发送好友请求时出错",
+                "load": "加载好友列表失败"
+            },
+            "profile": {
+                "loadUser": "加载该用户时遇到问题。"
+            }
+        },
+        "friendsList": {
+            "friendStart": "您已与<2>{{user}}</2>成为好友。",
+            "header": {
+                "incoming": "正在传入",
+                "online": "在线",
+                "outgoing": "正在传出",
+                "offline": "离线"
+            },
+            "tabs": {
+                "socialSettings": "社交设置",
+                "addFriends": "添加好友",
+                "friendsList": "好友列表"
+            },
+            "title": {
+                "addFriends": "添加好友",
+                "friends": "好友"
+            },
+            "tooltip": "好友（Alt + E）",
+            "receivedFriendRequest": "<0>{{user}}</0>向您发送了好友请求。"
+        },
+        "profile": {
+            "achievements": "成就",
+            "latestGames": "最近游戏",
+            "points": "积分",
+            "rank": "排名",
+            "tabs": {
+                "admin": "管理",
+                "matchHistory": "比赛历史",
+                "season": "赛季",
+                "stats": "统计数据",
+                "summary": "概要"
+            },
+            "rating": "评分",
+            "record": "战绩",
+            "totalGames": "总比赛数"
+        },
+        "profileOverlay": {
+            "info": "信息",
+            "joined": "加入日期{{date}}",
+            "ranked": "排位",
+            "rightClick": "右键单击用户以执行更多操作",
+            "viewProfile": "查看资料"
+        },
+        "titles": {
+            "novice": "新手"
+        }
+    },
+    "whispers": {
+        "createWhisper": {
+            "title": "发送信息",
+            "username": "用户名",
+            "usernamePattern": "用户名包含无效字符",
+            "usernameRequired": "请输入用户名",
+            "error": "错误：{{errorMessage}}"
+        },
+        "errors": {
+            "cantWhisperYourself": "您不能与自己私聊。",
+            "invalidAction": "必须与该用户正在私聊中才能查询历史信息记录",
+            "loadingHistory": "加载历史信息记录时遇到错误：{{errorMessage}}",
+            "noSelfMessaging": "您不能对自己发送信息",
+            "openSession": "私聊用户时遇到错误：{{errorMessage}}",
+            "sendingMessage": "发送信息时遇到错误：{{errorMessage}}",
+            "unknownError": "未知错误",
+            "userNotFound": "未找到用户"
+        },
+        "navEntry": {
+            "closeWhisper": "关闭私聊"
+        }
+    },
+    "material": {
+        "dialog": {
+            "closeDialog": "关闭对话框"
+        },
+        "passwordField": {
+            "hide": "隐藏密码",
+            "show": "显示密码"
+        }
+    },
+    "messaging": {
+        "blockedMessage": "消息被屏蔽",
+        "mention": "提到",
+        "newDayMessage": "日期已变为<2>{{day}}</2>",
+        "sendMessage": "发送消息"
+    },
+    "windowControls": {
+        "close": "关闭",
+        "maximizeRestore": "最大化/恢复",
+        "minimize": "最小化"
+    },
+    "leagues": {
+        "activity": {
+            "title": "联赛"
+        },
+        "explainer": {
+            "description": "在全新推出的联赛中争夺奖品、锦标赛参赛资格，还有更多！",
+            "howLeaguesWork": "联赛如何运作",
+            "joinDescription": "首先需要在当前正在进行中或报名中的联赛中找到您想要参加的赛制。某些联赛可能有不同的要求、规则或门槛，因此请务必在加入前详细阅读联赛信息！",
+            "joinTitle": "加入。",
+            "playDescription": "联赛开始后，您参加的所有天梯游戏除了正常的天梯点数以外还会额外奖励联赛积分。查看联赛页面上的排行榜，看看您的表现如何！",
+            "playTitle": "游玩。",
+            "winDescription": "联赛结束后，组织者可以查看排行榜以便发放奖品。详情请查看联赛信息页面。",
+            "winTitle": "取胜！"
+        },
+        "leagueDetails": {
+            "goBack": "返回列表",
+            "joined": "已加入",
+            "joinError": "无法加入联赛：{{errorMessage}}",
+            "leaderboard": "排行榜",
+            "leaderboardError": "查询排行榜时遇到问题：{{errorMessage}}",
+            "leaderBoardHeader": {
+                "lastPlayed": "上一次游戏",
+                "player": "玩家",
+                "points": "积分",
+                "rank": "排名",
+                "winLoss": "胜/败"
+            },
+            "leagueEndedError": "无法加入联赛，因为该联赛已经结束",
+            "leagueJoined": "已加入的联赛",
+            "noPlayers": "没有匹配的玩家。",
+            "notFound": "未找到联赛",
+            "retrieveError": "查询此联赛时遇到错误：{{errorMessage}}",
+            "rulesAndInfo": "规则与信息",
+            "about": "关于",
+            "copyLink": "复制联赛链接",
+            "dateText": "{{startDate}} 至 {{endDate}}",
+            "info": "信息"
+        },
+        "list": {
+            "acceptingSignups": "接受报名",
+            "currentlyRunning": "正在进行",
+            "ends": "于{{endDate}}结束",
+            "finished": "已完成",
+            "howDoLeaguesWork": "联赛如何运作？",
+            "joined": "已加入",
+            "loadingError": "加载联赛时出错",
+            "manageLeagues": "管理联赛",
+            "noLeagues": "没有匹配的联赛",
+            "pageHeadline": "联赛",
+            "starts": "于{{startDate}}开始",
+            "viewInfo": "查看信息"
+        }
+    },
+    "fileBrowser": {
+        "rootFolder": "根目录",
+        "upOneDirectory": "向上一级目录"
     },
     "forms": {
         "fileInput": {
-            "clearFiles": "清除文件"
+            "chooseFile": "选择文件"
         }
+    },
+    "bugReport": {
+        "details": "细节",
+        "detailsDescription": "请描述该错误并尽可能详细地说明该错误发生时您正在执行的操作。",
+        "detailsRequired": "错误报告必须包含详细信息。",
+        "error": "错误：{{errorMessage}}",
+        "logUploadDescription": "您的错误报告将包括您计算机上的 ShieldBattery 日志，以帮助诊断问题。日志最多可保存 30 天，并且只有 ShieldBattery 员工才能查看。",
+        "reportSubmitted": "已提交错误报告。",
+        "title": "报告错误"
     }
 }

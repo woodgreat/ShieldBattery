@@ -1,0 +1,145 @@
+name: JS CI
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Using pnpm v8.x
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - name: Using Node.js 20.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install app dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: ./app
+
+      - name: Run unit tests
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Check translation files
+        id: check-translation-files
+        run: pnpm gen-translations:app --fail-on-update && pnpm gen-translations:email --fail-on-update
+
+      - name: Display translation error
+        if: ${{ failure() && steps.check-translation-files.conclusion == 'failure' }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.setFailed('The translation files are not up to date. Please run "pnpm gen-translations" in the directory root and commit the updated translation files.')
+
+      - name: Generate email templates
+        id: gen-email-templates
+        run: pnpm gen-emails
+
+      - name: Check email templates
+        uses: tj-actions/verify-changed-files@v15
+        id: check-email-templates
+        with:
+          files: server/email/*.html
+
+      - name: Display email template error
+        if: ${{ steps.check-email-templates.outputs.files_changed == 'true' || failure() && steps.gen-email-templates.conclusion == 'failure' }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.setFailed('The email templates seem outdated. Please run "pnpm gen-emails" in the directory root and commit the updated email templates.')
+
+      - name: Generate graphql files
+        id: gen-graphql
+        run: pnpm gen-graphql
+
+      - name: Check graphql codegen
+        uses: tj-actions/verify-changed-files@v15
+        id: check-graphql
+        with:
+          files: client/gql/*
+
+      - name: Display graphql error
+        if: ${{ steps.check-graphql.outputs.files_changed == 'true' || failure() && steps.gen-graphql.conclusion == 'failure' }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.setFailed('The generated graphql files seem outdated. Please run `pnpm gen-graphql` in the directory root and commit the updated files.')
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Building Docker containers
+        run: cd ./integration && docker-compose build
+
+      - name: Running Docker containers
+        run: cd ./integration && docker-compose up -V -d
+
+      - name: Using pnpm v8.x
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Using Node.js 20.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install app dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: ./app
+
+      - name: Install playwright dependencies
+        run: pnpm exec playwright install --with-deps
+
+      - name: Run integration tests
+        run: pnpm test:integration
+
+      - name: View app-server logs
+        if: ${{ failure() }}
+        run: docker logs integration_app-server_1
+
+      - name: View server-rs logs
+        if: ${{ failure() }}
+        run: docker logs integration_server-rs_1
+
+      - name: View mailgun logs
+        if: ${{ failure() }}
+        run: docker logs integration_mailgun_1
+
+      - name: View google-cloud logs
+        if: ${{ failure() }}
+        run: docker logs integration_google-cloud_1
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ failure() || success() }}
+        with:
+          name: test-results
+          path: ./test-results/*
+          retention-days: 5
+          if-no-files-found: ignore

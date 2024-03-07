@@ -20,7 +20,7 @@ function getErrorClass(code: string): string {
 }
 
 function isDatabaseError(error: unknown): error is DatabaseError {
-  return error instanceof Error && error.hasOwnProperty('code') && error.hasOwnProperty('position')
+  return error instanceof Error && 'code' in error && 'position' in error
 }
 
 function handlePgSyntaxError(queryText: string, error: DatabaseError): Error {
@@ -46,5 +46,5 @@ function handlePgSyntaxError(queryText: string, error: DatabaseError): Error {
   if (error.hint) {
     messageLines.push(`hint: ${error.hint}`)
   }
-  return new Error(`${error.message} in query: \n${messageLines.join('\n')}`)
+  return new Error(`${error.message} in query: \n${messageLines.join('\n')}`, { cause: error })
 }

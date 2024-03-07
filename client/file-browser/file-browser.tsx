@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 import styled from 'styled-components'
 import { assertUnreachable } from '../../common/assert-unreachable'
+import swallowNonBuiltins from '../../common/async/swallow-non-builtins'
 import { useObservedDimensions } from '../dom/dimension-hooks'
-import { useVirtuosoScrollFix } from '../dom/virtuoso-scroll-fix'
 import { MaterialIcon } from '../icons/material/material-icon'
 import { useKeyListener } from '../keyboard/key-listener'
 import { JsonLocalStorageValue } from '../local-storage'
@@ -136,7 +136,8 @@ interface FileBrowserProps {
   title: string
   titleButton?: React.ReactElement
   fileEntryConfig: FileBrowserFileEntryConfig
-  sortFunc?: (a: FileBrowserEntry, b: FileBrowserEntry) => number
+  folderSortFunc?: (a: FileBrowserFolderEntry, b: FileBrowserFolderEntry) => number
+  fileSortFunc?: (a: FileBrowserFileEntry, b: FileBrowserFileEntry) => number
 }
 
 export function FileBrowser({
@@ -145,10 +146,10 @@ export function FileBrowser({
   title = 'Files',
   titleButton,
   fileEntryConfig,
-  sortFunc = sortByName,
+  folderSortFunc = sortByName,
+  fileSortFunc = sortByName,
 }: FileBrowserProps) {
   const { t } = useTranslation()
-  const [scrollerRef] = useVirtuosoScrollFix()
 
   const [fileBrowserPath, setFileBrowserPath] = useState('')
   const [upOneDir, setUpOneDir] = useState<FileBrowserUpEntry>()
@@ -178,7 +179,9 @@ export function FileBrowser({
   // Focus *something* when file browser is opened, because if we don't, whatever was focused before
   // the file browser was opened will still have focus and will mess with our keyboard events.
   const focusBrowser = useCallback((elem: HTMLDivElement | null) => {
-    Promise.resolve().then(() => elem?.focus())
+    Promise.resolve()
+      .then(() => elem?.focus())
+      .catch(swallowNonBuiltins)
   }, [])
 
   const entries = useMemo(() => {
@@ -229,7 +232,7 @@ export function FileBrowser({
     }
   }, [prevIsLoadingFiles, isLoadingFiles, entries, focusedIndex])
 
-  const getFiles = useStableCallback(async () => {
+  const getFiles = useStableCallback(() => {
     if (!fileBrowserPath) {
       return
     }
@@ -237,34 +240,38 @@ export function FileBrowser({
     setIsLoadingFiles(true)
     setLoadFilesError(undefined)
 
-    try {
-      const result = await readFolder(fileBrowserPath)
+    Promise.resolve()
+      .then(async () => {
+        try {
+          const result = await readFolder(fileBrowserPath)
 
-      const isRootFolder = fileBrowserPath === rootFolder.path
-      let upOneDir: FileBrowserUpEntry | undefined
-      if (!isRootFolder) {
-        upOneDir = {
-          type: FileBrowserEntryType.Up,
-          name: t('fileBrowser.upOneDirectory', 'Up one directory'),
-          path: `${fileBrowserPath}\\..`,
+          const isRootFolder = fileBrowserPath === rootFolder.path
+          let upOneDir: FileBrowserUpEntry | undefined
+          if (!isRootFolder) {
+            upOneDir = {
+              type: FileBrowserEntryType.Up,
+              name: t('fileBrowser.upOneDirectory', 'Up one directory'),
+              path: `${fileBrowserPath}\\..`,
+            }
+          }
+
+          const folders: FileBrowserFolderEntry[] = result
+            .filter((e): e is FileBrowserFolderEntry => e.type === FileBrowserEntryType.Folder)
+            .sort(folderSortFunc)
+          const files: FileBrowserFileEntry[] = result
+            .filter((e): e is FileBrowserFileEntry => e.type === FileBrowserEntryType.File)
+            .sort(fileSortFunc)
+
+          setUpOneDir(upOneDir)
+          setFolders(folders)
+          setFiles(files)
+        } catch (err) {
+          setLoadFilesError(err as Error)
+        } finally {
+          setIsLoadingFiles(false)
         }
-      }
-
-      const folders: FileBrowserFolderEntry[] = result
-        .filter((e): e is FileBrowserFolderEntry => e.type === FileBrowserEntryType.Folder)
-        .sort(sortFunc)
-      const files: FileBrowserFileEntry[] = result
-        .filter((e): e is FileBrowserFileEntry => e.type === FileBrowserEntryType.File)
-        .sort(sortFunc)
-
-      setUpOneDir(upOneDir)
-      setFolders(folders)
-      setFiles(files)
-    } catch (err) {
-      setLoadFilesError(err as Error)
-    } finally {
-      setIsLoadingFiles(false)
-    }
+      })
+      .catch(swallowNonBuiltins)
   })
 
   useEffect(() => {
@@ -376,13 +383,14 @@ export function FileBrowser({
           }
           return true
         }
-        case SPACE:
+        case SPACE: {
           const focusedFileEntry = files.find(f => f.path === focusedPath)
           if (focusedFileEntry && fileEntryConfig.ExpansionPanelComponent) {
             onFileClick(focusedFileEntry)
             return true
           }
           return true
+        }
         case UP:
           moveFocusedIndexBy(-1)
           return true
@@ -390,7 +398,7 @@ export function FileBrowser({
           moveFocusedIndexBy(1)
           return true
         case PAGEUP:
-        case PAGEDOWN:
+        case PAGEDOWN: {
           if (!containerRect) {
             return true
           }
@@ -400,8 +408,9 @@ export function FileBrowser({
           const delta = event.code === PAGEUP ? -ENTRIES_SHOWN + 1 : ENTRIES_SHOWN - 1
           moveFocusedIndexBy(delta)
           return true
+        }
         case HOME:
-        case END:
+        case END: {
           const newFocusedEntry = event.code === HOME ? entries[0] : entries[entries.length - 1]
           if (!newFocusedEntry || newFocusedEntry.path === focusedPath) {
             return true
@@ -414,12 +423,14 @@ export function FileBrowser({
             listRef.current?.scrollToIndex({ index: entries.length, align: 'start' })
           }
           return true
-        case BACKSPACE:
+        }
+        case BACKSPACE: {
           const isRootFolder = fileBrowserPath === rootFolder.path
           if (!isRootFolder) {
             onUpLevelClick()
           }
           return true
+        }
       }
 
       return false
@@ -473,7 +484,7 @@ export function FileBrowser({
   } else if (loadFilesError) {
     emptyContent = <ErrorText>{loadFilesError.message}</ErrorText>
   } else {
-    emptyContent = <EmptyText>{t('fileBrowser.noFiles', 'Nothing to see here')}</EmptyText>
+    emptyContent = <EmptyText>{t('common.lists.empty', 'Nothing to see here')}</EmptyText>
   }
 
   const displayedPath = fileBrowserPath
@@ -511,7 +522,6 @@ export function FileBrowser({
         {entries.length > 0 ? (
           <Virtuoso
             ref={listRef}
-            scrollerRef={scrollerRef}
             components={{ Header: VertPadding, Footer: VertPadding }}
             data={entries}
             itemContent={renderRow}

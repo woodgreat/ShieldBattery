@@ -25,7 +25,6 @@ import {
   LOBBY_UPDATE_SLOT_CHANGE,
   LOBBY_UPDATE_SLOT_CREATE,
   LOBBY_UPDATE_SLOT_DELETED,
-  NETWORK_SITE_CONNECTED,
 } from '../actions'
 import { TextMessageRecord } from '../messaging/message-records'
 import { keyedReducer } from '../reducers/keyed-reducer'
@@ -49,6 +48,8 @@ export class LobbyInfo extends Record({
   gameSubType: 0,
   teams: List(),
   host: new Slot(),
+  turnRate: undefined,
+  useLegacyLimits: false,
 
   isCountingDown: false,
   countdownTimer: -1,
@@ -144,7 +145,7 @@ const infoReducer = keyedReducer(undefined, {
     return new LobbyInfo()
   },
 
-  [NETWORK_SITE_CONNECTED](state, action) {
+  ['@network/connect'](state, action) {
     return new LobbyInfo()
   },
 
@@ -296,7 +297,7 @@ function chatReducer(lobbyInfo, lastLobbyInfo, state, action) {
   if (!lobbyInfo.name) {
     return EMPTY_CHAT
   }
-  return chatHandlers.hasOwnProperty(action.type)
+  return Object.hasOwn(chatHandlers, action.type)
     ? prune(chatHandlers[action.type](lobbyInfo, lastLobbyInfo, state, action))
     : state
 }

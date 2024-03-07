@@ -3,7 +3,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { ChatServiceErrorCode, SbChannelId } from '../../common/chat'
 import { urlPath } from '../../common/urls'
-import { hasAnyPermission } from '../admin/admin-permissions'
+import { useHasAnyPermission } from '../admin/admin-permissions'
 import { MaterialIcon } from '../icons/material/material-icon'
 import { IconButton, RaisedButton } from '../material/button'
 import Card from '../material/card'
@@ -27,7 +27,7 @@ import {
 import { ChannelBadge } from './channel-badge'
 import { ChannelBanner, ChannelBannerPlaceholderImage } from './channel-banner'
 
-const ChannelCardRoot = styled(Card)`
+export const ChannelCardRoot = styled(Card)`
   position: relative;
   width: 352px;
   padding: 0;
@@ -44,13 +44,13 @@ const OverflowMenuButton = styled(IconButton)`
   right: 4px;
 `
 
-const ChannelBannerAndBadge = styled.div`
+export const ChannelBannerAndBadge = styled.div`
   box-sizing: content-box;
   position: relative;
   padding-bottom: 20px;
 `
 
-const ChannelCardBadge = styled.div`
+export const ChannelCardBadge = styled.div`
   ${shadow2dp};
   position: absolute;
   left: 12px;
@@ -63,7 +63,7 @@ const ChannelCardBadge = styled.div`
   border-radius: 9999px;
 `
 
-const ChannelName = styled.div`
+export const ChannelName = styled.div`
   ${headline6};
   margin-top: 4px;
   padding: 0 16px;
@@ -92,7 +92,7 @@ const PrivateChannelDescriptionText = styled.span`
   text-align: center;
 `
 
-const ChannelDescriptionContainer = styled.div`
+export const ChannelDescriptionContainer = styled.div`
   ${body1};
   margin-top: 16px;
   padding: 0 16px;
@@ -109,7 +109,7 @@ const NoChannelDescriptionText = styled.span`
   color: ${colorTextFaint};
 `
 
-const ChannelActions = styled.div`
+export const ChannelActions = styled.div`
   padding: 16px 16px 10px 16px;
 
   display: flex;
@@ -128,8 +128,7 @@ const JoinedIndicator = styled.div`
 
 export interface ConnectedChannelInfoCardProps {
   /**
-   * The ID of a channel for which we want to display info for. In case the channel with this ID is
-   * not found, the card will display an error.
+   * The ID of a channel for which we want to display info for.
    */
   channelId: SbChannelId
   /**
@@ -141,8 +140,10 @@ export interface ConnectedChannelInfoCardProps {
 
 /**
  * A component which finds a channel for a given channel ID and displays its info. Allows users to
- * join the channel if they're not already in it, and handles errors in case the channel is not
- * found etc.
+ * join the channel if they're not already in it.
+ *
+ * NOTE: This component assumes the channel exists and doesn't handle errors in case the channel was
+ * not found.
  */
 export function ConnectedChannelInfoCard({
   channelId,
@@ -153,7 +154,7 @@ export function ConnectedChannelInfoCard({
   const basicChannelInfo = useAppSelector(s => s.chat.idToBasicInfo.get(channelId))
   const detailedChannelInfo = useAppSelector(s => s.chat.idToDetailedInfo.get(channelId))
   const isUserInChannel = useAppSelector(s => s.chat.joinedChannels.has(channelId))
-  const isAdmin = useAppSelector(s => hasAnyPermission(s.auth, 'moderateChatChannels'))
+  const isAdmin = useHasAnyPermission('moderateChatChannels')
 
   const [overflowMenuOpen, openOverflowMenu, closeOverflowMenu] = usePopoverController()
   const [anchor, anchorX, anchorY] = useAnchorPosition('left', 'top')
@@ -265,8 +266,8 @@ export function ConnectedChannelInfoCard({
         {basicChannelInfo ? (
           <ChannelCardBadge>
             <ChannelBadge
-              basicChannelInfo={basicChannelInfo}
-              detailedChannelInfo={detailedChannelInfo}
+              src={detailedChannelInfo?.badgePath}
+              channelName={basicChannelInfo.name}
             />
           </ChannelCardBadge>
         ) : null}

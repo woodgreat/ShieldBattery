@@ -1,5 +1,6 @@
 import PropTypes from 'prop-types'
 import React from 'react'
+import { Trans, withTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { gameTypeToLabel } from '../../common/games/configuration'
 import { getPlayerSlots } from '../../common/lobbies'
@@ -208,10 +209,13 @@ class LoadingMessage extends React.Component {
   }
 
   _resetTimer() {
-    this._timer = setTimeout(() => {
-      this.setState({ messageIndex: this._pickMessageIndex() })
-      this._resetTimer()
-    }, Math.floor(Math.random() * (MESSAGE_TIME_MAX - MESSAGE_TIME_MIN)) + MESSAGE_TIME_MIN)
+    this._timer = setTimeout(
+      () => {
+        this.setState({ messageIndex: this._pickMessageIndex() })
+        this._resetTimer()
+      },
+      Math.floor(Math.random() * (MESSAGE_TIME_MAX - MESSAGE_TIME_MIN)) + MESSAGE_TIME_MIN,
+    )
   }
 
   componentDidMount() {
@@ -263,6 +267,7 @@ const StyledPlayerCard = styled(PlayerCard)`
   margin: 8px;
 `
 
+@withTranslation()
 export default class LoadingScreen extends React.Component {
   static propTypes = {
     lobby: PropTypes.object.isRequired,
@@ -271,7 +276,7 @@ export default class LoadingScreen extends React.Component {
   }
 
   render() {
-    const { lobby, gameStatus, user } = this.props
+    const { lobby, gameStatus, user, t } = this.props
 
     const isReady = p => {
       if (p.type === 'computer' || p.name === user.name) return true
@@ -295,9 +300,11 @@ export default class LoadingScreen extends React.Component {
     return (
       <Content>
         <div>
-          <Display1Old as='span'>{gameTypeToLabel(lobby.gameType)}</Display1Old>
-          <GameTypeMapBridge as='span'> on </GameTypeMapBridge>
-          <Display1Old as='span'>{lobby.map.name}</Display1Old>
+          <Trans t={t} i18nKey='lobbies.loading.content'>
+            <Display1Old as='span'>{{ gameType: gameTypeToLabel(lobby.gameType, t) }}</Display1Old>
+            <GameTypeMapBridge as='span'> on </GameTypeMapBridge>
+            <Display1Old as='span'>{{ mapName: lobby.map.name }}</Display1Old>
+          </Trans>
         </div>
         <MapImageContainer>
           <MapImage map={lobby.map} />

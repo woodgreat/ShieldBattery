@@ -19,7 +19,7 @@ interface UserLanguageSettingsModel {
 }
 
 export function UserLanguageSettings() {
-  const { i18n } = useTranslation()
+  const { i18n, t } = useTranslation()
   const dispatch = useAppDispatch()
 
   const debouncedChangeUserLanguageRef = useRef(
@@ -49,15 +49,19 @@ export function UserLanguageSettings() {
     <form noValidate={true} onSubmit={onSubmit}>
       <SubmitOnEnter />
       <FormContainer>
-        <RadioGroup label='Select a language' {...bindInput('language')}>
-          {ALL_TRANSLATION_LANGUAGES.map(language => (
-            <RadioButton
-              key={language}
-              value={language}
-              label={translationLanguageToLabel(language)}
-            />
-          ))}
-        </RadioGroup>
+        <div>
+          <RadioGroup
+            label={t('settings.user.language.selectLanguage', 'Select a language')}
+            {...bindInput('language')}>
+            {ALL_TRANSLATION_LANGUAGES.map(language => (
+              <RadioButton
+                key={language}
+                value={language}
+                label={translationLanguageToLabel(language)}
+              />
+            ))}
+          </RadioGroup>
+        </div>
       </FormContainer>
     </form>
   )

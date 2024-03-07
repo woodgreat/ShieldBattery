@@ -6,17 +6,10 @@
 cd "$(dirname "${BASH_SOURCE[0]}")"
 cd ..
 
+NODE_ENV=production
 echo "Running DB migrations"
-yarn run migrate-up || exit 1
+pnpm run migrate-up || exit 1
 echo "DB migrations complete"
-echo ""
-
-echo "Running redis migrations"
-for f in server/redis-migrations/*.js; do
-  echo "> $f"
-  node -r "./babel-register" -r "core-js/proposals/reflect-metadata" -r "dotenv-expand/config" "$f" || exit 1
-done
-echo "Redis migrations complete"
 echo ""
 
 ACCESS_KEY=$(echo $SB_FILE_STORE | jq '.doSpaces.accessKeyId' | cut -d '"' -f 2)

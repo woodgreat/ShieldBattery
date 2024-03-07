@@ -248,7 +248,9 @@ impl<'e> Analysis<'e> {
             .ok()
             .filter(|&offset| offset != 0)?;
         let tls_address = base + tls_offset;
-        let tls_ptr = binary.read_u32(tls_address + 2 * VirtualAddress::SIZE).ok()?;
+        let tls_ptr = binary
+            .read_u32(tls_address + 2 * VirtualAddress::SIZE)
+            .ok()?;
         Some(tls_ptr as *mut u32)
     }
 
@@ -370,7 +372,7 @@ impl<'e> Analysis<'e> {
         self.0
             .firegraft_addresses()
             .unit_status_funcs
-            .get(0)
+            .first()
             .copied()
     }
 
@@ -392,7 +394,7 @@ impl<'e> Analysis<'e> {
             .arrays
             .get(5)
             .filter(|x| x.len() == 1)
-            .and_then(|x| x.get(0))
+            .and_then(|x| x.first())
             .filter(|x| x.1 == 0 && x.2 == 0)
             .map(|x| self.2.mem32(x.0, u64::from(VirtualAddress::SIZE)))
     }
@@ -571,5 +573,32 @@ impl<'e> Analysis<'e> {
 
     pub fn select_units(&mut self) -> Option<VirtualAddress> {
         self.0.select_units()
+    }
+
+    pub fn first_dialog(&mut self) -> Option<Operand<'e>> {
+        self.0.first_dialog()
+    }
+
+    pub fn graphic_layers(&mut self) -> Option<Operand<'e>> {
+        self.0.graphic_layers()
+    }
+
+    pub fn first_player_unit(&mut self) -> Option<Operand<'e>> {
+        self.0.first_player_unit()
+    }
+
+    pub fn game_screen_height_ratio(&mut self) -> Option<Operand<'e>> {
+        self.0.game_screen_height_ratio()
+    }
+
+    pub fn zoom(&mut self) -> Option<Operand<'e>> {
+        self.0.zoom()
+    }
+
+    pub fn console_vtables(&mut self) -> Vec<VirtualAddress> {
+        let mut out = Vec::with_capacity(2);
+        out.extend(self.0.vtables_for_class(b".?AVSDConsole@@"));
+        out.extend(self.0.vtables_for_class(b".?AVHDWideConsole@@"));
+        out
     }
 }

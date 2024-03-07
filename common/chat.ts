@@ -1,9 +1,10 @@
 import { Opaque } from 'type-fest'
 import { Jsonify } from './json'
+import { Patch } from './patch'
 import { SbUser, SbUserId } from './users/sb-user'
 
-export const CHANNEL_BANNER_WIDTH = 704 * 2
-export const CHANNEL_BANNER_HEIGHT = 288 * 2
+export const CHANNEL_BANNER_WIDTH = 736 * 2
+export const CHANNEL_BANNER_HEIGHT = 414 * 2
 export const CHANNEL_BADGE_WIDTH = 80 * 4
 export const CHANNEL_BADGE_HEIGHT = 80 * 4
 
@@ -25,14 +26,17 @@ export function makeSbChannelId(id: number): SbChannelId {
 
 export enum ChatServiceErrorCode {
   CannotChangeChannelOwner = 'CannotChangeChannelOwner',
+  CannotEditChannel = 'CannotEditChannel',
   CannotLeaveShieldBattery = 'CannotLeaveShieldBattery',
   CannotModerateChannelOwner = 'CannotModerateChannelOwner',
   CannotModerateChannelModerator = 'CannotModerateChannelModerator',
   CannotModerateShieldBattery = 'CannotModerateShieldBattery',
   CannotModerateYourself = 'CannotModerateYourself',
   ChannelNotFound = 'ChannelNotFound',
+  InappropriateImage = 'InappropriateImage',
   MaximumJoinedChannels = 'MaximumJoinedChannels',
   MaximumOwnedChannels = 'MaximumOwnedChannels',
+  NoInitialChannelData = 'NoChannelData',
   NotEnoughPermissions = 'NotEnoughPermissions',
   NotInChannel = 'NotInChannel',
   TargetNotInChannel = 'TargetNotInChannel',
@@ -178,6 +182,11 @@ export interface JoinedChannelInfo {
   topic?: string
 }
 
+export interface ChannelPreferences {
+  /** A flag indicating whether to show/hide the channel banner for a user. */
+  hideBanner: boolean
+}
+
 export interface ChannelPermissions {
   /**
    * A flag indicating whether the user has a permission to kick someone from the channel. Kicking a
@@ -206,6 +215,8 @@ export interface InitialChannelData {
   joinedChannelInfo: JoinedChannelInfo
   /** A list of IDs of active users that are in the chat channel. */
   activeUserIds: SbUserId[]
+  /** The channel preferences for the current user that is initializing the channel. */
+  selfPreferences: ChannelPreferences
   /** The channel permissions for the current user that is initializing the channel. */
   selfPermissions: ChannelPermissions
 }
@@ -226,6 +237,16 @@ export interface ChatJoinEvent {
   user: SbUser
   /** A message info for the user joining a channel that is saved in the DB. */
   message: JoinChannelMessage
+}
+
+export interface ChatEditEvent {
+  action: 'edit'
+  /** The updated basic information about the edited channel. */
+  channelInfo: BasicChannelInfo
+  /** The updated detailed information about the edited channel. */
+  detailedChannelInfo: DetailedChannelInfo
+  /** The updated channel information specific to user's edited channel. */
+  joinedChannelInfo: JoinedChannelInfo
 }
 
 export interface ChatLeaveEvent {
@@ -293,12 +314,11 @@ export interface ChatUserOfflineEvent {
 }
 
 /**
- * Events that are sent to all clients in a particular chat channel (except the "init" event which
- * is sent only to the client that initially subscribes to these events).
+ * Events that are sent to all clients in a particular chat channel.
  */
 export type ChatEvent =
-  | ChatInitEvent
   | ChatJoinEvent
+  | ChatEditEvent
   | ChatLeaveEvent
   | ChatKickEvent
   | ChatBanEvent
@@ -308,6 +328,12 @@ export type ChatEvent =
   | ChatUserIdleEvent
   | ChatUserOfflineEvent
 
+export interface ChatPreferencesChangedEvent {
+  action: 'preferencesChanged'
+  /** The channel preferences for the current user whose preferences have changed. */
+  selfPreferences: ChannelPreferences
+}
+
 export interface ChatPermissionsChangedEvent {
   action: 'permissionsChanged'
   /** The channel permissions for the current user whose permissions have changed. */
@@ -315,7 +341,10 @@ export interface ChatPermissionsChangedEvent {
 }
 
 /** Events that are sent to a particular user in a particular chat channel. */
-export type ChatUserEvent = ChatPermissionsChangedEvent
+export type ChatUserEvent =
+  | ChatInitEvent
+  | ChatPreferencesChangedEvent
+  | ChatPermissionsChangedEvent
 
 /**
  * The response returned when joining a specific chat channel.
@@ -326,6 +355,28 @@ export interface JoinChannelResponse {
   /** The detailed information about the joined channel. */
   detailedChannelInfo: DetailedChannelInfo
   /** The channel information specific to user's joined channel. */
+  joinedChannelInfo: JoinedChannelInfo
+}
+
+/**
+ * The body data of the API route for editing the channel info.
+ */
+export interface EditChannelRequest {
+  description?: string | null
+  topic?: string | null
+  deleteBanner?: boolean
+  deleteBadge?: boolean
+}
+
+/**
+ * The response returned when editing a specific chat channel.
+ */
+export interface EditChannelResponse {
+  /** The updated basic information about the edited channel. */
+  channelInfo: BasicChannelInfo
+  /** The updated detailed information about the edited channel. */
+  detailedChannelInfo: DetailedChannelInfo
+  /** The updated channel information specific to user's edited channel. */
   joinedChannelInfo: JoinedChannelInfo
 }
 
@@ -420,6 +471,11 @@ export interface GetChatUserProfileResponse {
    */
   profile?: ChatUserProfileJson
 }
+
+/**
+ * The body of a request when updating the preferences of a user in a specific chat channel.
+ */
+export type UpdateChannelUserPreferencesRequest = Patch<ChannelPreferences>
 
 /**
  * The response returned when fetching the permissions of a user in a specific chat channel.

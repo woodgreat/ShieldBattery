@@ -59,6 +59,8 @@ interface IpcInvokeables {
   activeGameSetConfig: (config: GameLaunchConfig | Record<string, never>) => string | null
   activeGameSetRoutes: (gameId: string, routes: GameRoute[]) => void
 
+  bugReportCollectFiles: () => Promise<Uint8Array>
+
   // TODO(tec27): Support the non-filetypes version if we need it, overloads don't seem to work
   // well with the current approach for typing these invokes =/
   fsReadDir: (dirPath: string, options: { withFileTypes: true }) => Promise<FsDirent[]>
@@ -83,6 +85,7 @@ interface IpcInvokeables {
   settingsLocalMerge: (settings: Readonly<Partial<LocalSettings>>) => void
   settingsScrMerge: (settings: Readonly<Partial<ScrSettings>>) => void
 
+  settingsAutoPickStarcraftPath: () => Promise<boolean>
   settingsCheckStarcraftPath: (path: string) => Promise<{ path: boolean; version: boolean }>
   settingsBrowseForStarcraft: (
     defaultPath: string,
@@ -131,6 +134,8 @@ interface IpcMainSendables {
   activeGameStatus: (status: ReportedGameStatus) => void
 
   rallyPointPingResult: (server: ResolvedRallyPointServer, ping: number) => void
+
+  replaysOpen: (replayPaths: string[]) => void
 
   settingsLocalChanged: (settings: Readonly<Partial<LocalSettings>>) => void
   settingsScrChanged: (settings: Readonly<Partial<ScrSettings>>) => void
@@ -395,7 +400,7 @@ export class TypedIpcRenderer {
     channel: K,
     listener: IpcMainSendables[K],
   ): this {
-    ipcRenderer?.removeListener(channel, listener)
+    ipcRenderer?.removeListener(channel, listener as any)
     return this
   }
 }

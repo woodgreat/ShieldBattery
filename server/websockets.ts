@@ -9,6 +9,7 @@ import log from './lib/logging/logger'
 import { isElectronClient } from './lib/network/only-web-clients'
 import { getSingleQueryParam } from './lib/network/query-param'
 import { CORS_MAX_AGE_SECONDS } from './lib/security/cors'
+import { StateWithJwt } from './lib/session/jwt-session-middleware'
 import getAddress from './lib/websockets/get-address'
 import { RequestSessionLookup, SessionInfo } from './lib/websockets/session-lookup'
 import { ClientSocketsManager, UserSocketsManager } from './lib/websockets/socket-groups'
@@ -63,16 +64,17 @@ export class WebsocketServer {
   constructor(
     private koa: Koa,
     readonly nydus: NydusServer,
+    @inject('jwtMiddleware') private jwtMiddleware: Koa.Middleware,
     @inject('sessionMiddleware') private sessionMiddleware: Koa.Middleware,
     private sessionLookup: RequestSessionLookup,
     readonly clientSockets: ClientSocketsManager,
     readonly userSockets: UserSocketsManager,
   ) {
-    ;(this.nydus as AuthorizingNydusServer).setAllowRequestHandler((req, cb) =>
+    ;(this.nydus as AuthorizingNydusServer).setAllowRequestHandler((req, cb) => {
       this.onAuthorization(req, cb).catch(err => {
         log.error({ err }, 'Error during socket authorization')
-      }),
-    )
+      })
+    })
 
     this.nydus
       .on('error', err => {
@@ -90,22 +92,6 @@ export class WebsocketServer {
         handler(this.nydus, this.userSockets, this.clientSockets)
       }
     }
-
-    this.userSockets
-      .on('newUser', () => this.connectedUsers++)
-      .on('userQuit', () => this.connectedUsers--)
-
-    this.nydus.on('connection', socket => {
-      this.nydus.subscribeClient(socket, '/status', { users: this.connectedUsers })
-    })
-
-    let lastConnectedUsers = 0
-    setInterval(() => {
-      if (this.connectedUsers !== lastConnectedUsers) {
-        lastConnectedUsers = this.connectedUsers
-        this.nydus.publish('/status', { users: lastConnectedUsers })
-      }
-    }, 1 * 60 * 1000)
   }
 
   async onAuthorization(
@@ -114,18 +100,15 @@ export class WebsocketServer {
   ) {
     const logger = log.child({ reqId: cuid() })
     logger.info({ req }, 'websocket authorizing')
-    if (!req.headers.cookie) {
-      logger.warn({ req, err: new Error('request had no cookies') }, 'websocket error')
-      cb(null, false)
-      return
-    }
 
-    const ctx = this.koa.createContext(req, dummyRes)
+    const ctx = this.koa.createContext<StateWithJwt>(req, dummyRes)
+    const jwtMiddleware = this.jwtMiddleware
     const sessionMiddleware = this.sessionMiddleware
     try {
+      await jwtMiddleware(ctx, async () => {})
       await sessionMiddleware(ctx, async () => {})
 
-      if (!ctx.session?.userId) {
+      if (!ctx.session || !ctx.state.jwtData) {
         // User is not logged in
         cb(null, false)
         return
@@ -133,10 +116,10 @@ export class WebsocketServer {
 
       const clientId = getSingleQueryParam(ctx.query.clientId) ?? cuid()
       const handshakeData: SessionInfo = {
-        sessionId: ctx.sessionId!,
-        userId: ctx.session.userId,
+        sessionId: ctx.state.jwtData.sessionId,
+        userId: ctx.session.user.id,
         clientId,
-        userName: ctx.session.userName,
+        userName: ctx.session.user.name,
         address: getAddress(req),
         clientType: isElectronClient(ctx) ? 'electron' : 'web',
       }

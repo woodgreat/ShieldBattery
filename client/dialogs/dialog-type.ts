@@ -7,9 +7,12 @@ import { SbUserId } from '../../common/users/sb-user'
 export enum DialogType {
   AcceptableUse = 'acceptableUse',
   AcceptMatch = 'acceptMatch',
-  Account = 'account',
+  BugReport = 'bugReport',
   Changelog = 'changelog',
+  ChangeEmail = 'changeEmail',
+  ChangePassword = 'changePassword',
   ChannelBanUser = 'channelBanUser',
+  ChannelSettings = 'channelSettings',
   Download = 'download',
   ExternalLink = 'externalLink',
   LeagueExplainer = 'leagueExplainer',
@@ -19,6 +22,8 @@ export enum DialogType {
   PartyInvite = 'partyInvite',
   PostMatch = 'postMatch',
   PrivacyPolicy = 'privacyPolicy',
+  ReplayInfo = 'replayInfo',
+  ReplayLoad = 'replayLoad',
   Simple = 'simple',
   ShieldBatteryHealth = 'shieldBatteryHealth',
   StarcraftHealth = 'starcraftHealth',
@@ -32,13 +37,24 @@ type BaseDialogPayload<D, DataType = undefined> = DataType extends undefined
 
 type AcceptableUseDialogPayload = BaseDialogPayload<typeof DialogType.AcceptableUse>
 type AcceptMatchDialogPayload = BaseDialogPayload<typeof DialogType.AcceptMatch>
-type AccountDialogPayload = BaseDialogPayload<typeof DialogType.Account>
+type BugReportDialogPayload = BaseDialogPayload<typeof DialogType.BugReport>
 type ChangelogDialogPayload = BaseDialogPayload<typeof DialogType.Changelog>
+type ChangeEmailDialogPayload = BaseDialogPayload<
+  typeof DialogType.ChangeEmail,
+  { currentEmail: string }
+>
+type ChangePasswordDialogPayload = BaseDialogPayload<typeof DialogType.ChangePassword>
 type ChannelBanUserDialogPayload = BaseDialogPayload<
   typeof DialogType.ChannelBanUser,
   {
     channelId: SbChannelId
     userId: SbUserId
+  }
+>
+export type ChannelSettingsDialogPayload = BaseDialogPayload<
+  typeof DialogType.ChannelSettings,
+  {
+    channelId: SbChannelId
   }
 >
 type DownloadDialogPayload = BaseDialogPayload<typeof DialogType.Download>
@@ -75,6 +91,18 @@ export type PostMatchDialogPayload = BaseDialogPayload<
   }
 >
 type PrivacyPolicyDialogPayload = BaseDialogPayload<typeof DialogType.PrivacyPolicy>
+type ReplayInfoDialogPayload = BaseDialogPayload<
+  typeof DialogType.ReplayInfo,
+  {
+    filePath: string
+  }
+>
+type ReplayLoadDialogPayload = BaseDialogPayload<
+  typeof DialogType.ReplayLoad,
+  {
+    gameId: string
+  }
+>
 type SimpleDialogPayload = BaseDialogPayload<
   typeof DialogType.Simple,
   {
@@ -91,9 +119,12 @@ type WhispersDialogPayload = BaseDialogPayload<typeof DialogType.Whispers>
 export type DialogPayload =
   | AcceptableUseDialogPayload
   | AcceptMatchDialogPayload
-  | AccountDialogPayload
+  | BugReportDialogPayload
   | ChangelogDialogPayload
+  | ChangeEmailDialogPayload
+  | ChangePasswordDialogPayload
   | ChannelBanUserDialogPayload
+  | ChannelSettingsDialogPayload
   | DownloadDialogPayload
   | ExternalLinkDialogPayload
   | LeagueExplainerDialogPayload
@@ -103,6 +134,8 @@ export type DialogPayload =
   | PartyInviteDialogPayload
   | PostMatchDialogPayload
   | PrivacyPolicyDialogPayload
+  | ReplayInfoDialogPayload
+  | ReplayLoadDialogPayload
   | SimpleDialogPayload
   | ShieldBatteryHealthDialogPayload
   | StarcraftHealthDialogPayload

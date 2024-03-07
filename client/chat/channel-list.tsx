@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { BasicChannelInfo } from '../../common/chat'
 import { urlPath } from '../../common/urls'
+import { useTrackPageView } from '../analytics/analytics'
 import { ConnectedChannelInfoCard } from '../chat/channel-info-card'
 import { MaterialIcon } from '../icons/material/material-icon'
 import InfiniteScrollList from '../lists/infinite-scroll-list'
@@ -16,6 +17,7 @@ import { useAppDispatch } from '../redux-hooks'
 import { SearchInput, SearchInputHandle } from '../search/search-input'
 import { useStableCallback } from '../state-hooks'
 import { colorError, colorTextFaint } from '../styles/colors'
+import { FlexSpacer } from '../styles/flex-spacer'
 import { headline4, subtitle1 } from '../styles/typography'
 import { searchChannels } from './action-creators'
 
@@ -28,9 +30,8 @@ const Container = styled.div`
 
 const TitleBar = styled.div`
   display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
+  align-items: baseline;
+  gap: 16px;
   margin-bottom: 16px;
 `
 
@@ -62,6 +63,7 @@ const ErrorText = styled.div`
 `
 
 export function ChannelList() {
+  useTrackPageView('/chat/')
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const autoFocusRef = useAutoFocusRef<SearchInputHandle>()
@@ -80,6 +82,9 @@ export function ChannelList() {
       // Just need to clear the search results here and let the infinite scroll list initiate the
       // network request.
       setSearchQuery(searchQuery)
+      // TODO(2Pac): Make the infinite scroll lost in charge of the loading state, so we don't have
+      // to do this here, which is pretty unintuitive.
+      setIsLoadingMoreChannels(false)
       setSearchError(undefined)
       setChannels(undefined)
       setHasMoreChannels(true)
@@ -166,6 +171,7 @@ export function ChannelList() {
     <Container>
       <TitleBar>
         <PageHeadline>{t('chat.channelList.pageHeadline', 'Chat channels')}</PageHeadline>
+        <FlexSpacer />
         <RaisedButton
           label={t('chat.channelList.createChannel', 'Create channel')}
           iconStart={<MaterialIcon icon='add' />}

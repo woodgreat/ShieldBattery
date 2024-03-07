@@ -1,7 +1,9 @@
 import { Immutable } from 'immer'
 import { List } from 'immutable'
 import React from 'react'
+import { WithTranslation, withTranslation } from 'react-i18next'
 import styled from 'styled-components'
+import { ReadonlyDeep } from 'type-fest'
 import { assertUnreachable } from '../../common/assert-unreachable'
 import { gameTypeToLabel, isTeamType } from '../../common/games/configuration'
 import {
@@ -14,8 +16,9 @@ import {
 } from '../../common/lobbies'
 import { Slot, SlotType } from '../../common/lobbies/slot'
 import { MapInfoJson } from '../../common/maps'
+import { BwTurnRate } from '../../common/network'
 import { RaceChar } from '../../common/races'
-import { SelfUserRecord } from '../auth/auth-records'
+import { SelfUser } from '../../common/users/sb-user'
 import { MapThumbnail } from '../maps/map-thumbnail'
 import { RaisedButton } from '../material/button'
 import Card from '../material/card'
@@ -154,10 +157,20 @@ function renderChatMessage(msg: SbMessage) {
   }
 }
 
+function turnRateToLabel(turnRate: BwTurnRate | 0 | undefined, t: WithTranslation['t']): string {
+  if (turnRate === 0) {
+    return t('lobbies.lobby.turnRateDynamic', 'DTR')
+  } else if (!turnRate) {
+    return t('lobbies.lobby.turnRateAuto', 'Auto')
+  } else {
+    return String(turnRate)
+  }
+}
+
 interface LobbyProps {
   lobby: LobbyInfo
   chat: List<SbMessage>
-  user: SelfUserRecord
+  user: ReadonlyDeep<SelfUser>
   isFavoritingMap: boolean
   onLeaveLobbyClick: () => void
   onSetRace: (slotId: string, race: RaceChar) => void
@@ -175,7 +188,7 @@ interface LobbyProps {
   onStartGame: () => void
 }
 
-export default class Lobby extends React.Component<LobbyProps> {
+class Lobby extends React.Component<LobbyProps & WithTranslation> {
   getTeamSlots(team: Team, isObserver: boolean, isLobbyUms: boolean) {
     const {
       lobby,
@@ -322,6 +335,7 @@ export default class Lobby extends React.Component<LobbyProps> {
       onSendChatMessage,
       onMapPreview,
       onToggleFavoriteMap,
+      t,
     } = this.props
 
     const isLobbyUms = isUms(lobby.gameType)
@@ -357,7 +371,10 @@ export default class Lobby extends React.Component<LobbyProps> {
           <StyledChat listProps={listProps} inputProps={inputProps} />
         </Left>
         <Info>
-          <RaisedButton label='Leave lobby' onClick={onLeaveLobbyClick} />
+          <RaisedButton
+            label={t('lobbies.lobby.leaveLobby', 'Leave lobby')}
+            onClick={onLeaveLobbyClick}
+          />
           <MapName>{(lobby.map as unknown as Immutable<MapInfoJson>).name}</MapName>
           <StyledMapThumbnail
             map={lobby.map as unknown as Immutable<MapInfoJson>}
@@ -366,8 +383,20 @@ export default class Lobby extends React.Component<LobbyProps> {
             isFavoriting={isFavoritingMap}
           />
           <InfoItem>
-            <InfoLabel as='span'>Game type</InfoLabel>
-            <InfoValue as='span'>{gameTypeToLabel(lobby.gameType)}</InfoValue>
+            <InfoLabel as='span'>{t('lobbies.lobby.gameType', 'Game type')}</InfoLabel>
+            <InfoValue as='span'>{gameTypeToLabel(lobby.gameType, t)}</InfoValue>
+          </InfoItem>
+          <InfoItem>
+            <InfoLabel as='span'>{t('lobbies.lobby.turnRate', 'Turn rate')}</InfoLabel>
+            <InfoValue as='span'>{turnRateToLabel(lobby.turnRate, t)}</InfoValue>
+          </InfoItem>
+          <InfoItem>
+            <InfoLabel as='span'>{t('lobbies.lobby.unitLimit', 'Unit limit')}</InfoLabel>
+            <InfoValue as='span'>
+              {lobby.useLegacyLimits
+                ? t('lobbies.lobby.unitLimitLegacy', 'Legacy')
+                : t('lobbies.lobby.unitLimitExtended', 'Extended')}
+            </InfoValue>
           </InfoItem>
           {this.renderCountdown()}
           {this.renderStartButton()}
@@ -386,14 +415,21 @@ export default class Lobby extends React.Component<LobbyProps> {
   }
 
   renderStartButton() {
-    const { lobby, user, onStartGame } = this.props
+    const { lobby, user, onStartGame, t } = this.props
     if (!user || lobby.host.name !== user.name) {
       return null
     }
 
     const isDisabled = lobby.isCountingDown || !hasOpposingSides(lobby as any)
     return (
-      <StartButton color='primary' label='Start game' disabled={isDisabled} onClick={onStartGame} />
+      <StartButton
+        color='primary'
+        label={t('lobbies.lobby.startGame', 'Start game')}
+        disabled={isDisabled}
+        onClick={onStartGame}
+      />
     )
   }
 }
+
+export default withTranslation()(Lobby)

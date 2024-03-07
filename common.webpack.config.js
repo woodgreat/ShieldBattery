@@ -74,7 +74,7 @@ export default function ({
         {
           // Dumb workaround for `iconv-lite` not fixing their bugs. See this issue for more info:
           // https://github.com/ashtuchkin/iconv-lite/issues/204
-          test: /node_modules[\/\\](iconv-lite)[\/\\].+/,
+          test: /node_modules[/\\](iconv-lite)[/\\].+/,
           resolve: {
             aliasFields: ['main'],
           },
@@ -102,12 +102,6 @@ export default function ({
         },
       }),
       ...webpackOpts.plugins,
-      // get rid of errors caused by any-promise's crappy codebase, by replacing it with a module
-      // that just exports whatever Promise babel is using
-      new webpack.NormalModuleReplacementPlugin(
-        /[\\/]any-promise[\\/]/,
-        require.resolve('./common/promise.js'),
-      ),
     ].concat(isProd ? [] : [new ReactRefreshWebpackPlugin()]),
 
     resolve: {

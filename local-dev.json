@@ -1,0 +1,23 @@
+[
+  {
+    "command": ["pnpm", "run", "start-server"],
+    "title": "Node Web Server"
+  },
+  {
+    "command": ["run-dev-server.bat"],
+    "cwd": "./server-rs",
+    "title": "Rust Web Server"
+  },
+  {
+    "command": ["pnpm", "run", "dev"],
+    "title": "Dev Webpack Server"
+  },
+  {
+    "command": ["pnpm", "run", "gen-graphql", "--watch"],
+    "title": "GraphQL Codegen"
+  },
+  {
+    "command": ["pnpm", "run", "app"],
+    "title": "Electron App"
+  }
+]

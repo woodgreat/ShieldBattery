@@ -1,14 +1,20 @@
 import cuid from 'cuid'
 import { TypedIpcRenderer } from '../../common/ipc'
-import { apiUrl } from '../../common/urls'
-import { SbUserId, SelfUser } from '../../common/users/sb-user'
+import { apiUrl, urlPath } from '../../common/urls'
+import { SbUserId } from '../../common/users/sb-user'
 import { ClientSessionInfo } from '../../common/users/session'
 import type { PromisifiedAction, ReduxAction } from '../action-types'
-import type { ThunkAction } from '../dispatch-registry'
+import { dispatch, type ThunkAction } from '../dispatch-registry'
 import { maybeChangeLanguageLocally } from '../i18n/action-creators'
+import logger from '../logging/logger'
 import { RequestHandlingSpec, abortableThunk } from '../network/abortable-thunk'
-import { encodeBodyAsParams, fetchJson } from '../network/fetch'
-import { AccountUpdateSuccess, AuthChangeBegin } from './actions'
+import {
+  CREDENTIAL_STORAGE,
+  CredentialStorageType,
+  encodeBodyAsParams,
+  fetchJson,
+} from '../network/fetch'
+import { AuthChangeBegin } from './actions'
 import { getBrowserprint } from './browserprint'
 
 const typedIpc = new TypedIpcRenderer()
@@ -70,6 +76,55 @@ async function getExtraSessionData() {
   return extraData
 }
 
+let sessionRefreshTimeout: ReturnType<typeof setTimeout> | undefined
+function scheduleSessionRefresh() {
+  if (sessionRefreshTimeout) {
+    clearTimeout(sessionRefreshTimeout)
+  }
+
+  // 24 hours with 30 minute jtter
+  const jitter = Math.random() * 1000 * 60 * 30 - 1000 * 60 * 15
+  const time = 1000 * 60 * 60 * 24 + jitter
+
+  sessionRefreshTimeout = setTimeout(() => {
+    sessionRefreshTimeout = undefined
+    dispatch(
+      getCurrentSession(
+        {},
+        {
+          onSuccess() {},
+          onError(err) {
+            logger.error(`Error refreshing session: ${err?.stack ?? String(err)}`)
+          },
+        },
+      ),
+    )
+  }, time)
+}
+
+function clearSessionRefresh() {
+  if (sessionRefreshTimeout) {
+    clearTimeout(sessionRefreshTimeout)
+    sessionRefreshTimeout = undefined
+  }
+}
+
+function initSession(
+  session: ClientSessionInfo,
+  storageType = CredentialStorageType.Auto,
+): ThunkAction {
+  return dispatch => {
+    CREDENTIAL_STORAGE.store(session.jwt, storageType)
+    dispatch({
+      type: '@auth/loadCurrentSession',
+      payload: session,
+    })
+
+    dispatch(maybeChangeLanguageLocally(session.user.locale))
+    scheduleSessionRefresh()
+  }
+}
+
 export function logIn(
   {
     username,
@@ -91,12 +146,9 @@ export function logIn(
       }),
     })
 
-    dispatch({
-      type: '@auth/loadCurrentSession',
-      payload: result,
-    })
-
-    dispatch(maybeChangeLanguageLocally(result.user.locale))
+    dispatch(
+      initSession(result, remember ? CredentialStorageType.Local : CredentialStorageType.Session),
+    )
   })
 }
 
@@ -105,6 +157,8 @@ export function logOut() {
     const result = await fetchJson<void>(apiUrl`sessions`, {
       method: 'delete',
     })
+    CREDENTIAL_STORAGE.store(undefined)
+    clearSessionRefresh()
 
     return result
   })
@@ -132,12 +186,7 @@ export function signUp(
     })
     window.fathom?.trackGoal('YTZ0JAUE', 0)
 
-    dispatch({
-      type: '@auth/loadCurrentSession',
-      payload: result,
-    })
-
-    dispatch(maybeChangeLanguageLocally(result.user.locale))
+    dispatch(initSession(result, CredentialStorageType.Session))
   })
 }
 
@@ -147,18 +196,13 @@ export function getCurrentSession(
 ): ThunkAction {
   return abortableThunk(spec, async dispatch => {
     const result = await fetchJson<ClientSessionInfo>(
-      apiUrl`sessions?date=${Date.now()}&locale=${locale}`,
+      apiUrl`sessions?date=${Date.now()}` + (locale ? urlPath`&locale=${locale}` : ''),
       {
         method: 'get',
       },
     )
 
-    dispatch({
-      type: '@auth/loadCurrentSession',
-      payload: result,
-    })
-
-    dispatch(maybeChangeLanguageLocally(result.user.locale))
+    dispatch(initSession(result))
   })
 }
 
@@ -168,11 +212,16 @@ export function getCurrentSession(
 export function bootstrapSession(session?: ClientSessionInfo): ThunkAction {
   return dispatch => {
     if (session) {
-      dispatch({
-        type: '@auth/loadCurrentSession',
-        payload: session,
-      })
+      dispatch(initSession(session))
     }
+  }
+}
+
+export function revokeSession(): ThunkAction {
+  return dispatch => {
+    dispatch({ type: '@auth/sessionUnauthorized', payload: undefined })
+    CREDENTIAL_STORAGE.store(undefined)
+    clearSessionRefresh()
   }
 }
 
@@ -224,14 +273,5 @@ export function verifyEmail(userId: SbUserId, token: string) {
 export function sendVerificationEmail(userId: SbUserId, spec: RequestHandlingSpec): ThunkAction {
   return abortableThunk(spec, () =>
     fetchJson<void>(apiUrl`users/${userId}/email-verification/send`, { method: 'post' }),
-  )
-}
-
-export function updateAccount(userId: SbUserId, userProps: Partial<SelfUser>) {
-  return idRequest('@auth/accountUpdate', () =>
-    fetchJson<AccountUpdateSuccess['payload']>('/api/1/users/' + encodeURIComponent(userId), {
-      method: 'PATCH',
-      body: JSON.stringify(userProps),
-    }),
   )
 }

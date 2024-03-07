@@ -1,4 +1,12 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import styled from 'styled-components'
 import { background800, colorDividers } from '../styles/colors'
 
@@ -125,9 +133,13 @@ export function useScrollIndicatorState({ refreshToken }: ScrollIndicatorStatePr
     startObserving()
   }, [refreshToken, startObserving])
 
+  const id = useId()
   const [topNode, bottomNode] = useMemo(() => {
-    return [<ScrollObserved ref={topElemRef} />, <ScrollObserved ref={bottomElemRef} />]
-  }, [])
+    return [
+      <ScrollObserved ref={topElemRef} key={id + 'top'} />,
+      <ScrollObserved ref={bottomElemRef} key={id + 'bottom'} />,
+    ]
+  }, [id])
 
   return [isAtTop, isAtBottom, topNode, bottomNode]
 }

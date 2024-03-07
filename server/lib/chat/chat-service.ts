@@ -1,15 +1,24 @@
+import formidable from 'formidable'
 import { Record as ImmutableRecord, Map, Set } from 'immutable'
+import mime from 'mime'
 import { singleton } from 'tsyringe'
 import { assertUnreachable } from '../../../common/assert-unreachable'
+import swallowNonBuiltins from '../../../common/async/swallow-non-builtins'
 import {
+  CHANNEL_BADGE_HEIGHT,
+  CHANNEL_BADGE_WIDTH,
+  CHANNEL_BANNER_HEIGHT,
+  CHANNEL_BANNER_WIDTH,
   ChannelModerationAction,
   ChannelPermissions,
+  ChannelPreferences,
   ChatEvent,
-  ChatInitEvent,
   ChatReadyEvent,
   ChatServiceErrorCode,
   ChatUserEvent,
   DetailedChannelInfo,
+  EditChannelRequest,
+  EditChannelResponse,
   GetBatchedChannelInfosResponse,
   GetChannelHistoryServerResponse,
   GetChannelInfoResponse,
@@ -24,11 +33,15 @@ import {
 } from '../../../common/chat'
 import { subtract } from '../../../common/data-structures/sets'
 import { CAN_LEAVE_SHIELDBATTERY_CHANNEL } from '../../../common/flags'
+import { Patch } from '../../../common/patch'
 import { SbUser, SbUserId } from '../../../common/users/sb-user'
 import { DbClient } from '../db'
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from '../db/pg-error-codes'
 import transact from '../db/transaction'
 import { CodedError } from '../errors/coded-error'
+import { writeFile } from '../file-upload'
+import { createImagePath, resizeImage } from '../file-upload/images'
+import { ImageService } from '../images/image-service'
 import logger from '../logging/logger'
 import filterChatMessage from '../messaging/filter-chat-message'
 import { processMessageContents } from '../messaging/process-chat-message'
@@ -40,6 +53,7 @@ import { UserSocketsGroup, UserSocketsManager } from '../websockets/socket-group
 import { TypedPublisher } from '../websockets/typed-publisher'
 import {
   ChatMessage,
+  EditableChannelFields,
   FullChannelInfo,
   UserChannelEntry,
   addMessageToChannel,
@@ -63,7 +77,9 @@ import {
   toBasicChannelInfo,
   toDetailedChannelInfo,
   toJoinedChannelInfo,
+  updateChannel,
   updateUserPermissions,
+  updateUserPreferences,
 } from './chat-models'
 
 class ChatState extends ImmutableRecord({
@@ -105,17 +121,18 @@ export default class ChatService {
   constructor(
     private publisher: TypedPublisher<ChatEvent | ChatUserEvent>,
     private userSocketsManager: UserSocketsManager,
+    private imageService: ImageService,
   ) {
     userSocketsManager
-      .on('newUser', userSockets =>
+      .on('newUser', userSockets => {
         this.handleNewUser(userSockets).catch(err =>
           logger.error({ err }, 'Error handling new user in chat service'),
-        ),
-      )
+        )
+      })
       .on('userQuit', userId => this.handleUserQuit(userId))
   }
 
-  private updateUserAfterJoining(
+  private async updateUserAfterJoining(
     userInfo: SbUser,
     channelId: SbChannelId,
     userChannelEntry: UserChannelEntry,
@@ -143,7 +160,25 @@ export default class ChatService {
     // is allowed in some cases (e.g. during account creation)
     const userSockets = this.userSocketsManager.getById(userInfo.id)
     if (userSockets) {
-      this.subscribeUserToChannel(userSockets, channelId)
+      userSockets.subscribe(getChannelPath(channelId))
+      userSockets.subscribe(getChannelUserPath(channelId, userSockets.userId))
+
+      const [channelInfo, userChannelEntry] = await Promise.all([
+        getChannelInfo(channelId),
+        getUserChannelEntryForUser(userSockets.userId, channelId),
+      ])
+
+      if (channelInfo && userChannelEntry) {
+        this.publisher.publish(getChannelUserPath(channelId, userSockets.userId), {
+          action: 'init3',
+          channelInfo: toBasicChannelInfo(channelInfo),
+          detailedChannelInfo: toDetailedChannelInfo(channelInfo),
+          joinedChannelInfo: toJoinedChannelInfo(channelInfo),
+          activeUserIds: this.state.channels.get(channelInfo.id)!.toArray(),
+          selfPreferences: userChannelEntry.channelPreferences,
+          selfPermissions: userChannelEntry.channelPermissions,
+        })
+      }
     }
   }
 
@@ -193,9 +228,15 @@ export default class ChatService {
     // NOTE(tec27): We don't/can't await this because it would be a recursive async dependency
     // (this function's Promise is await'd for the transaction, and transactionCompleted is awaited
     // by this function)
-    transactionCompleted.then(() =>
-      this.updateUserAfterJoining(userInfo, channelInfo.id, userChannelEntry, message),
-    )
+    transactionCompleted
+      .then(() =>
+        this.updateUserAfterJoining(userInfo, channelInfo.id, userChannelEntry, message).catch(
+          err => {
+            logger.error({ err }, 'Error retrieving the initial channel data for the user')
+          },
+        ),
+      )
+      .catch(swallowNonBuiltins)
   }
 
   private async banUserFromChannelIfNeeded(
@@ -340,7 +381,15 @@ export default class ChatService {
     channel = channel!
 
     if (!isUserInChannel) {
-      this.updateUserAfterJoining(userInfo, channel.id, userChannelEntry!, message!)
+      try {
+        await this.updateUserAfterJoining(userInfo, channel.id, userChannelEntry!, message!)
+      } catch (err) {
+        throw new ChatServiceError(
+          ChatServiceErrorCode.NoInitialChannelData,
+          'Error retrieving the initial channel data for the user',
+          { cause: err },
+        )
+      }
     }
 
     return {
@@ -348,6 +397,124 @@ export default class ChatService {
       detailedChannelInfo: toDetailedChannelInfo(channel),
       joinedChannelInfo: toJoinedChannelInfo(channel),
     }
+  }
+
+  async editChannel({
+    channelId,
+    userId,
+    isAdmin,
+    updates,
+    bannerFile,
+    badgeFile,
+  }: {
+    channelId: SbChannelId
+    userId: SbUserId
+    isAdmin: boolean
+    updates: EditChannelRequest
+    bannerFile?: formidable.File
+    badgeFile?: formidable.File
+  }): Promise<EditChannelResponse> {
+    const originalChannel = await getChannelInfo(channelId)
+
+    if (!originalChannel) {
+      throw new ChatServiceError(ChatServiceErrorCode.ChannelNotFound, 'Channel not found')
+    }
+
+    if (!isAdmin && originalChannel.ownerId !== userId) {
+      throw new ChatServiceError(
+        ChatServiceErrorCode.CannotEditChannel,
+        'Only channel owner and admins can edit the channel',
+      )
+    }
+
+    if (bannerFile && !(await this.imageService.isImageSafe(bannerFile.filepath))) {
+      throw new ChatServiceError(
+        ChatServiceErrorCode.InappropriateImage,
+        'Banner image is inappropriate',
+      )
+    }
+
+    if (badgeFile && !(await this.imageService.isImageSafe(badgeFile.filepath))) {
+      throw new ChatServiceError(
+        ChatServiceErrorCode.InappropriateImage,
+        'Badge image is inappropriate',
+      )
+    }
+
+    const [banner, bannerExtension] = bannerFile
+      ? await resizeImage(bannerFile.filepath, CHANNEL_BANNER_WIDTH, CHANNEL_BANNER_HEIGHT, {
+          fallbackType: 'jpg',
+        })
+      : [undefined, undefined]
+    const [badge, badgeExtension] = badgeFile
+      ? await resizeImage(badgeFile.filepath, CHANNEL_BADGE_WIDTH, CHANNEL_BADGE_HEIGHT)
+      : [undefined, undefined]
+
+    return await transact(async () => {
+      let bannerPath: string | undefined
+      if (banner) {
+        bannerPath = createImagePath('channel-images', bannerExtension)
+      }
+      let badgePath: string | undefined
+      if (badge) {
+        badgePath = createImagePath('channel-images', badgeExtension)
+      }
+
+      const updatedChannel: Patch<EditableChannelFields> = { ...updates }
+      delete (updatedChannel as any).banner
+      delete (updatedChannel as any).deleteBanner
+      delete (updatedChannel as any).badge
+      delete (updatedChannel as any).deleteBadge
+
+      if (updates.deleteBanner) {
+        updatedChannel.bannerPath = null
+      } else if (bannerPath) {
+        updatedChannel.bannerPath = bannerPath
+      }
+      if (updates.deleteBadge) {
+        updatedChannel.badgePath = null
+      } else if (badgePath) {
+        updatedChannel.badgePath = badgePath
+      }
+
+      const channel = await updateChannel(channelId, updatedChannel)
+
+      const filePromises: Array<Promise<unknown>> = []
+
+      if (banner && bannerPath) {
+        const buffer = await banner.toBuffer()
+        filePromises.push(
+          writeFile(bannerPath, buffer, {
+            acl: 'public-read',
+            type: mime.getType(bannerExtension),
+          }),
+        )
+      }
+      if (badge && badgePath) {
+        const buffer = await badge.toBuffer()
+        filePromises.push(
+          writeFile(badgePath, buffer, {
+            acl: 'public-read',
+            type: mime.getType(badgeExtension),
+          }),
+        )
+      }
+
+      await Promise.all(filePromises)
+
+      this.publisher.publish(getChannelPath(channelId), {
+        action: 'edit',
+        channelInfo: toBasicChannelInfo(channel),
+        detailedChannelInfo: toDetailedChannelInfo(channel),
+        joinedChannelInfo: toJoinedChannelInfo(channel),
+      })
+
+      return {
+        channelInfo: toBasicChannelInfo(channel),
+        detailedChannelInfo: toDetailedChannelInfo(channel),
+        joinedChannelInfo: toJoinedChannelInfo(channel),
+      }
+    })
   }
 
   async leaveChannel(channelId: SbChannelId, userId: SbUserId): Promise<void> {
@@ -836,6 +1003,33 @@ export default class ChatService {
     }
   }
 
+  async updateUserPreferences(
+    channelId: SbChannelId,
+    userId: SbUserId,
+    preferences: Patch<ChannelPreferences>,
+  ) {
+    const [channelInfo, userChannelEntry] = await Promise.all([
+      getChannelInfo(channelId),
+      getUserChannelEntryForUser(userId, channelId),
+    ])
+
+    if (!channelInfo) {
+      throw new ChatServiceError(ChatServiceErrorCode.ChannelNotFound, 'Channel not found')
+    }
+    if (!userChannelEntry) {
+      throw new ChatServiceError(
+        ChatServiceErrorCode.NotInChannel,
+        'Must be in channel to update preferences',
+      )
+    }
+
+    const { channelPreferences } = await updateUserPreferences(channelId, userId, preferences)
+    this.publisher.publish(getChannelUserPath(channelId, userId), {
+      action: 'preferencesChanged',
+      selfPreferences: channelPreferences,
+    })
+  }
+
   async updateUserPermissions(
     channelId: SbChannelId,
     userId: SbUserId,
@@ -886,36 +1080,6 @@ export default class ChatService {
     }
 
     return userSockets
-  }
-
-  private subscribeUserToChannel(userSockets: UserSocketsGroup, channelId: SbChannelId) {
-    userSockets.subscribe<ChatInitEvent>(getChannelPath(channelId), async () => {
-      try {
-        const [channelInfo, userChannelEntry] = await Promise.all([
-          getChannelInfo(channelId),
-          getUserChannelEntryForUser(userSockets.userId, channelId),
-        ])
-        if (!channelInfo) {
-          return undefined
-        }
-        if (!userChannelEntry) {
-          return undefined
-        }
-
-        return {
-          action: 'init3',
-          channelInfo: toBasicChannelInfo(channelInfo),
-          detailedChannelInfo: toDetailedChannelInfo(channelInfo),
-          joinedChannelInfo: toJoinedChannelInfo(channelInfo),
-          activeUserIds: this.state.channels.get(channelInfo.id)!.toArray(),
-          selfPermissions: userChannelEntry.channelPermissions,
-        }
-      } catch (err) {
-        logger.error({ err }, 'Error retrieving the initial channel data for the user')
-        return undefined
-      }
-    })
-    userSockets.subscribe(getChannelUserPath(channelId, userSockets.userId))
   }
 
   unsubscribeUserFromChannel(user: UserSocketsGroup, channelId: SbChannelId) {
@@ -987,6 +1151,7 @@ export default class ChatService {
               detailedChannelInfo: toDetailedChannelInfo(channelInfo),
               joinedChannelInfo: toJoinedChannelInfo(channelInfo),
               activeUserIds: this.state.channels.get(channelInfo.id)!.toArray(),
+              selfPreferences: userChannelEntry.channelPreferences,
               selfPermissions: userChannelEntry.channelPermissions,
             }
           }),

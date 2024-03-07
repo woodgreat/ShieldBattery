@@ -104,11 +104,13 @@ class NameForm extends React.Component {
         icon={<MaterialIcon icon='check' />}
         title={t('common.actions.save', 'Save')}
         onClick={onSubmit}
+        key='save'
       />,
       <IconButton
         icon={<MaterialIcon icon='close' />}
         title={t('common.actions.cancel', 'Cancel')}
         onClick={onCancel}
+        key='cancel'
       />,
     ]
 
@@ -147,11 +149,13 @@ class DescriptionForm extends React.Component {
         icon={<MaterialIcon icon='check' />}
         title={t('common.actions.save', 'Save')}
         onClick={onSubmit}
+        key='save'
       />,
       <IconButton
         icon={<MaterialIcon icon='close' />}
         title={t('common.actions.cancel', 'Cancel')}
         onClick={onCancel}
+        key='cancel'
       />,
     ]
 
@@ -242,9 +246,9 @@ export default class MapDetails extends React.Component {
 
     let canEdit = false
     if (map.visibility === MapVisibility.Official || map.visibility === MapVisibility.Public) {
-      canEdit = auth.permissions.manageMaps
+      canEdit = auth.self.permissions.manageMaps
     } else if (map.visibility === MapVisibility.Private) {
-      canEdit = map.uploadedBy.id === auth.user.id
+      canEdit = map.uploadedBy.id === auth.self.user.id
     }
 
     return (
@@ -308,7 +312,7 @@ export default class MapDetails extends React.Component {
             </MapDataItem>
             <MapDataItem>
               <Trans t={t} i18nKey='maps.details.tileset'>
-                Tileset: {{ tilesetName: tilesetToName(map.mapData.tileset) }}
+                Tileset: {{ tilesetName: tilesetToName(map.mapData.tileset, t) }}
               </Trans>
             </MapDataItem>
             <MapDataItem>

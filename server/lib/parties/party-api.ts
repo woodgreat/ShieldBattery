@@ -19,7 +19,9 @@ import { SbUser } from '../../../common/users/sb-user'
 import { asHttpError } from '../errors/error-with-payload'
 import { httpApi, httpBeforeAll } from '../http/http-api'
 import { httpBefore, httpDelete, httpPost } from '../http/route-decorators'
+import { filterVetoedMaps } from '../matchmaking/map-vetoes'
 import { matchmakingPreferencesValidator } from '../matchmaking/matchmaking-validators'
+import { getCurrentMapPool } from '../models/matchmaking-map-pools'
 import ensureLoggedIn from '../session/ensure-logged-in'
 import createThrottle from '../throttle/create-throttle'
 import throttleMiddleware from '../throttle/middleware'
@@ -56,6 +58,7 @@ function convertPartyServiceError(err: unknown) {
     case PartyServiceErrorCode.NotFoundOrNotInvited:
     case PartyServiceErrorCode.NotFoundOrNotInParty:
     case PartyServiceErrorCode.InvalidAction:
+    case PartyServiceErrorCode.InvalidMapPool:
     case PartyServiceErrorCode.AlreadyMember:
     case PartyServiceErrorCode.InvalidSelfAction:
     case PartyServiceErrorCode.AlreadyInGameplayActivity:
@@ -87,10 +90,13 @@ async function convertPartyServiceErrors(ctx: RouterContext, next: Koa.Next) {
 @httpApi('/parties')
 @httpBeforeAll(ensureLoggedIn, convertPartyServiceErrors)
 export class PartyApi {
-  constructor(private partyService: PartyService, private userIdManager: UserIdentifierManager) {}
+  constructor(
+    private partyService: PartyService,
+    private userIdManager: UserIdentifierManager,
+  ) {}
 
   @httpPost('/invites')
-  @httpBefore(throttleMiddleware(invitesThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(invitesThrottle, ctx => String(ctx.session!.user!.id)))
   async invite(ctx: RouterContext): Promise<void> {
     const { body } = validateRequest(ctx, {
       body: Joi.alternatives().try(
@@ -127,13 +133,13 @@ export class PartyApi {
     // TODO(2Pac): Check if the target user has blocked invitations from the user issuing
     // the request. Or potentially use friends list when implemented.
 
-    await this.partyService.invite(ctx.session!.userId, clientId, foundTarget)
+    await this.partyService.invite(ctx.session!.user!.id, clientId, foundTarget)
 
     ctx.status = 204
   }
 
   @httpDelete('/invites/:partyId')
-  @httpBefore(throttleMiddleware(invitesThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(invitesThrottle, ctx => String(ctx.session!.user!.id)))
   async decline(ctx: RouterContext): Promise<void> {
     const {
       params: { partyId },
@@ -143,13 +149,13 @@ export class PartyApi {
       }),
     })
 
-    this.partyService.decline(partyId, ctx.session!.userId)
+    await this.partyService.decline(partyId, ctx.session!.user!.id)
 
     ctx.status = 204
   }
 
   @httpDelete('/invites/:partyId/:targetId')
-  @httpBefore(throttleMiddleware(invitesThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(invitesThrottle, ctx => String(ctx.session!.user!.id)))
   async removeInvite(ctx: RouterContext): Promise<void> {
     const {
       params: { partyId, targetId },
@@ -165,13 +171,13 @@ export class PartyApi {
       throw new httpErrors.NotFound('Target user not found')
     }
 
-    await this.partyService.removeInvite(partyId, ctx.session!.userId, foundTarget.id)
+    await this.partyService.removeInvite(partyId, ctx.session!.user!.id, foundTarget.id)
 
     ctx.status = 204
   }
 
   @httpPost('/:partyId')
-  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.user!.id)))
   async accept(ctx: RouterContext): Promise<void> {
     const {
       params: { partyId },
@@ -185,7 +191,7 @@ export class PartyApi {
       }),
     })
 
-    const user = await findUserById(ctx.session!.userId)
+    const user = await findUserById(ctx.session!.user!.id)
     if (!user) {
       throw new Error("current user couldn't be found")
     }
@@ -196,7 +202,7 @@ export class PartyApi {
   }
 
   @httpDelete('/:partyId/:clientId')
-  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.user!.id)))
   async leaveOrKick(ctx: RouterContext): Promise<void> {
     const {
       params: { partyId, clientId },
@@ -212,7 +218,7 @@ export class PartyApi {
     })
 
     if (type === 'leave') {
-      this.partyService.leaveParty(partyId, ctx.session!.userId, String(clientId))
+      this.partyService.leaveParty(partyId, ctx.session!.user!.id, String(clientId))
     } else if (type === 'kick') {
       if (typeof clientId !== 'number') {
         throw new httpErrors.BadRequest('clientId must be a number for kicking')
@@ -223,7 +229,7 @@ export class PartyApi {
         throw new httpErrors.NotFound('Target user not found')
       }
 
-      this.partyService.kickPlayer(partyId, ctx.session!.userId, foundTarget.id)
+      this.partyService.kickPlayer(partyId, ctx.session!.user!.id, foundTarget.id)
     } else {
       assertUnreachable(type)
     }
@@ -232,7 +238,7 @@ export class PartyApi {
   }
 
   @httpPost('/:partyId/messages')
-  @httpBefore(throttleMiddleware(sendChatMessageThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(sendChatMessageThrottle, ctx => String(ctx.session!.user!.id)))
   async sendChatMessage(ctx: RouterContext): Promise<void> {
     const {
       params: { partyId },
@@ -246,18 +252,18 @@ export class PartyApi {
       }),
     })
 
-    const user = await findUserById(ctx.session!.userId)
+    const user = await findUserById(ctx.session!.user!.id)
     if (!user) {
       throw new Error("current user couldn't be found")
     }
 
-    this.partyService.sendChatMessage(partyId, user, message)
+    await this.partyService.sendChatMessage(partyId, user, message)
 
     ctx.status = 204
   }
 
   @httpPost('/:partyId/change-leader')
-  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.user!.id)))
   async changeLeader(ctx: RouterContext): Promise<void> {
     const {
       params: { partyId },
@@ -276,13 +282,13 @@ export class PartyApi {
       throw new httpErrors.NotFound('Target user not found')
     }
 
-    this.partyService.changeLeader(partyId, ctx.session!.userId, foundTarget.id)
+    this.partyService.changeLeader(partyId, ctx.session!.user!.id, foundTarget.id)
 
     ctx.status = 204
   }
 
   @httpPost('/:partyId/find-match')
-  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.user!.id)))
   async findMatch(ctx: RouterContext): Promise<void> {
     const {
       params: { partyId },
@@ -292,21 +298,29 @@ export class PartyApi {
         partyId: Joi.string().required(),
       }),
       body: Joi.object<FindMatchAsPartyRequest>({
-        preferences: matchmakingPreferencesValidator(ctx.session!.userId).required(),
+        preferences: matchmakingPreferencesValidator(ctx.session!.user!.id).required(),
         identifiers: joiClientIdentifiers().required(),
       }),
     })
 
-    await this.userIdManager.upsert(ctx.session!.userId, identifiers)
-    if (await this.userIdManager.banUserIfNeeded(ctx.session!.userId)) {
+    const currentMapPool = await getCurrentMapPool(preferences.matchmakingType)
+    if (!currentMapPool) {
+      throw new PartyServiceError(PartyServiceErrorCode.InvalidMapPool, "Map pool doesn't exist")
+    }
+
+    await this.userIdManager.upsert(ctx.session!.user!.id, identifiers)
+    if (await this.userIdManager.banUserIfNeeded(ctx.session!.user!.id)) {
       throw new httpErrors.Unauthorized('This account is banned')
     }
 
-    await this.partyService.findMatch(partyId, ctx.session!.userId, identifiers, preferences)
+    await this.partyService.findMatch(partyId, ctx.session!.user!.id, identifiers, {
+      ...preferences,
+      mapSelections: filterVetoedMaps(currentMapPool, preferences.mapSelections),
+    })
   }
 
   @httpPost('/:partyId/find-match/:queueId')
-  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.user!.id)))
   async acceptFindMatch(ctx: RouterContext): Promise<void> {
     const {
       params: { partyId, queueId },
@@ -322,16 +336,16 @@ export class PartyApi {
       }),
     })
 
-    await this.userIdManager.upsert(ctx.session!.userId, identifiers)
-    if (await this.userIdManager.banUserIfNeeded(ctx.session!.userId)) {
+    await this.userIdManager.upsert(ctx.session!.user!.id, identifiers)
+    if (await this.userIdManager.banUserIfNeeded(ctx.session!.user!.id)) {
       throw new httpErrors.Unauthorized('This account is banned')
     }
 
-    this.partyService.acceptFindMatch(partyId, queueId, ctx.session!.userId, identifiers, race)
+    this.partyService.acceptFindMatch(partyId, queueId, ctx.session!.user!.id, identifiers, race)
   }
 
   @httpDelete('/:partyId/find-match/:queueId')
-  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.userId)))
+  @httpBefore(throttleMiddleware(partyThrottle, ctx => String(ctx.session!.user!.id)))
   async rejectFindMatch(ctx: RouterContext): Promise<void> {
     const {
       params: { partyId, queueId },
@@ -342,6 +356,6 @@ export class PartyApi {
       }),
     })
 
-    this.partyService.rejectFindMatch(partyId, queueId, ctx.session!.userId)
+    this.partyService.rejectFindMatch(partyId, queueId, ctx.session!.user!.id)
   }
 }

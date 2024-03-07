@@ -1,8 +1,11 @@
 import { Immutable } from 'immer'
 import keycode from 'keycode'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { rgba } from 'polished'
+import React, { useCallback, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { Route, Switch } from 'wouter'
+import { NEWS_PAGE } from '../common/flags'
 import { MapInfoJson } from '../common/maps'
 import { EMAIL_VERIFICATION_ID, NotificationType } from '../common/notifications'
 import { ReduxAction } from './action-types'
@@ -18,7 +21,9 @@ import { ChannelRouteComponent } from './chat/route'
 import { openDialog } from './dialogs/action-creators'
 import { DialogType } from './dialogs/dialog-type'
 import { DispatchFunction } from './dispatch-registry'
+import { FileDropZone } from './file-browser/file-drop-zone'
 import { GamesRouteComponent } from './games/route'
+import { Home } from './home'
 import { MaterialIcon } from './icons/material/material-icon'
 import FindMatchIcon from './icons/shieldbattery/ic_satellite_dish_black_36px.svg'
 import { useKeyListener } from './keyboard/key-listener'
@@ -26,15 +31,18 @@ import { navigateToLadder } from './ladder/action-creators'
 import { LadderRouteComponent } from './ladder/ladder'
 import { navigateToLeaguesList } from './leagues/action-creators'
 import { LeagueRoot } from './leagues/league-list'
-import LobbyView from './lobbies/view'
+import { LobbyView } from './lobbies/view'
 import { regenMapImage, removeMap } from './maps/action-creators'
 import { cancelFindMatch } from './matchmaking/action-creators'
 import { MatchmakingSearchingOverlay } from './matchmaking/matchmaking-searching-overlay'
 import MatchmakingView from './matchmaking/view'
 import { IconButton, useButtonHotkey } from './material/button'
+import Card from './material/card'
+import { usePopoverController } from './material/popover'
+import { shadowDef8dp } from './material/shadow-constants'
 import { Tooltip } from './material/tooltip'
 import { ConnectedLeftNav } from './navigation/connected-left-nav'
-import Index from './navigation/index'
+import { GoToIndex } from './navigation/index'
 import { replace } from './navigation/routing'
 import { addLocalNotification } from './notifications/action-creators'
 import { NotificationsButton } from './notifications/activity-bar-entry'
@@ -47,10 +55,14 @@ import {
 } from './policies/action-creators'
 import LoadingIndicator from './progress/dots'
 import { useAppDispatch, useAppSelector } from './redux-hooks'
+import { showReplayInfo } from './replays/action-creators'
 import { openSettings } from './settings/action-creators'
 import { isShieldBatteryHealthy, isStarcraftHealthy } from './starcraft/is-starcraft-healthy'
 import { StarcraftStatus } from './starcraft/starcraft-reducer'
+import { useStableCallback } from './state-hooks'
+import { amberA400, colorTextSecondary, dialogScrim } from './styles/colors'
 import { FlexSpacer } from './styles/flex-spacer'
+import { Subtitle1 } from './styles/typography'
 import { FriendsListActivityButton } from './users/friends-list'
 import { ProfileRouteComponent } from './users/route'
 import { WhisperRouteComponent } from './whispers/route'
@@ -82,7 +94,7 @@ let matchmakingRoute = <></>
 let partyRoute = <></>
 if (IS_ELECTRON) {
   // TODO(2Pac): Remove `any` once the `LobbyView` is TS-ified
-  lobbyRoute = <Route path='/lobbies/:lobby/:rest*' component={LobbyView as any} />
+  lobbyRoute = <Route path='/lobbies/:lobby/:rest*' component={LobbyView} />
   matchmakingRoute = <Route path='/matchmaking/:rest*' component={MatchmakingView} />
   partyRoute = <Route path='/parties/:partyId/:rest*' component={PartyView} />
 }
@@ -139,18 +151,83 @@ function useHealthyStarcraftCallback<T extends (...args: any[]) => any>(
   )
 }
 
+const StyledFileDropZone = styled(FileDropZone)`
+  position: absolute;
+  inset: 0;
+`
+
+const FileDropContents = styled.div`
+  width: 100%;
+  height: 100%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: ${rgba(dialogScrim, 0.42)};
+  pointer-events: none;
+`
+
+const FileDropCard = styled(Card)`
+  width: 100%;
+  max-width: 480px;
+  aspect-ratio: 16 / 9;
+  padding-bottom: 32px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+
+  border: 4px dashed ${rgba(amberA400, 0.7)};
+  border-radius: 16px;
+  box-shadow: ${shadowDef8dp};
+  contain: paint;
+
+  color: ${colorTextSecondary};
+  text-align: center;
+`
+
+function GlobalDropZone() {
+  const dispatch = useAppDispatch()
+  const { t } = useTranslation()
+
+  const onFilesDropped = useStableCallback((files: File[]) => {
+    // TODO(tec27): Support multiple replay files being dropped at once: create a playlist/watch
+    // them in succession
+    const file = files[0]
+    dispatch(showReplayInfo(file.path))
+  })
+
+  return (
+    <StyledFileDropZone extensions={['rep']} onFilesDropped={onFilesDropped}>
+      <FileDropContents>
+        <FileDropCard>
+          <MaterialIcon icon='file_open' size={80} />
+          <Subtitle1>
+            {t('replays.fileDropText', 'Drop replays here to watch them with ShieldBattery.')}
+          </Subtitle1>
+        </FileDropCard>
+      </FileDropContents>
+    </StyledFileDropZone>
+  )
+}
+
 export function MainLayout() {
+  const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const isAdmin = useIsAdmin()
   const inGameplayActivity = useAppSelector(s => s.gameplayActivity.inGameplayActivity)
-  const isEmailVerified = useAppSelector(s => s.auth.user.emailVerified)
+  const isEmailVerified = useAppSelector(s => s.auth.self!.user.emailVerified)
   const isMatchmakingSearching = useAppSelector(s => !!s.matchmaking.searchInfo)
-  const lobbyCount = useAppSelector(s => s.serverStatus.lobbyCount)
+  const lobbyCount = useAppSelector(s => s.lobbyList.count)
   const starcraft = useAppSelector(s => s.starcraft)
 
-  const [searchingMatchOverlayOpen, setSearchingMatchOverlayOpen] = useState(false)
-
+  const [searchingMatchOverlayOpen, openSearchingMatchOverlay, closeSearchingMatchOverlay] =
+    usePopoverController(false)
   const searchingMatchButtonRef = useRef<HTMLButtonElement>(null)
+
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
   useButtonHotkey({ ref: settingsButtonRef, hotkey: ALT_S })
 
@@ -235,7 +312,7 @@ export function MainLayout() {
           type: ActivityOverlayType.BrowseServerMaps,
           initData: {
             uploadedMap: map,
-            title: 'Maps',
+            title: t('maps.activity.title', 'Maps'),
             onMapUpload,
             onMapSelect: onMapDetails,
             onMapDetails,
@@ -245,7 +322,7 @@ export function MainLayout() {
         }),
       )
     },
-    [dispatch, onMapDetails, onRegenMapImage, onRemoveMap],
+    [dispatch, onMapDetails, onRegenMapImage, onRemoveMap, t],
   )
 
   // TODO(tec27): Figure out why the hell this requires a valid starcraft installation and then fix
@@ -258,7 +335,7 @@ export function MainLayout() {
         openOverlay({
           type: ActivityOverlayType.BrowseServerMaps,
           initData: {
-            title: 'Maps',
+            title: t('maps.activity.title', 'Maps'),
             onMapUpload,
             onMapSelect: onMapDetails,
             onMapDetails,
@@ -285,7 +362,7 @@ export function MainLayout() {
     <ActivityButton
       key='find-match'
       icon={<FindMatchIcon />}
-      label='Find match'
+      label={t('matchmaking.activity.findMatch', 'Find match')}
       onClick={onFindMatchClick}
       disabled={inGameplayActivity}
       hotkey={ALT_F}
@@ -296,8 +373,8 @@ export function MainLayout() {
       ref={searchingMatchButtonRef}
       icon={<FindMatchIcon />}
       glowing={true}
-      label='Finding…'
-      onClick={() => setSearchingMatchOverlayOpen(true)}
+      label={t('matchmaking.activity.finding', 'Finding…')}
+      onClick={openSearchingMatchOverlay}
       hotkey={ALT_F}
     />
   )
@@ -307,7 +384,7 @@ export function MainLayout() {
         <ActivityButton
           key='lobbies'
           icon={<MaterialIcon icon='holiday_village' size={36} />}
-          label='Lobbies'
+          label={t('lobbies.activity.title', 'Lobbies')}
           onClick={onLobbiesClick}
           hotkey={ALT_B}
           count={lobbyCount > 0 ? lobbyCount : undefined}
@@ -315,28 +392,28 @@ export function MainLayout() {
         <ActivityButton
           key='maps'
           icon={<MaterialIcon icon='map' size={36} />}
-          label='Maps'
+          label={t('maps.activity.title', 'Maps')}
           onClick={onMapsClick}
           hotkey={ALT_M}
         />,
         <ActivityButton
           key='replays'
           icon={<MaterialIcon icon='movie' size={36} />}
-          label='Replays'
+          label={t('replays.activity.title', 'Replays')}
           onClick={onReplaysClick}
           hotkey={ALT_R}
         />,
         <ActivityButton
           key='ladder'
           icon={<MaterialIcon icon='military_tech' size={36} />}
-          label='Ladder'
+          label={t('ladder.activity.title', 'Ladder')}
           onClick={() => navigateToLadder()}
           hotkey={ALT_D}
         />,
         <ActivityButton
           key='leagues'
           icon={<MaterialIcon icon='social_leaderboard' size={36} />}
-          label='Leagues'
+          label={t('leagues.activity.title', 'Leagues')}
           onClick={() => navigateToLeaguesList()}
           hotkey={ALT_G}
         />,
@@ -346,21 +423,21 @@ export function MainLayout() {
         <ActivityButton
           key='download'
           icon={<MaterialIcon icon='download' size={36} />}
-          label='Download'
+          label={t('common.actions.download', 'Download')}
           onClick={() => dispatch(openDialog({ type: DialogType.Download }))}
           hotkey={ALT_O}
         />,
         <ActivityButton
           key='ladder'
           icon={<MaterialIcon icon='military_tech' size={36} />}
-          label='Ladder'
+          label={t('ladder.activity.title', 'Ladder')}
           onClick={() => navigateToLadder()}
           hotkey={ALT_D}
         />,
         <ActivityButton
           key='leagues'
           icon={<MaterialIcon icon='social_leaderboard' size={36} />}
-          label='Leagues'
+          label={t('leagues.activity.title', 'Leagues')}
           onClick={() => navigateToLeaguesList()}
           hotkey={ALT_G}
         />,
@@ -381,12 +458,14 @@ export function MainLayout() {
           {matchmakingRoute}
           {partyRoute}
           <Route path='/users/:rest*' component={ProfileRouteComponent} />
-          {/* TODO(2Pac): Remove `any` once the `Whisper` is TS-ified */}
           <Route path='/whispers/:rest*' component={WhisperRouteComponent} />
-          {/* If no paths match, redirect the page to the "index". */}
-          <Route>
-            <Index transitionFn={replace} />
-          </Route>
+          {NEWS_PAGE ? (
+            <Route component={Home} />
+          ) : (
+            <Route>
+              <GoToIndex transitionFn={replace} />
+            </Route>
+          )}
         </Switch>
       </Content>
       <ActivityBar>
@@ -394,12 +473,13 @@ export function MainLayout() {
 
         <MiniActivityButtonsContainer key='mini-buttons'>
           <NotificationsButton />
-          <Tooltip text='Settings (Alt + S)' position='left'>
+          <Tooltip text={t('settings.activity.title', 'Settings (Alt + S)')} position='left'>
             <IconButton
               key='settings'
               ref={settingsButtonRef}
               icon={<MaterialIcon icon='settings' />}
               onClick={() => dispatch(openSettings())}
+              testName='settings-button'
             />
           </Tooltip>
           <FriendsListActivityButton />
@@ -413,13 +493,14 @@ export function MainLayout() {
           anchor={searchingMatchButtonRef.current ?? undefined}
           onCancelSearch={() => {
             dispatch(cancelFindMatch())
-            setSearchingMatchOverlayOpen(false)
+            closeSearchingMatchOverlay()
           }}
-          onDismiss={() => setSearchingMatchOverlayOpen(false)}
+          onDismiss={closeSearchingMatchOverlay}
         />
       ) : null}
       <ActivityOverlay />
       <NotificationPopups />
+      {IS_ELECTRON ? <GlobalDropZone /> : null}
     </Container>
   )
 }

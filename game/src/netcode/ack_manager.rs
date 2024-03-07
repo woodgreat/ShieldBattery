@@ -95,8 +95,8 @@ impl AckManager {
 
         let mut result: u32 = 0;
         let mut mask: u32 = 1;
-        for i in 1..=32 {
-            if most_recent_seq < i as u64 {
+        for i in 1u64..=32 {
+            if most_recent_seq < i {
                 // Haven't seen enough packets to build the full ack bits yet
                 break;
             }
@@ -130,8 +130,8 @@ impl AckManager {
             self.on_packet_acked(ack);
 
             let mut ack_bits = incoming.ack_bits;
-            for i in 1..=32 {
-                if ack < i as u64 {
+            for i in 1u64..=32 {
+                if ack < i {
                     break;
                 }
                 if ack_bits & 1 == 1 {
@@ -218,6 +218,15 @@ impl AckManager {
 
         message
     }
+
+    pub fn debug_info(&self) -> DebugInfo {
+        DebugInfo {
+            packet_num: self.packet_num,
+            payload_num: self.payload_num,
+            last_seen_remote_packet_num: self.last_seen_remote_packet_num(),
+            payloads_in_flight: self.payloads_in_flight(),
+        }
+    }
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
@@ -238,6 +247,26 @@ struct SentPayload {
 #[derive(Clone, Default)]
 struct ReceivedPacket;
 
+/// Data that gets sent out of async thread to be rendered by egui thread.
+pub struct DebugInfo {
+    packet_num: u64,
+    payload_num: u64,
+    last_seen_remote_packet_num: u64,
+    payloads_in_flight: usize,
+}
+
+impl DebugInfo {
+    pub fn draw(&self, ui: &mut egui::Ui) {
+        ui.label(format!("Packet # {}", self.packet_num));
+        ui.label(format!("Payload # {}", self.payload_num));
+        ui.label(format!(
+            "Remote packet # {}",
+            self.last_seen_remote_packet_num
+        ));
+        ui.label(format!("Payloads in flight {}", self.payloads_in_flight));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::netcode::ack_manager::NO_REMOTE_PACKETS_SEEN_NUM;
@@ -251,12 +280,14 @@ mod tests {
 
     #[test]
     fn check_game_message_overhead() {
-        let mut message: GameMessage = GameMessage::default();
         // Set numbers that max out our sequence numbers to ensure we have calculated the max
         // byte overhead
-        message.packet_num = 0x7FFF_FFFF_FFFF_FFFF;
-        message.ack = 0x7FFF_FFFF_FFFF_FFFF;
-        message.ack_bits = 0xFFFF_FFFF;
+        let message = GameMessage {
+            packet_num: 0x7FFF_FFFF_FFFF_FFFF,
+            ack: 0x7FFF_FFFF_FFFF_FFFF,
+            ack_bits: 0xFFFF_FFFF,
+            ..Default::default()
+        };
 
         assert_eq!(message.encoded_len() as u32, MAX_GAME_MESSAGE_OVERHEAD)
     }
@@ -415,9 +446,11 @@ mod tests {
     }
 
     fn make_fake_incoming(packet_num: u64, ack: u64, acked_in_bits: &[u64]) -> GameMessage {
-        let mut message: GameMessage = GameMessage::default();
-        message.packet_num = packet_num;
-        message.ack = ack;
+        let mut message = GameMessage {
+            packet_num,
+            ack,
+            ..Default::default()
+        };
         let mut ack_bits = 0;
         for &ack_id in acked_in_bits {
             if ack_id >= ack || ack_id < (ack.max(32) - 32) {

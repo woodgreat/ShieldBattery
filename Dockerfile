@@ -1,7 +1,9 @@
 # ---------- 1st stage ----------
 # The first stage adds the necessary libraries to build native add-ons (eg. bcrypt) and then installs
 # the server dependencies
-FROM node:18-alpine as builder
+FROM node:20-alpine as builder
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # By default, `alpine` images don't have necessary tools to install native add-ons, so we use the
 # multistage build to install the necessary tools, and build the dependencies which will then be
@@ -9,14 +11,22 @@ FROM node:18-alpine as builder
 # make the image lighter).
 RUN apk add --no-cache python3 make g++ git
 
-# Ensure that we don't spend time installing dependencies that are only needed for the client
-# application.
-ENV SB_SERVER_ONLY=1
-
 # Set the working directory to where we want to install the dependencies; this directory doesn't
 # really matter as it will not be present in the final image, but keeping the path short makes
 # copying from it easier in the next stage.
 WORKDIR /shieldbattery
+
+# Ensure that we don't spend time installing dependencies that are only needed for the client
+# application.
+ENV SB_SERVER_ONLY=1
+
+# Clone the `wait-for-it` repository which contains a script we'll copy over to our final image, and
+# use it to control our services startup order
+RUN git clone --depth 1 https://github.com/vishnubob/wait-for-it.git
+
+# Clone the `s3cmd` repository which contains a script we'll copy over to our final image, and use
+# it to sync our public assets to the cloud
+RUN git clone --depth 1 https://github.com/s3tools/s3cmd.git
 
 # Copy the whole repository to the image, *except* the stuff marked in the `.dockerignore` file
 COPY . .
@@ -24,26 +34,21 @@ COPY . .
 # Install only the root folder's dependencies (`app` dependencies should be built into the
 # Electron app). Note that we specifically install non-production dependencies here so that we can
 # use them to build the client code. They will be pruned out in a later step.
-RUN yarn
+RUN pnpm install --frozen-lockfile
 
 # Prebuild the web client assets so we can simply copy them over
 ENV NODE_ENV=production
-RUN yarn run build-web-client
+RUN pnpm run build-web-client
 
 # Then prune the server deps to only the production ones
-RUN yarn
-
-# Clone the `wait-for-it` repository which contains a script we'll copy over to our final image, and
-# use it to control our services startup order
-RUN git clone https://github.com/vishnubob/wait-for-it.git
-
-# Clone the `s3cmd` repository which contains a script we'll copy over to our final image, and use
-# it to sync our public assets to the cloud
-RUN git clone https://github.com/s3tools/s3cmd.git
+RUN pnpm prune --prod
 
 # ---------- 2nd stage ----------
 # Second stage copies the built dependencies from first stage and runs the app in production mode
-FROM node:18-alpine
+FROM node:20-alpine
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
 ENV NODE_ENV=production
 # Tell the server not to try and run webpack
 ENV SB_PREBUILT_ASSETS=true
@@ -53,8 +58,9 @@ ENV SB_PREBUILT_ASSETS=true
 # Also, we need python to execute some python scripts (e.g. `s3cmd`).
 RUN apk add --no-cache bash logrotate jq python3 py-pip
 
-# Install the dependencies of the `s3cmd` python script
-RUN pip3 install python-dateutil
+# Install the dependencies of the `s3cmd` python script (--break-system-packages because otherwise
+# we'd need a virtualenv, which is overkill since we're not using python for anything else)
+RUN pip3 install python-dateutil --break-system-packages
 
 # Set up log rotation
 COPY --from=builder /shieldbattery/server/deployment_files/logrotate.conf /etc/logrotate.d/shieldbattery
@@ -68,24 +74,21 @@ USER node
 # Set the working directory to the home directory of the `node` user
 WORKDIR /home/node/shieldbattery
 
+# Copy the installed dependencies from the first stage
+COPY --chown=node:node --from=builder /shieldbattery/wait-for-it/wait-for-it.sh tools/wait-for-it.sh
+COPY --chown=node:node --from=builder /shieldbattery/s3cmd/s3cmd tools/s3cmd/s3cmd
+COPY --chown=node:node --from=builder /shieldbattery/s3cmd/S3 tools/s3cmd/S3
+
 # Copy just the sources the server needs
 COPY --chown=node:node --from=builder /shieldbattery/node_modules ./node_modules
 COPY --chown=node:node --from=builder /shieldbattery/common ./common
 COPY --chown=node:node --from=builder /shieldbattery/server ./server
 COPY --chown=node:node --from=builder /shieldbattery/package.json /shieldbattery/babel.config.json ./
 COPY --chown=node:node --from=builder /shieldbattery/babel-register.js /shieldbattery/babel-register.js ./
-
-# Copy the installed dependencies from the first stage
-COPY --chown=node:node --from=builder /shieldbattery/wait-for-it/wait-for-it.sh tools/wait-for-it.sh
-COPY --chown=node:node --from=builder /shieldbattery/s3cmd/s3cmd tools/s3cmd/s3cmd
-COPY --chown=node:node --from=builder /shieldbattery/s3cmd/S3 tools/s3cmd/S3
+COPY --chown=node:node --from=builder /shieldbattery/server/deployment_files/entrypoint.sh /entrypoint.sh
 
 # Allow the various scripts to be run (necessary when building on Linux)
-RUN chmod +x ./server/update_server.sh
-RUN chmod +x ./server/testing/run_mailgun.sh
-
-COPY --chown=node:node --from=builder /shieldbattery/server/deployment_files/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x ./server/update_server.sh ./server/testing/run_mailgun.sh ./server/testing/run_google_cloud.sh /entrypoint.sh
 
 # Make the various volume locations as the right user (if we let Docker do it they end up owned by
 # root and not writeable)

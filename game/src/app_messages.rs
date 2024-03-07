@@ -1,8 +1,9 @@
-use std::collections::HashMap;
-
+use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::bw;
+use crate::bw::players::{AssignedRace, VictoryState};
+use crate::bw::{GameType, LobbyOptions};
 
 // Structures of messages that are used to communicate with the electron app.
 
@@ -27,9 +28,11 @@ pub struct SetupProgressInfo {
     pub extra: Option<String>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct LocalUser {
+    /// The local user's ShieldBattery user ID.
     pub id: u32,
+    /// The local user's ShieldBattery username.
     pub name: String,
 }
 
@@ -39,16 +42,6 @@ pub struct WindowMove {
     pub y: i32,
     pub w: i32,
     pub h: i32,
-}
-
-#[derive(Serialize, Copy, Clone)]
-pub enum Race {
-    #[serde(rename = "z")]
-    Zerg,
-    #[serde(rename = "t")]
-    Terran,
-    #[serde(rename = "p")]
-    Protoss,
 }
 
 #[derive(Deserialize, Copy, Clone, Eq, PartialEq)]
@@ -65,14 +58,14 @@ pub enum UmsLobbyRace {
     Any,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct GamePlayerResult {
-    pub result: u8,
-    pub race: Race,
+    pub result: VictoryState,
+    pub race: AssignedRace,
     pub apm: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Copy, Clone, Serialize)]
 pub struct NetworkStallInfo {
     pub count: u32,
     pub min: u32,
@@ -80,11 +73,11 @@ pub struct NetworkStallInfo {
     pub median: u32,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GameResults {
     #[serde(rename = "time")]
-    pub time_ms: u32,
+    pub time_ms: u64,
     pub results: HashMap<u32, GamePlayerResult>,
     pub network_stalls: NetworkStallInfo,
 }
@@ -94,7 +87,7 @@ pub struct GameResults {
 pub struct GameResultsReport {
     pub user_id: u32,
     pub result_code: String,
-    pub time: u32,
+    pub time: u64,
     pub player_results: Vec<(u32, GamePlayerResult)>,
 }
 
@@ -114,6 +107,7 @@ pub struct GameSetupInfo {
     pub slots: Vec<PlayerInfo>,
     pub host: PlayerInfo,
     pub disable_alliance_changes: Option<bool>,
+    pub use_legacy_limits: Option<bool>,
     pub turn_rate: Option<u32>,
     pub user_latency: Option<u32>,
     pub seed: u32,
@@ -125,6 +119,32 @@ pub struct GameSetupInfo {
 impl GameSetupInfo {
     pub fn is_replay(&self) -> bool {
         self.map.is_replay == Some(true)
+    }
+
+    pub fn game_type(&self) -> Option<GameType> {
+        match &*self.game_type {
+            "melee" => Some(GameType::melee()),
+            "ffa" => Some(GameType::ffa()),
+            "oneVOne" => Some(GameType::one_v_one()),
+            "ums" => Some(GameType::ums()),
+            "teamMelee" => Some(GameType::team_melee(self.game_sub_type?)),
+            "teamFfa" => Some(GameType::team_ffa(self.game_sub_type?)),
+            "topVBottom" => Some(GameType::top_v_bottom(self.game_sub_type?)),
+            _ => None,
+        }
+    }
+}
+
+impl From<&GameSetupInfo> for LobbyOptions {
+    fn from(value: &GameSetupInfo) -> Self {
+        LobbyOptions {
+            game_type: value.game_type().unwrap_or(GameType {
+                primary: 0x2,
+                subtype: 0x1,
+            }),
+            turn_rate: value.turn_rate.unwrap_or(0),
+            use_legacy_limits: value.use_legacy_limits.unwrap_or(false),
+        }
     }
 }
 
@@ -210,7 +230,7 @@ impl PlayerInfo {
     }
 
     pub fn bw_race(&self) -> u8 {
-        match self.race.as_ref().map(|x| &**x) {
+        match self.race.as_deref() {
             Some("z") => bw::RACE_ZERG,
             Some("t") => bw::RACE_TERRAN,
             Some("p") => bw::RACE_PROTOSS,

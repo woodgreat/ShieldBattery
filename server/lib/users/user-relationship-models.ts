@@ -1,4 +1,3 @@
-import sql from 'sql-template-strings'
 import { assertUnreachable } from '../../../common/assert-unreachable'
 import {
   UserRelationship,
@@ -7,6 +6,7 @@ import {
 } from '../../../common/users/relationships'
 import { SbUserId } from '../../../common/users/sb-user'
 import db, { DbClient } from '../db'
+import { sql } from '../db/sql'
 import transact from '../db/transaction'
 import { Dbify } from '../db/types'
 
@@ -226,6 +226,7 @@ export async function getRelationshipSummaryForUser(
               createdAt: row.highCreatedAt!,
             })
           }
+          break
 
         case MutualKind.BlockBoth:
         case MutualKind.BlockLowToHigh:
@@ -440,7 +441,7 @@ export async function removeFriendRequest(
         };
     `)
 
-    return result.rowCount > 0
+    return !!result.rowCount
   } finally {
     done()
   }
@@ -472,7 +473,7 @@ export async function removeFriend(
         AND user_high = ${highId};
     `)
 
-    return result.rowCount > 0
+    return !!result.rowCount
   } finally {
     done()
   }

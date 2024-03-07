@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test'
 import { suppressChangelog } from '../../changelog-utils'
+import { clearLocalState } from '../../clear-local-state'
 import { LoginPage } from '../../pages/login-page'
 import { SentEmailChecker } from '../../sent-email-checker'
 import { generateUsername } from '../../username-generator'
-import { VERIFICATION_LINK_REGEX, signupWith } from './utils'
+import { getVerificationLink, signupWith } from './utils'
 
 const sentEmailChecker = new SentEmailChecker()
 
@@ -31,7 +32,7 @@ test('sign up and verify email in same browser', async ({ page }) => {
 
   const emails = await sentEmailChecker.retrieveSentEmails(email)
   expect(emails).toHaveLength(1)
-  const link = VERIFICATION_LINK_REGEX.exec(emails[0].text)?.groups?.link
+  const link = getVerificationLink(emails[0].templateVariables)
   expect(link).toBeDefined()
 
   await page.goto(link!)
@@ -61,10 +62,10 @@ test('sign up and verify email in different browser', async ({ context, page }) 
 
   const emails = await sentEmailChecker.retrieveSentEmails(email)
   expect(emails).toHaveLength(1)
-  const link = VERIFICATION_LINK_REGEX.exec(emails[0].text)?.groups?.link
+  const link = getVerificationLink(emails[0].templateVariables)
   expect(link).toBeDefined()
 
-  await context.clearCookies()
+  await clearLocalState({ context, page })
   await page.goto(link!)
 
   await page.waitForSelector('[data-test=not-logged-in-error]')

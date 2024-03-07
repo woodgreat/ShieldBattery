@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import {
   ALL_ANNOUNCERS,
@@ -7,7 +8,7 @@ import {
 } from '../../../common/settings/blizz-settings'
 import { useForm } from '../../forms/form-hook'
 import SubmitOnEnter from '../../forms/submit-on-enter'
-import CheckBox from '../../material/check-box'
+import { CheckBox } from '../../material/check-box'
 import { SelectOption } from '../../material/select/option'
 import { Select } from '../../material/select/select'
 import Slider from '../../material/slider'
@@ -16,7 +17,7 @@ import { useStableCallback } from '../../state-hooks'
 import { colorTextSecondary } from '../../styles/colors'
 import { overline } from '../../styles/typography'
 import { mergeScrSettings } from '../action-creators'
-import { FormContainer, Spacer } from '../settings-content'
+import { FormContainer } from '../settings-content'
 
 const AnnouncerOverline = styled.div`
   ${overline};
@@ -40,6 +41,7 @@ interface GameSoundSettingsModel {
 }
 
 export function GameSoundSettings() {
+  const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const scrSettings = useAppSelector(s => s.settings.scr)
 
@@ -79,10 +81,14 @@ export function GameSoundSettings() {
       <SubmitOnEnter />
       <FormContainer>
         <div>
-          <CheckBox {...bindCheckable('musicOn')} label='Music' inputProps={{ tabIndex: 0 }} />
+          <CheckBox
+            {...bindCheckable('musicOn')}
+            label={t('settings.game.sound.music', 'Music')}
+            inputProps={{ tabIndex: 0 }}
+          />
           <Slider
             {...bindCustom('musicVolume')}
-            label='Music volume'
+            label={t('settings.game.sound.musicVolume', 'Music volume')}
             tabIndex={0}
             min={0}
             max={100}
@@ -90,15 +96,16 @@ export function GameSoundSettings() {
             disabled={!getInputValue('musicOn')}
             showTicks={false}
           />
-          <Spacer />
+        </div>
+        <div>
           <CheckBox
             {...bindCheckable('soundOn')}
-            label='Game sounds'
+            label={t('settings.game.sound.gameSounds', 'Game sounds')}
             inputProps={{ tabIndex: 0 }}
           />
           <Slider
             {...bindCustom('soundVolume')}
-            label='Sound volume'
+            label={t('settings.game.sound.soundVolume', 'Sound volume')}
             tabIndex={0}
             min={0}
             max={100}
@@ -106,49 +113,59 @@ export function GameSoundSettings() {
             disabled={!getInputValue('soundOn')}
             showTicks={false}
           />
-          <Spacer />
-
-          <AnnouncerOverline>Packs (must be purchased from Blizzard)</AnnouncerOverline>
-          <Select {...bindCustom('selectedAnnouncer')} label='Announcer' tabIndex={0}>
+        </div>
+        <div>
+          <AnnouncerOverline>
+            {t('settings.game.sound.announcer.info', 'Packs (must be purchased from Blizzard)')}
+          </AnnouncerOverline>
+          <Select
+            {...bindCustom('selectedAnnouncer')}
+            label={t('settings.game.sound.announcer.title', 'Announcer')}
+            allowErrors={false}
+            tabIndex={0}>
             {ALL_ANNOUNCERS.map(announcer => (
-              <SelectOption key={announcer} value={announcer} text={getAnnouncerName(announcer)} />
+              <SelectOption
+                key={announcer}
+                value={announcer}
+                text={getAnnouncerName(announcer, t)}
+              />
             ))}
           </Select>
         </div>
         <div>
           <CheckBox
             {...bindCheckable('unitSpeechOn')}
-            label='Unit speech'
+            label={t('settings.game.sound.unitSpeech', 'Unit speech')}
             inputProps={{ tabIndex: 0 }}
           />
           <CheckBox
             {...bindCheckable('unitAcknowledgementsOn')}
-            label='Unit acknowledgements'
+            label={t('settings.game.sound.unitAcknowledgements', 'Unit acknowledgements')}
             inputProps={{ tabIndex: 0 }}
           />
           <CheckBox
             {...bindCheckable('backgroundSoundsOn')}
-            label='Sound plays while in background'
+            label={t('settings.game.sound.backgroundSounds', 'Sound plays while in background')}
             inputProps={{ tabIndex: 0 }}
           />
           <CheckBox
             {...bindCheckable('buildingSoundsOn')}
-            label='Building sounds'
+            label={t('settings.game.sound.buildingSounds', 'Building sounds')}
             inputProps={{ tabIndex: 0 }}
           />
           <CheckBox
             {...bindCheckable('gameSubtitlesOn')}
-            label='Game subtitles'
+            label={t('settings.game.sound.gameSubtitles', 'Game subtitles')}
             inputProps={{ tabIndex: 0 }}
           />
           <CheckBox
             {...bindCheckable('cinematicSubtitlesOn')}
-            label='Cinematic subtitles'
+            label={t('settings.game.sound.cinematicSubtitles', 'Cinematic subtitles')}
             inputProps={{ tabIndex: 0 }}
           />
           <CheckBox
             {...bindCheckable('originalVoiceOversOn')}
-            label='Original unit voice overs'
+            label={t('settings.game.sound.originalVoiceOvers', 'Original unit voice overs')}
             inputProps={{ tabIndex: 0 }}
           />
         </div>

@@ -1,5 +1,4 @@
 import bcrypt from 'bcrypt'
-import sql from 'sql-template-strings'
 import { container } from 'tsyringe'
 import { assertUnreachable } from '../../../common/assert-unreachable'
 import createDeferred from '../../../common/async/deferred'
@@ -13,6 +12,7 @@ import { SbPermissions } from '../../../common/users/permissions'
 import { SbUser, SbUserId, SelfUser } from '../../../common/users/sb-user'
 import ChatService from '../chat/chat-service'
 import db, { DbClient } from '../db'
+import { sql, sqlConcat, sqlRaw } from '../db/sql'
 import transact from '../db/transaction'
 import { Dbify } from '../db/types'
 import { createPermissions } from '../models/permissions'
@@ -27,6 +27,7 @@ import { createUserStats } from './user-stats-model'
 interface UserInternal {
   id: SbUserId
   name: string
+  loginName: string
   email: string
   created: Date
   signupIpAddress?: string
@@ -54,6 +55,7 @@ function convertUserFromDb(dbUser: DbUser): UserInternal {
   return {
     id: dbUser.id,
     name: dbUser.name,
+    loginName: dbUser.login_name,
     email: dbUser.email,
     created: dbUser.created,
     signupIpAddress: dbUser.signup_ip_address,
@@ -80,6 +82,7 @@ function convertToExternalSelf(userInternal: UserInternal): SelfUser {
   return {
     id: userInternal.id,
     name: userInternal.name,
+    loginName: userInternal.loginName,
     email: userInternal.email,
     emailVerified: userInternal.emailVerified,
     acceptedPrivacyVersion: userInternal.acceptedPrivacyVersion,
@@ -124,9 +127,9 @@ export async function createUser({
   try {
     const transactionResult = await transact(async client => {
       const result = await client.query<DbUser>(sql`
-      INSERT INTO users (name, email, created, signup_ip_address, email_verified, locale,
-        accepted_privacy_version, accepted_terms_version, accepted_use_policy_version)
-      VALUES (${name}, ${email}, ${createdDate}, ${ipAddress}, false, ${locale},
+      INSERT INTO users (name, login_name, email, created, signup_ip_address, email_verified,
+        locale, accepted_privacy_version, accepted_terms_version, accepted_use_policy_version)
+      VALUES (${name}, ${name}, ${email}, ${createdDate}, ${ipAddress}, false, ${locale},
         ${PRIVACY_POLICY_VERSION}, ${TERMS_OF_SERVICE_VERSION}, ${ACCEPTABLE_USE_VERSION})
       RETURNING *
     `)
@@ -166,7 +169,7 @@ export async function createUser({
 /** Fields that can be updated for a user. */
 export type UserUpdatables = Omit<
   UserInternal & UserPrivate,
-  'id' | 'name' | 'created' | 'signupIpAddress' | 'userId'
+  'id' | 'name' | 'created' | 'signupIpAddress' | 'userId' | 'loginName'
 >
 
 /**
@@ -184,62 +187,48 @@ export async function updateUser(
     SET
   `
 
-  let appended = false
-  for (const [key, value] of Object.entries(updates)) {
-    const castedKey = key as keyof UserUpdatables
-    if (castedKey === 'password') {
-      updatedPassword = String(value)
-      continue
-    }
-
-    if (appended) {
-      query.append(sql`,`)
-    }
-
-    switch (castedKey) {
-      case 'email':
-        query.append(sql`
-          email = ${value}
-        `)
-        break
-      case 'emailVerified':
-        query.append(sql`
-          email_verified = ${value}
-        `)
-        break
-      case 'acceptedPrivacyVersion':
-        query.append(sql`
-          accepted_privacy_version = ${value}
-        `)
-        break
-      case 'acceptedTermsVersion':
-        query.append(sql`
-          accepted_terms_version = ${value}
-        `)
-        break
-      case 'acceptedUsePolicyVersion':
-        query.append(sql`
-          accepted_use_policy_version = ${value}
-        `)
-        break
-      case 'locale':
-        query.append(sql`
-          locale = ${value}
-        `)
-        break
-      default:
-        assertUnreachable(castedKey)
-    }
-
-    appended = true
+  const updatedEntries = Object.entries(updates).filter(([key, value]) => value !== undefined)
+  if (!updatedEntries.length) {
+    throw new Error('No updated fields specified')
   }
 
-  query.append(sql`
+  query = query.append(
+    sqlConcat(
+      ', ',
+      updatedEntries.map(([_key, value]) => {
+        const key = _key as keyof UserUpdatables
+
+        if (key === 'password') {
+          updatedPassword = String(value)
+          return sqlRaw('')
+        }
+
+        switch (key) {
+          case 'email':
+            return sql`email = ${value}`
+          case 'emailVerified':
+            return sql`email_verified = ${value}`
+          case 'acceptedPrivacyVersion':
+            return sql`accepted_privacy_version = ${value}`
+          case 'acceptedTermsVersion':
+            return sql`accepted_terms_version = ${value}`
+          case 'acceptedUsePolicyVersion':
+            return sql`accepted_use_policy_version = ${value}`
+          case 'locale':
+            return sql`locale = ${value}`
+          default:
+            return assertUnreachable(key)
+        }
+      }),
+    ),
+  )
+
+  query = query.append(sql`
     WHERE id = ${id}
     RETURNING *;
   `)
 
-  if (!appended) {
+  if (updatedPassword && updatedEntries.length === 1) {
     // Only updating user_private stuff, so we just need to query the current row
     query = sql`SELECT * FROM users WHERE id = ${id}`
   }
@@ -271,7 +260,7 @@ export async function attemptLogin(
   username: string,
   password: string,
 ): Promise<SelfUser | undefined> {
-  const user = await internalFindUserByName(username)
+  const user = await internalFindUserByLoginName(username)
   if (!user) {
     return undefined
   }
@@ -330,6 +319,20 @@ async function internalFindUserByName(name: string): Promise<UserInternal | unde
   }
 }
 
+async function internalFindUserByLoginName(name: string): Promise<UserInternal | undefined> {
+  const { client, done } = await db()
+  try {
+    const result = await client.query<DbUser>(sql`
+      SELECT * FROM users
+      WHERE login_name = ${name}
+    `)
+
+    return result.rows.length > 0 ? convertUserFromDb(result.rows[0]) : undefined
+  } finally {
+    done()
+  }
+}
+
 async function internalGetUserPrivateById(id: number): Promise<UserPrivate | undefined> {
   const { client, done } = await db()
   try {
@@ -355,6 +358,10 @@ export async function findUserByName(name: string): Promise<SbUser | undefined> 
  * be included in the result. The order of the result is not guaranteed.
  */
 export async function findUsersByName(names: string[]): Promise<SbUser[]> {
+  if (!names.length) {
+    return []
+  }
+
   const { client, done } = await db()
   try {
     const result = await client.query<DbUser>(sql`SELECT * FROM users WHERE name = ANY (${names})`)
@@ -379,6 +386,10 @@ export async function findUsersByNameAsMap(names: string[]): Promise<Map<string,
  * be included in the result. The order of the result is not guaranteed.
  */
 export async function findUsersById(ids: SbUserId[]): Promise<SbUser[]> {
+  if (!ids.length) {
+    return []
+  }
+
   const { client, done } = await db()
   try {
     const result = await client.query<DbUser>(sql`SELECT * FROM users WHERE id = ANY (${ids})`)
@@ -432,4 +443,20 @@ export async function findAllUsersWithEmail(email: string): Promise<SbUser[]> {
 export async function retrieveUserCreatedDate(userId: SbUserId): Promise<Date> {
   const user = await internalFindUserById(userId)
   return user!.created
+}
+
+export async function isUsernameAvailable(username: string): Promise<boolean> {
+  const { client, done } = await db()
+  try {
+    const result = await client.query(sql`
+      SELECT 1
+      FROM users
+      WHERE name = ${username}
+      OR login_name = ${username}
+    `)
+
+    return result.rows.length === 0
+  } finally {
+    done()
+  }
 }

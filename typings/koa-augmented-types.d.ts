@@ -1,24 +1,13 @@
 import { Logger } from 'pino'
 import promClient from 'prom-client'
-import { MatchmakingType } from '../common/matchmaking'
+import { ReadonlyDeep } from 'type-fest'
 import { SbPermissions } from '../common/users/permissions'
-import { SbUserId } from '../common/users/sb-user'
+import { SbUserId, SelfUser } from '../common/users/sb-user'
 
 declare module 'koa' {
   interface AppSession {
-    cookie: any // TODO(tec27): Type this better, this is how koa-generic-session types it as well
-    // TODO(tec27): Maybe just move these user fields into a SelfUser to keep things synced up?
-    userId: SbUserId
-    userName: string
-    email: string
-    emailVerified: boolean
-    acceptedPrivacyVersion: number
-    acceptedTermsVersion: number
-    acceptedUsePolicyVersion: number
-    locale?: string
-
+    user: SelfUser
     permissions: SbPermissions
-    lastQueuedMatchmakingType: MatchmakingType
   }
 
   // NOTE(tec27): We add a bunch of things to ExtendedContext so that koa-router's more generic
@@ -26,11 +15,16 @@ declare module 'koa' {
   // extending the final `Context` type (and make TS complain about these properties missing on
   // `RouterContext`)
   interface ExtendableContext {
-    // for koa-generic-session
-    session: AppSession | null
-    sessionId: string | null
-    sessionSave: boolean | null
-    regenerateSession(): Promise<void>
+    /**
+     * A fast cache for user + permission information. Use `beginSession` or `deleteSession` to
+     * change users. Use UserService for making changes to the current user/permissions to see them
+     * reflected here.
+     */
+    session?: ReadonlyDeep<AppSession>
+    /** Starts a new session for the given user, updating the `session` field to match. */
+    beginSession(userId: SbUserId, stayLoggedIn: boolean): Promise<void>
+    /** Deletes the current session, updating the `session` field to match. */
+    deleteSession(): Promise<void>
 
     // for koa-views
     render(viewPath: string, locals?: any): Promise<void>

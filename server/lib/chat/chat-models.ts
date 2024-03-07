@@ -1,8 +1,9 @@
-import sql from 'sql-template-strings'
 import { MergeExclusive } from 'type-fest'
+import { assertUnreachable } from '../../../common/assert-unreachable'
 import {
   BasicChannelInfo,
   ChannelPermissions,
+  ChannelPreferences,
   DetailedChannelInfo,
   JoinedChannelInfo,
   MAXIMUM_JOINED_CHANNELS,
@@ -10,26 +11,33 @@ import {
   SbChannelId,
   ServerChatMessageType,
 } from '../../../common/chat'
+import { Patch } from '../../../common/patch'
 import { SbUser, SbUserId } from '../../../common/users/sb-user'
 import db, { DbClient } from '../db'
 import { escapeSearchString } from '../db/escape-search-string'
+import { sql, sqlConcat } from '../db/sql'
 import transact from '../db/transaction'
 import { Dbify } from '../db/types'
+import { getUrl } from '../file-upload'
 
 export interface UserChannelEntry {
   userId: SbUserId
   channelId: SbChannelId
   joinDate: Date
+  channelPreferences: ChannelPreferences
   channelPermissions: ChannelPermissions
 }
 
-type DbUserChannelEntry = Dbify<UserChannelEntry & ChannelPermissions>
+type DbUserChannelEntry = Dbify<UserChannelEntry & ChannelPreferences & ChannelPermissions>
 
 function convertUserChannelEntryFromDb(props: DbUserChannelEntry): UserChannelEntry {
   return {
     userId: props.user_id,
     channelId: props.channel_id,
     joinDate: props.join_date,
+    channelPreferences: {
+      hideBanner: props.hide_banner,
+    },
     channelPermissions: {
       kick: props.kick,
       ban: props.ban,
@@ -127,6 +135,12 @@ export async function getUserChannelEntriesForUser(
  */
 export type FullChannelInfo = BasicChannelInfo & DetailedChannelInfo & JoinedChannelInfo
 
+/**
+ * A type that contains channel fields which can be edited. Note that this doesn't mean the API
+ * allows editing all of these fields yet, but at some point in the future it might.
+ */
+export type EditableChannelFields = Omit<FullChannelInfo, 'id' | 'userCount'>
+
 /** Takes the full channel info and returns only the basic fields. */
 export function toBasicChannelInfo(channel: FullChannelInfo): BasicChannelInfo {
   return {
@@ -137,11 +151,13 @@ export function toBasicChannelInfo(channel: FullChannelInfo): BasicChannelInfo {
   }
 }
 
-// TODO(2Pac): Add the missing fields here after #909 is done.
 /** Takes the full channel info and returns only the detailed fields. */
 export function toDetailedChannelInfo(channel: FullChannelInfo): DetailedChannelInfo {
   return {
     id: channel.id,
+    description: channel.description,
+    bannerPath: channel.bannerPath,
+    badgePath: channel.badgePath,
     userCount: channel.userCount,
   }
 }
@@ -166,6 +182,9 @@ function convertChannelFromDb(props: DbChannel): FullChannelInfo {
     userCount: props.user_count,
     ownerId: props.owner_id,
     topic: props.topic,
+    description: props.description,
+    bannerPath: props.banner_path ? getUrl(props.banner_path) : undefined,
+    badgePath: props.badge_path ? getUrl(props.badge_path) : undefined,
   }
 }
 
@@ -194,6 +213,64 @@ export async function createChannel(
     `)
 
     return result.rows.length > 0 ? convertChannelFromDb(result.rows[0]) : undefined
+  } finally {
+    done()
+  }
+}
+
+/**
+ * Updates the channel with the given list of updates. Throws an error if there are no updates, so
+ * make sure to only call this method when you update one of the channel's fields.
+ */
+export async function updateChannel(
+  channelId: SbChannelId,
+  updates: Patch<EditableChannelFields>,
+  withClient?: DbClient,
+): Promise<FullChannelInfo> {
+  const updateEntries = Object.entries(updates).filter(([_, value]) => value !== undefined)
+  if (!updateEntries.length) {
+    throw new Error('No columns updated')
+  }
+
+  const { client, done } = await db(withClient)
+  try {
+    const query = sql`
+      UPDATE channels
+      SET
+      ${sqlConcat(
+        ', ',
+        updateEntries.map(([_key, value]) => {
+          const key = _key as keyof typeof updates
+
+          switch (key) {
+            case 'name':
+              return sql`name = ${value}`
+            case 'private':
+              return sql`private = ${value}`
+            case 'official':
+              return sql`official = ${value}`
+            case 'description':
+              return sql`description = ${value}`
+            case 'bannerPath':
+              return sql`banner_path = ${value}`
+            case 'badgePath':
+              return sql`badge_path = ${value}`
+            case 'ownerId':
+              return sql`owner_id = ${value}`
+            case 'topic':
+              return sql`topic = ${value}`
+
+            default:
+              return assertUnreachable(key)
+          }
+        }),
+      )}
+      WHERE id = ${channelId}
+      RETURNING *
+    `
+
+    const result = await client.query<DbChannel>(query)
+    return convertChannelFromDb(result.rows[0])
   } finally {
     done()
   }
@@ -323,17 +400,17 @@ export async function getMessagesForChannel(
 ): Promise<ChatMessage[]> {
   const { client, done } = await db()
 
-  const query = sql`
+  let query = sql`
       WITH messages AS (
         SELECT m.id AS msg_id, u.id AS user_id, u.name AS user_name, m.channel_id, m.sent, m.data
         FROM channel_messages as m INNER JOIN users as u ON m.user_id = u.id
         WHERE m.channel_id = ${channelId} `
 
   if (beforeDate !== undefined) {
-    query.append(sql`AND m.sent < ${beforeDate}`)
+    query = query.append(sql`AND m.sent < ${beforeDate}`)
   }
 
-  query.append(sql`
+  query = query.append(sql`
         ORDER BY m.sent DESC
         LIMIT ${limit}
       ) SELECT * FROM messages ORDER BY sent ASC`)
@@ -394,7 +471,7 @@ export async function removeUserFromChannel(
       WHERE id = ${channelId} AND official = false AND
         NOT EXISTS (SELECT 1 FROM channel_users WHERE channel_id = ${channelId});
     `)
-    if (deleteChannelResult.rowCount > 0) {
+    if (deleteChannelResult.rowCount) {
       // Channel was deleted; meaning there is no one left in it so there is no one to transfer the
       // ownership to
       return {}
@@ -450,6 +527,47 @@ export async function removeUserFromChannel(
   })
 }
 
+export async function updateUserPreferences(
+  channelId: SbChannelId,
+  userId: SbUserId,
+  updates: Patch<ChannelPreferences>,
+  withClient?: DbClient,
+) {
+  const updateEntries = Object.entries(updates).filter(([_, value]) => value !== undefined)
+  if (!updateEntries.length) {
+    throw new Error('No columns updated')
+  }
+
+  const { client, done } = await db(withClient)
+  try {
+    const query = sql`
+      UPDATE channel_users
+      SET
+      ${sqlConcat(
+        ', ',
+        updateEntries.map(([_key, value]) => {
+          const key = _key as keyof typeof updates
+
+          switch (key) {
+            case 'hideBanner':
+              return sql`hide_banner = ${value}`
+
+            default:
+              return assertUnreachable(key)
+          }
+        }),
+      )}
+      WHERE channel_id = ${channelId} AND user_id = ${userId}
+      RETURNING *
+    `
+
+    const result = await client.query<DbUserChannelEntry>(query)
+    return convertUserChannelEntryFromDb(result.rows[0])
+  } finally {
+    done()
+  }
+}
+
 export async function updateUserPermissions(
   channelId: SbChannelId,
   userId: SbUserId,
@@ -488,7 +606,7 @@ export async function countBannedIdentifiersForChannel(
   const { client, done } = await db(withClient)
 
   try {
-    const query = sql`
+    let query = sql`
       SELECT COUNT(DISTINCT identifier_type) as "matches"
       FROM channel_identifier_bans cib
       WHERE cib.channel_id = ${channelId}
@@ -500,7 +618,7 @@ export async function countBannedIdentifiersForChannel(
     `
 
     if (filterBrowserprint) {
-      query.append(sql`
+      query = query.append(sql`
         AND cib.identifier_type != 0
       `)
     }
@@ -581,7 +699,7 @@ export async function banAllIdentifiersFromChannel(
   const { client, done } = await db(withClient)
 
   try {
-    const query = sql`
+    let query = sql`
       INSERT INTO channel_identifier_bans (
         channel_id, identifier_type, identifier_hash, time_banned, first_user_id
       )
@@ -596,12 +714,12 @@ export async function banAllIdentifiersFromChannel(
     `
 
     if (filterBrowserprint) {
-      query.append(sql`
+      query = query.append(sql`
         AND identifier_type != 0
       `)
     }
 
-    query.append(sql`
+    query = query.append(sql`
       ON CONFLICT (channel_id, identifier_type, identifier_hash)
       DO NOTHING
     `)
@@ -728,16 +846,16 @@ export async function searchChannels(
 ): Promise<FullChannelInfo[]> {
   const { client, done } = await db(withClient)
   try {
-    const query = sql`
+    let query = sql`
       SELECT *
       FROM channels
     `
 
     if (searchStr) {
-      query.append(sql`WHERE name ILIKE ${`%${escapeSearchString(searchStr)}%`}`)
+      query = query.append(sql`WHERE name ILIKE ${`%${escapeSearchString(searchStr)}%`}`)
     }
 
-    query.append(sql`
+    query = query.append(sql`
       ORDER BY user_count DESC, name
       LIMIT ${limit}
       OFFSET ${offset}

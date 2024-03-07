@@ -7,8 +7,8 @@ use std::mem;
 
 use byteorder::{ByteOrder, LittleEndian};
 use lazy_static::lazy_static;
-use winapi::um::heapapi::{HeapCreate, HeapAlloc};
-use winapi::um::winnt::{HEAP_CREATE_ENABLE_EXECUTE};
+use winapi::um::heapapi::{HeapAlloc, HeapCreate};
+use winapi::um::winnt::HEAP_CREATE_ENABLE_EXECUTE;
 
 lazy_static! {
     static ref EXEC_HEAP: usize = init_exec_heap();
@@ -209,8 +209,8 @@ impl<A, B, C, D, E, F, G, H, R> ExternCFn for unsafe extern "C" fn(A, B, C, D, E
     }
 }
 
-impl<A, B, C, D, E, F, G, H, I, J, K, R> ExternCFn for
-    unsafe extern "C" fn(A, B, C, D, E, F, G, H, I, J, K) -> R
+impl<A, B, C, D, E, F, G, H, I, J, K, R> ExternCFn
+    for unsafe extern "C" fn(A, B, C, D, E, F, G, H, I, J, K) -> R
 {
     type Args = ArgCount11;
     type Ret = R;
@@ -247,7 +247,7 @@ impl<T: ExternCFn> Thiscall<T> {
             for _ in 0..(T::Args::N - 1) {
                 // Push args arg_max ..= 2
                 // push [esp + 4 * (args - 1)]
-                (&mut slice[..4]).copy_from_slice(&[0xff, 0x74, 0xe4, (T::Args::N - 1) * 4]);
+                slice[..4].copy_from_slice(&[0xff, 0x74, 0xe4, (T::Args::N - 1) * 4]);
                 slice = &mut slice[4..];
             }
             // push ecx
@@ -260,9 +260,9 @@ impl<T: ExternCFn> Thiscall<T> {
             slice[0] = 0xff;
             slice[1] = 0xd0;
             // add esp, args * 4
-            (&mut slice[2..5]).copy_from_slice(&[0x83, 0xc4, T::Args::N * 4]);
+            slice[2..5].copy_from_slice(&[0x83, 0xc4, T::Args::N * 4]);
             // ret (args - 1) * 4
-            (&mut slice[5..8]).copy_from_slice(&[0xc2, (T::Args::N - 1) * 4, 0x00]);
+            slice[5..8].copy_from_slice(&[0xc2, (T::Args::N - 1) * 4, 0x00]);
             Thiscall(ptr as usize, PhantomData)
         }
     }
@@ -280,7 +280,8 @@ impl<T: ExternCFn> Thiscall<T> {
 
 impl<T: ExternCFn<Args = ArgCount1>> Thiscall<T> {
     pub unsafe fn call1(self, a1: T::A1) -> T::Ret {
-        let fnptr: unsafe extern "C" fn(usize, T::A1) -> T::Ret = mem::transmute(CALL.as_ptr());
+        let fnptr: unsafe extern "C" fn(usize, T::A1) -> T::Ret =
+            mem::transmute(THISCALL_CALL.as_ptr());
         fnptr(self.0, a1)
     }
 }
@@ -288,7 +289,7 @@ impl<T: ExternCFn<Args = ArgCount1>> Thiscall<T> {
 impl<T: ExternCFn<Args = ArgCount2>> Thiscall<T> {
     pub unsafe fn call2(self, a1: T::A1, a2: T::A2) -> T::Ret {
         let fnptr: unsafe extern "C" fn(usize, T::A1, T::A2) -> T::Ret =
-            mem::transmute(CALL.as_ptr());
+            mem::transmute(THISCALL_CALL.as_ptr());
         fnptr(self.0, a1, a2)
     }
 }
@@ -296,7 +297,7 @@ impl<T: ExternCFn<Args = ArgCount2>> Thiscall<T> {
 impl<T: ExternCFn<Args = ArgCount3>> Thiscall<T> {
     pub unsafe fn call3(self, a1: T::A1, a2: T::A2, a3: T::A3) -> T::Ret {
         let fnptr: unsafe extern "C" fn(usize, T::A1, T::A2, T::A3) -> T::Ret =
-            mem::transmute(CALL.as_ptr());
+            mem::transmute(THISCALL_CALL.as_ptr());
         fnptr(self.0, a1, a2, a3)
     }
 }
@@ -311,14 +312,14 @@ impl<T: ExternCFn<Args = ArgCount6>> Thiscall<T> {
         a5: T::A5,
         a6: T::A6,
     ) -> T::Ret {
-        let fnptr:
-            unsafe extern "C" fn(usize, T::A1, T::A2, T::A3, T::A4, T::A5, T::A6) -> T::Ret =
-            mem::transmute(CALL.as_ptr());
+        let fnptr: unsafe extern "C" fn(usize, T::A1, T::A2, T::A3, T::A4, T::A5, T::A6) -> T::Ret =
+            mem::transmute(THISCALL_CALL.as_ptr());
         fnptr(self.0, a1, a2, a3, a4, a5, a6)
     }
 }
 
 impl<T: ExternCFn<Args = ArgCount8>> Thiscall<T> {
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn call8(
         self,
         a1: T::A1,
@@ -330,14 +331,24 @@ impl<T: ExternCFn<Args = ArgCount8>> Thiscall<T> {
         a7: T::A7,
         a8: T::A8,
     ) -> T::Ret {
-        let fnptr:
-            unsafe extern "C" fn(usize, T::A1, T::A2, T::A3, T::A4, T::A5, T::A6, T::A7, T::A8) -> T::Ret =
-            mem::transmute(CALL.as_ptr());
+        #[allow(clippy::type_complexity)]
+        let fnptr: unsafe extern "C" fn(
+            usize,
+            T::A1,
+            T::A2,
+            T::A3,
+            T::A4,
+            T::A5,
+            T::A6,
+            T::A7,
+            T::A8,
+        ) -> T::Ret = mem::transmute(THISCALL_CALL.as_ptr());
         fnptr(self.0, a1, a2, a3, a4, a5, a6, a7, a8)
     }
 }
 
 impl<T: ExternCFn<Args = ArgCount11>> Thiscall<T> {
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn call11(
         self,
         a1: T::A1,
@@ -352,19 +363,31 @@ impl<T: ExternCFn<Args = ArgCount11>> Thiscall<T> {
         a10: T::A10,
         a11: T::A11,
     ) -> T::Ret {
-        let fnptr:
-            unsafe extern "C" fn(usize, T::A1, T::A2, T::A3, T::A4, T::A5, T::A6,
-                T::A7, T::A8, T::A9, T::A10, T::A11) -> T::Ret =
-            mem::transmute(CALL.as_ptr());
+        #[allow(clippy::type_complexity)]
+        let fnptr: unsafe extern "C" fn(
+            usize,
+            T::A1,
+            T::A2,
+            T::A3,
+            T::A4,
+            T::A5,
+            T::A6,
+            T::A7,
+            T::A8,
+            T::A9,
+            T::A10,
+            T::A11,
+        ) -> T::Ret = mem::transmute(THISCALL_CALL.as_ptr());
         fnptr(self.0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11)
     }
 }
 
 // Max 11 arguments
 #[link_section = ".text"]
-static CALL: [u8; 0x39] = [
-    0x55,                   // push ebp
-    0x89, 0xe5,             // mov ebp, esp
+#[no_mangle] // Workaround for linker errors on opt-level 1 ??
+static THISCALL_CALL: [u8; 0x39] = [
+    0x55, // push ebp
+    0x89, 0xe5, // mov ebp, esp
     0x8b, 0x44, 0xe4, 0x08, // mov eax, [esp + 0x8]
     0x8b, 0x4c, 0xe4, 0x0c, // mov ecx, [esp + 0xc]
     0xff, 0x74, 0xe4, 0x34, // push [esp + 0x34]
@@ -377,8 +400,8 @@ static CALL: [u8; 0x39] = [
     0xff, 0x74, 0xe4, 0x34, // push [esp + 0x34]
     0xff, 0x74, 0xe4, 0x34, // push [esp + 0x34]
     0xff, 0x74, 0xe4, 0x34, // push [esp + 0x34]
-    0xff, 0xd0,             // call eax
-    0x89, 0xec,             // mov esp, ebp
-    0x5d,                   // pop ebp
-    0xc3,                   // ret
+    0xff, 0xd0, // call eax
+    0x89, 0xec, // mov esp, ebp
+    0x5d, // pop ebp
+    0xc3, // ret
 ];

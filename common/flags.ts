@@ -13,10 +13,10 @@ const ON = () => true
 export const DEV_ERROR = DEV()
 /** Show the "dev mode" indicator on the site (don't move this past dev mode). */
 export const DEV_INDICATOR = DEV()
-/** Allow users to join multiple channels (and leave channels). */
-export const MULTI_CHANNEL = DEV()
-/** Calculate a static turnrate to use rather than using dynamic. */
-export const USE_STATIC_TURNRATE = ON()
 // TODO(2Pac): Flip this flag to ON once we have a news/home page
 /** Allows users to leave the ShieldBattery chat channel. */
 export const CAN_LEAVE_SHIELDBATTERY_CHANNEL = OFF()
+/** Add a news/landing/home page. */
+export const NEWS_PAGE = DEV()
+/** Allow users to upload channel banners (and badges). */
+export const CHANNEL_BANNERS = ON()

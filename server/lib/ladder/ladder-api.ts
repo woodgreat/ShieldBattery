@@ -22,7 +22,7 @@ import { JobScheduler } from '../jobs/job-scheduler'
 import logger from '../logging/logger'
 import { MatchmakingSeasonsService } from '../matchmaking/matchmaking-seasons'
 import { getInstantaneousRanksForUser, getRankings, refreshRankings } from '../matchmaking/models'
-import { Redis } from '../redis'
+import { Redis } from '../redis/redis'
 import ensureLoggedIn from '../session/ensure-logged-in'
 import createThrottle from '../throttle/create-throttle'
 import throttleMiddleware from '../throttle/middleware'
@@ -109,7 +109,7 @@ export class LadderApi {
       }),
     })
 
-    if (params.id !== ctx.session?.userId) {
+    if (params.id !== ctx.session?.user?.id) {
       throw new LadderApiError(LadderErrorCode.OnlyAllowedOnSelf, 'only allowed on self')
     }
 

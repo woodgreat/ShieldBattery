@@ -56,25 +56,25 @@ export async function storeMap(
     { mapData, extension, uploadedBy, visibility, parserVersion: MAP_PARSER_VERSION },
     async () => {
       const image256Promise = image256Stream
-        ? writeFile(imagePath(hash, 256), image256Stream, {
+        ? writeFile(imagePath(hash, 256), image256Stream as any, {
             acl: 'public-read',
             type: 'image/jpeg',
           })
         : Promise.resolve()
       const image512Promise = image512Stream
-        ? writeFile(imagePath(hash, 512), image512Stream, {
+        ? writeFile(imagePath(hash, 512), image512Stream as any, {
             acl: 'public-read',
             type: 'image/jpeg',
           })
         : Promise.resolve()
       const image1024Promise = image1024Stream
-        ? writeFile(imagePath(hash, 1024), image1024Stream, {
+        ? writeFile(imagePath(hash, 1024), image1024Stream as any, {
             acl: 'public-read',
             type: 'image/jpeg',
           })
         : Promise.resolve()
       const image2048Promise = image2048Stream
-        ? writeFile(imagePath(hash, 2048), image2048Stream, {
+        ? writeFile(imagePath(hash, 2048), image2048Stream as any, {
             acl: 'public-read',
             type: 'image/jpeg',
           })
@@ -100,16 +100,28 @@ export async function storeRegeneratedImages(path: string, extension: MapExtensi
   const { hash } = mapData
 
   const image256Promise = image256Stream
-    ? writeFile(imagePath(hash, 256), image256Stream, { acl: 'public-read', type: 'image/jpeg' })
+    ? writeFile(imagePath(hash, 256), image256Stream as any, {
+        acl: 'public-read',
+        type: 'image/jpeg',
+      })
     : Promise.resolve()
   const image512Promise = image512Stream
-    ? writeFile(imagePath(hash, 512), image512Stream, { acl: 'public-read', type: 'image/jpeg' })
+    ? writeFile(imagePath(hash, 512), image512Stream as any, {
+        acl: 'public-read',
+        type: 'image/jpeg',
+      })
     : Promise.resolve()
   const image1024Promise = image1024Stream
-    ? writeFile(imagePath(hash, 1024), image1024Stream, { acl: 'public-read', type: 'image/jpeg' })
+    ? writeFile(imagePath(hash, 1024), image1024Stream as any, {
+        acl: 'public-read',
+        type: 'image/jpeg',
+      })
     : Promise.resolve()
   const image2048Promise = image2048Stream
-    ? writeFile(imagePath(hash, 2048), image2048Stream, { acl: 'public-read', type: 'image/jpeg' })
+    ? writeFile(imagePath(hash, 2048), image2048Stream as any, {
+        acl: 'public-read',
+        type: 'image/jpeg',
+      })
     : Promise.resolve()
 
   await Promise.all([image256Promise, image512Promise, image1024Promise, image2048Promise])
@@ -146,7 +158,17 @@ async function mapParseWorker(
       extension,
       generateImages ? BW_DATA_PATH : '',
     ])
-  console.assert(messages.length === 1)
+
+  if (messages.length !== 1) {
+    throw new Error(
+      'Expected exactly one message from map parse worked, but got ' + messages.length,
+    )
+  }
+
+  if ('error' in messages[0]) {
+    throw new Error(`Encountered error parsing map: ${messages[0].error}`)
+  }
+
   return {
     mapData: messages[0],
     image256Stream: BW_DATA_PATH ? image256Stream : undefined,
@@ -157,8 +179,7 @@ async function mapParseWorker(
 }
 
 interface ChildProcessResult {
-  // TODO(tec27): type this better
-  messages: any[]
+  messages: Array<MapParseData | { error: string }>
   image256Stream: BufferList
   image512Stream: BufferList
   image1024Stream: BufferList
@@ -172,7 +193,7 @@ function runChildProcess(path: string, args?: ReadonlyArray<string>): Promise<Ch
       clearTimeout(childTimeout)
     }
   }
-  const result = new Promise<ChildProcessResult>(async (resolve, reject) => {
+  const result = new Promise<ChildProcessResult>((resolve, reject) => {
     const child = childProcess.fork(path, args, {
       stdio: [0, 1, 2, 'pipe', 'pipe', 'pipe', 'pipe', 'ipc'],
     })
@@ -240,13 +261,22 @@ function runChildProcess(path: string, args?: ReadonlyArray<string>): Promise<Ch
       console.assert(msg === 'init')
       inited = true
     })
-    while (!inited && !error) {
+
+    const sendInit = () => {
+      if (inited || error) {
+        return
+      }
+
       child.send('init')
-      await new Promise(resolve => setTimeout(resolve, 10))
+      setTimeout(sendInit, 10)
     }
+
+    sendInit()
   })
 
-  result.then(cleanup, cleanup)
+  result.finally(cleanup).catch(() => {
+    /* We return this promise so the error will be handled by whatever called this */
+  })
 
   return result
 }
